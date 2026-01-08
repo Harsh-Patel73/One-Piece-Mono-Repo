@@ -1,0 +1,105 @@
+# Prometheus Alert Rules for OPTCG Monorepo
+
+groups:
+  - name: service_alerts
+    rules:
+      # Service availability alerts
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "{{ $labels.instance }} has been down for more than 1 minute"
+
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency on {{ $labels.job }}"
+          description: "95th percentile latency is above 1 second"
+
+  - name: resource_alerts
+    rules:
+      # Memory usage alerts
+      - alert: HighMemoryUsage
+        expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.name }}"
+          description: "Container {{ $labels.name }} memory usage is above 90%"
+
+      - alert: HighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total[5m]) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.name }}"
+          description: "Container {{ $labels.name }} CPU usage is above 90%"
+
+      # Disk space alerts
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Less than 10% disk space remaining"
+
+  - name: training_alerts
+    rules:
+      # Training-specific alerts
+      - alert: TrainingStalled
+        expr: increase(training_iterations_total[10m]) == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Training has stalled"
+          description: "No training iterations in the last 15 minutes"
+
+      - alert: HighTrainingLoss
+        expr: training_loss > 10
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Training loss is unusually high"
+          description: "Training loss has been above 10 for 30 minutes"
+
+      - alert: GPUNotAvailable
+        expr: absent(nvidia_gpu_memory_used_bytes)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "GPU metrics not available"
+          description: "NVIDIA GPU metrics are not being collected"
+
+  - name: simulator_alerts
+    rules:
+      # Simulator-specific alerts
+      - alert: HighActiveGames
+        expr: simulator_active_games > 100
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "High number of active games"
+          description: "More than 100 active games running"
+
+      - alert: WebSocketErrors
+        expr: rate(websocket_errors_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "WebSocket errors increasing"
+          description: "WebSocket error rate is above 1 per second"

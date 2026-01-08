@@ -1,0 +1,142 @@
+# Training Only Docker Compose
+# Usage: docker compose -f docker-compose.train.yml up -d
+# This starts only training service with monitoring stack (no simulator)
+
+services:
+  #============================================
+  # TRAINING SERVICE
+  #============================================
+  training:
+    build:
+      context: ./packages/training
+      dockerfile: Dockerfile
+      target: production
+    container_name: optcg-training
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./checkpoints:/app/checkpoints
+      - ./logs/training:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+    networks:
+      - monitoring-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  #============================================
+  # MONITORING STACK
+  #============================================
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: optcg-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - monitoring-net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: optcg-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-optcg}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - monitoring-net
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.2
+    container_name: optcg-cadvisor
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - monitoring-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  node-exporter:
+    image: prom/node-exporter:v1.6.1
+    container_name: optcg-node-exporter
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+    networks:
+      - monitoring-net
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+#============================================
+# NETWORKS
+#============================================
+networks:
+  monitoring-net:
+    driver: bridge
+    name: optcg-monitoring
+
+#============================================
+# VOLUMES
+#============================================
+volumes:
+  prometheus-data:
+    name: optcg-prometheus-data
+  grafana-data:
+    name: optcg-grafana-data

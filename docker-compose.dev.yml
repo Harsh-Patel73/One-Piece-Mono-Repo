@@ -1,0 +1,35 @@
+# Development Mode Docker Compose Override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+services:
+  training:
+    build:
+      target: development
+    volumes:
+      - ./packages/training:/app
+      - ./packages/game-engine:/app/game-engine
+      - ./checkpoints:/app/checkpoints
+    environment:
+      - LOG_LEVEL=DEBUG
+      - PYTHONDONTWRITEBYTECODE=1
+
+  simulator-backend:
+    build:
+      target: development
+    volumes:
+      - ./packages/simulator/backend:/app
+      - ./packages/game-engine:/app/game-engine
+    environment:
+      - LOG_LEVEL=DEBUG
+      - PYTHONDONTWRITEBYTECODE=1
+
+  simulator-frontend:
+    build:
+      target: development
+    ports:
+      - "3000:3000"  # Vite dev server port
+    volumes:
+      - ./packages/simulator/frontend:/app
+      - /app/node_modules  # Preserve node_modules
+    environment:
+      - NODE_ENV=development

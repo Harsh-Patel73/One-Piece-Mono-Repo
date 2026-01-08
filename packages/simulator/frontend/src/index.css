@@ -1,0 +1,41 @@
+@import url('https://fonts.googleapis.com/css2?family=Bangers&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #ffffff;
+  background-color: #0f172a;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+/* Card hover effects */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* Glow effects for different card colors */
+.glow-red { box-shadow: 0 0 20px rgba(229, 57, 53, 0.5); }
+.glow-blue { box-shadow: 0 0 20px rgba(30, 136, 229, 0.5); }
+.glow-green { box-shadow: 0 0 20px rgba(67, 160, 71, 0.5); }
+.glow-purple { box-shadow: 0 0 20px rgba(142, 36, 170, 0.5); }
+.glow-yellow { box-shadow: 0 0 20px rgba(253, 216, 53, 0.5); }
+
+/* Game board background */
+.game-board {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+}

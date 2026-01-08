@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+*.egg
+venv/
+.venv/
+.env
+
+# Node
+node_modules/
+dist/
+.npm/
+
+# Checkpoints & Models (TOO LARGE FOR GIT)
+checkpoints/*.pt
+*.pt
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+nul
+
+# Docker volumes (local data)
+prometheus-data/
+grafana-data/
+
+# Training state
+training_progress.json
+
+# Build artifacts
+build/
+*.egg-info/

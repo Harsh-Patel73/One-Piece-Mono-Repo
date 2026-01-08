@@ -1,0 +1,46 @@
+# Prometheus Configuration for OPTCG Monorepo
+# Scrapes metrics from training, simulator, and infrastructure services
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: '/metrics'
+
+  # Training service metrics
+  - job_name: 'training'
+    static_configs:
+      - targets: ['training:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 5s  # More frequent for training progress
+
+  # Simulator backend metrics
+  - job_name: 'simulator'
+    static_configs:
+      - targets: ['simulator-backend:8001']
+    metrics_path: '/metrics'
+
+  # Container metrics (cAdvisor)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    metrics_path: '/metrics'
+
+  # Host metrics (Node Exporter)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    metrics_path: '/metrics'
