@@ -23,6 +23,7 @@ class GamePhase(Enum):
 
     # Combat sub-phases
     ATTACK_DECLARATION = auto()
+    LEADER_EFFECT_STEP = auto()
     BLOCKER_STEP = auto()
     COUNTER_STEP = auto()
     DAMAGE_STEP = auto()

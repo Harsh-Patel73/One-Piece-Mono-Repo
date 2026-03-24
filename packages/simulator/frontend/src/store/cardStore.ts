@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
 interface Card {
   id: string
@@ -74,6 +74,7 @@ export const useCardStore = create<CardStore>((set, get) => ({
         counter: card.counter,
         life: card.life,
         color: card.colors || [],
+        traits: card.card_types || card.Type || null,  // Card trait like "Navy", "Straw Hat Crew"
         effect: card.effect,
         trigger: card.trigger,
         imageUrl: card.image_link,

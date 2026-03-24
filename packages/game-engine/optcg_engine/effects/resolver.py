@@ -81,6 +81,9 @@ class EffectResolver:
             EffectType.REVEAL: self._resolve_reveal,
             EffectType.NEGATE: self._resolve_negate,
             EffectType.ACTIVATE: self._resolve_activate,
+            EffectType.CHOOSE: self._resolve_choose,
+            EffectType.EXTRA_TURN: self._resolve_extra_turn,
+            EffectType.COPY: self._resolve_copy,
         }
 
     def can_resolve(self, effect: Effect, context: EffectContext) -> bool:
@@ -548,16 +551,196 @@ class EffectResolver:
         return EffectResult(success=False, message="No cards in deck")
 
     def _resolve_search(self, effect: Effect, context: EffectContext) -> EffectResult:
-        """Handle search/look effect."""
-        # For AI, just reveal that we looked
-        count = effect.value
-        print(f"{context.source_player.name} looks at top {count} cards of deck")
+        """
+        Handle search/look effect with validation for card restrictions.
 
-        return EffectResult(
-            success=True,
-            message=f"Looked at {count} cards",
-            state_changed=False,
-        )
+        This resolves search effects like:
+        - "Look at 5 cards... reveal up to 1 card with a type including 'Whitebeard Pirates'"
+        - "Search your deck for a Character with cost 3 or less"
+
+        For AI, we auto-select the first valid card. For player choice validation,
+        the validate_search_choice method should be called separately.
+        """
+        player = context.source_player
+        count = effect.value if effect.value > 0 else 5  # Default to 5 if not specified
+
+        print(f"{player.name} looks at top {count} cards of deck")
+
+        if not player.deck:
+            return EffectResult(
+                success=False,
+                message="No cards in deck to search",
+                state_changed=False,
+            )
+
+        # Get the cards we're looking at
+        cards_to_look = player.deck[:min(count, len(player.deck))]
+
+        # Filter by restrictions if any
+        restriction = effect.target_restriction
+        valid_cards = self._filter_search_cards(cards_to_look, restriction, context.source_card)
+
+        if valid_cards:
+            # AI auto-selects first valid card
+            # For player choice, targets would be passed in via context.targets
+            if context.targets:
+                # Validate player's choice
+                for chosen in context.targets:
+                    if chosen not in valid_cards:
+                        print(f"Invalid choice: {chosen.name} does not match search restrictions")
+                        return EffectResult(
+                            success=False,
+                            message=f"Invalid choice: {chosen.name} does not match restrictions",
+                            state_changed=False,
+                        )
+                selected = context.targets
+            else:
+                selected = [valid_cards[0]]
+
+            # Add selected card(s) to hand and put rest at bottom of deck
+            for card in selected:
+                if card in player.deck:
+                    player.deck.remove(card)
+                    player.hand.append(card)
+                    print(f"  Added {card.name} to hand")
+
+            # Put remaining looked-at cards at bottom of deck
+            for card in cards_to_look:
+                if card in player.deck:
+                    player.deck.remove(card)
+                    player.deck.append(card)
+
+            return EffectResult(
+                success=True,
+                message=f"Searched and added {len(selected)} card(s) to hand",
+                state_changed=True,
+                targets_affected=selected,
+            )
+        else:
+            # No valid cards found, put all at bottom
+            for card in cards_to_look:
+                if card in player.deck:
+                    player.deck.remove(card)
+                    player.deck.append(card)
+
+            return EffectResult(
+                success=True,
+                message=f"Looked at {count} cards but found no matches",
+                state_changed=False,
+            )
+
+    def _filter_search_cards(
+        self,
+        cards: List['Card'],
+        restriction: TargetRestriction,
+        source_card: 'Card'
+    ) -> List['Card']:
+        """
+        Filter cards based on search restrictions.
+
+        Args:
+            cards: Cards to filter
+            restriction: The restrictions to apply (type, cost, etc.)
+            source_card: The card performing the search (for "other than" exclusions)
+
+        Returns:
+            List of cards matching the restrictions
+        """
+        if not restriction:
+            return list(cards)
+
+        result = []
+        for card in cards:
+            # Check cost restrictions
+            if restriction.cost_max is not None:
+                cost = card.cost or 0
+                if cost > restriction.cost_max:
+                    continue
+
+            if restriction.cost_min is not None:
+                cost = card.cost or 0
+                if cost < restriction.cost_min:
+                    continue
+
+            if restriction.cost_exact is not None:
+                cost = card.cost or 0
+                if cost != restriction.cost_exact:
+                    continue
+
+            # Check power restrictions
+            if restriction.power_max is not None:
+                power = card.power or 0
+                if power > restriction.power_max:
+                    continue
+
+            if restriction.power_min is not None:
+                power = card.power or 0
+                if power < restriction.power_min:
+                    continue
+
+            # Check color restrictions
+            if restriction.colors:
+                card_colors = getattr(card, 'colors', []) or []
+                if not any(c.lower() in [cc.lower() for cc in card_colors] for c in restriction.colors):
+                    continue
+
+            # Check type restrictions (e.g., "Whitebeard Pirates")
+            if restriction.types:
+                card_type = getattr(card, 'card_origin', '') or getattr(card, 'card_types', '') or ''
+                type_match = any(t.lower() in card_type.lower() for t in restriction.types)
+                if not type_match:
+                    continue
+
+            # Check attribute restrictions
+            if restriction.attributes:
+                card_attr = getattr(card, 'attribute', '') or ''
+                if not any(a.lower() in card_attr.lower() for a in restriction.attributes):
+                    continue
+
+            # Check name restrictions (for "other than [CardName]" exclusions)
+            if restriction.name_contains is not None:
+                card_name = card.name or ''
+                # If name_contains starts with "!" it means "other than"
+                if restriction.name_contains.startswith('!'):
+                    exclude_name = restriction.name_contains[1:]
+                    if exclude_name.lower() in card_name.lower():
+                        continue
+                else:
+                    if restriction.name_contains.lower() not in card_name.lower():
+                        continue
+
+            result.append(card)
+
+        return result
+
+    def validate_search_choice(
+        self,
+        chosen_card: 'Card',
+        effect: Effect,
+        available_cards: List['Card'],
+        source_card: 'Card'
+    ) -> bool:
+        """
+        Validate a player's search card choice against restrictions.
+
+        Args:
+            chosen_card: The card the player wants to select
+            effect: The search effect with restrictions
+            available_cards: The cards that were available to search
+            source_card: The card performing the search
+
+        Returns:
+            True if the choice is valid, False otherwise
+        """
+        if chosen_card not in available_cards:
+            return False
+
+        restriction = effect.target_restriction
+        if not restriction:
+            return True
+
+        valid_cards = self._filter_search_cards(available_cards, restriction, source_card)
+        return chosen_card in valid_cards
 
     def _resolve_discard(self, effect: Effect, context: EffectContext) -> EffectResult:
         """Handle discard effect."""
@@ -854,6 +1037,167 @@ class EffectResolver:
             message=f"Activated {len(activated)} card(s)",
             state_changed=len(activated) > 0,
             targets_affected=activated,
+        )
+
+    def _resolve_choose(self, effect: Effect, context: EffectContext) -> EffectResult:
+        """
+        Handle 'choose one' effects where player picks from multiple options.
+
+        For AI, we evaluate each sub-effect and pick the most impactful one.
+        The sub_effects list contains the available choices.
+        """
+        if not effect.sub_effects:
+            # No sub-effects defined, try to execute based on raw text
+            # This handles cases where the parser couldn't break down the choices
+            print(f"{context.source_card.name} choose effect - no sub-effects parsed")
+            return EffectResult(
+                success=False,
+                message="Choose effect has no parsed options",
+                state_changed=False,
+            )
+
+        # AI strategy: evaluate each choice and pick the best one
+        best_choice = None
+        best_score = -1
+
+        for sub_effect in effect.sub_effects:
+            score = self._evaluate_effect_value(sub_effect, context)
+            if score > best_score:
+                best_score = score
+                best_choice = sub_effect
+
+        if best_choice:
+            # Execute the chosen effect
+            print(f"{context.source_card.name} chooses: {best_choice.effect_type.name}")
+            return self.resolve(best_choice, context)
+
+        # If no good choice, just pick the first one
+        if effect.sub_effects:
+            first_choice = effect.sub_effects[0]
+            print(f"{context.source_card.name} chooses first option: {first_choice.effect_type.name}")
+            return self.resolve(first_choice, context)
+
+        return EffectResult(
+            success=False,
+            message="No valid choice available",
+            state_changed=False,
+        )
+
+    def _evaluate_effect_value(self, effect: Effect, context: EffectContext) -> int:
+        """
+        Evaluate the strategic value of an effect for AI decision making.
+        Higher score = better choice.
+        """
+        score = 0
+
+        # KO effects are very valuable
+        if effect.effect_type == EffectType.KO:
+            targets = self.get_valid_targets(effect, context)
+            if targets:
+                # More valuable if we can KO higher cost targets
+                max_cost = max((getattr(t, 'cost', 0) or 0) for t in targets)
+                score = 100 + max_cost * 10
+            else:
+                score = 0  # No valid targets
+
+        # Draw effects are good
+        elif effect.effect_type == EffectType.DRAW:
+            score = 50 + (effect.value * 20)
+
+        # Power reduction can set up KOs
+        elif effect.effect_type == EffectType.POWER_REDUCE:
+            targets = self.get_valid_targets(effect, context)
+            if targets:
+                score = 60 + effect.value // 1000 * 5
+
+        # Return to hand is good removal
+        elif effect.effect_type == EffectType.RETURN_TO_HAND:
+            targets = self.get_valid_targets(effect, context)
+            if targets:
+                max_cost = max((getattr(t, 'cost', 0) or 0) for t in targets)
+                score = 70 + max_cost * 5
+            else:
+                score = 0
+
+        # Rest effects can disable attackers
+        elif effect.effect_type == EffectType.REST:
+            targets = self.get_valid_targets(effect, context)
+            if targets:
+                score = 40 + len(targets) * 10
+            else:
+                score = 0
+
+        # Trash effects (opponent discard)
+        elif effect.effect_type == EffectType.TRASH:
+            score = 55
+
+        # Cost reduction
+        elif effect.effect_type == EffectType.COST_REDUCE:
+            score = 30 + effect.value * 10
+
+        # Life manipulation
+        elif effect.effect_type == EffectType.LIFE_DAMAGE:
+            score = 80 + effect.value * 30
+
+        elif effect.effect_type == EffectType.LIFE_ADD:
+            score = 45 + effect.value * 15
+
+        # Default score for other effects
+        else:
+            score = 25
+
+        return score
+
+    def _resolve_extra_turn(self, effect: Effect, context: EffectContext) -> EffectResult:
+        """
+        Handle extra turn effect.
+
+        Sets a flag on the game state indicating the current player
+        should take another turn after this one.
+        """
+        # Mark that current player gets an extra turn
+        context.game_state.extra_turn_pending = True
+        context.game_state.extra_turn_player = context.source_player
+
+        player_name = getattr(context.source_player, 'name', 'Player')
+        print(f"{context.source_card.name} grants {player_name} an extra turn!")
+
+        return EffectResult(
+            success=True,
+            message=f"{player_name} will take an extra turn",
+            state_changed=True,
+        )
+
+    def _resolve_copy(self, effect: Effect, context: EffectContext) -> EffectResult:
+        """
+        Handle copy effect.
+
+        Copy effects are complex and typically need to reference
+        another effect to copy. For now, we return success but
+        note that full implementation requires tracking the effect to copy.
+        """
+        # Copy effects are rare and complex
+        # They typically copy an opponent's effect or a specific card's effect
+        print(f"{context.source_card.name} copy effect triggered")
+
+        # If there's a sub-effect to copy, resolve it
+        if effect.sub_effects:
+            results = []
+            for sub in effect.sub_effects:
+                result = self.resolve(sub, context)
+                results.append(result)
+
+            success = any(r.success for r in results)
+            return EffectResult(
+                success=success,
+                message="Copied effect(s)",
+                state_changed=success,
+            )
+
+        return EffectResult(
+            success=True,
+            message="Copy effect acknowledged",
+            state_changed=False,
         )
 
 

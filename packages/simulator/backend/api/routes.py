@@ -171,6 +171,140 @@ async def list_cards(
     }
 
 
+@router.get("/effect-test/queue")
+async def effect_test_queue(set_code: str = "OP01"):
+    """Return cards for a set with their current CARD_STATUS.md status."""
+    from pathlib import Path
+    import re
+
+    set_code = set_code.upper()
+    status_path = (
+        Path(__file__).parent.parent.parent.parent
+        / "game-engine"
+        / "optcg_engine"
+        / "effects"
+        / "CARD_STATUS.md"
+    )
+
+    statuses: dict[str, dict] = {}
+    if status_path.exists():
+        text = status_path.read_text(encoding="utf-8")
+        for line in text.splitlines():
+            if not line.startswith("|"):
+                continue
+            parts = [p.strip() for p in line.split("|")]
+            if len(parts) < 5:
+                continue
+            card_id_cell = parts[1]
+            if not re.match(r"[A-Z0-9]+-\d+", card_id_cell):
+                continue
+            statuses[card_id_cell] = {
+                "status": parts[2],
+                "name": parts[3],
+                "notes": parts[4] if len(parts) > 4 else "",
+            }
+
+    # Pull cards for the set from the database (search by set prefix)
+    prefix = set_code.lower() + "-"
+    cards = [
+        c for c in CARD_DB.values()
+        if (c.id or "").lower().startswith(prefix)
+        or (getattr(c, "id_normal", None) or "").lower().startswith(prefix)
+    ]
+    cards.sort(key=lambda c: c.id or "")
+
+    result = []
+    seen = set()
+    for c in cards:
+        cid = getattr(c, "id_normal", None) or c.id or ""
+        if not cid or cid in seen:
+            continue
+        seen.add(cid)
+        info = statuses.get(cid, {})
+        result.append({
+            "id": cid,
+            "name": c.name,
+            "card_type": c.card_type,
+            "cost": c.cost,
+            "power": c.power,
+            "status": info.get("status", "🔲 To Do"),
+            "notes": info.get("notes", ""),
+            "effect": c.effect,
+            "trigger": c.trigger,
+        })
+
+    return {"cards": result, "set_code": set_code, "total": len(result)}
+
+
+@router.post("/effect-test/verdict")
+async def submit_verdict(data: dict):
+    """Update a card's status in CARD_STATUS.md."""
+    import re
+    from pathlib import Path
+
+    card_id = (data.get("card_id") or "").upper()
+    verdict = data.get("verdict", "skip")
+    note = data.get("note", "")
+
+    STATUS_MAP = {
+        "pass": "✅ Verified",
+        "fail": "⚠ Needs Fix",
+        "skip": "🔲 To Do",
+    }
+    new_status = STATUS_MAP.get(verdict, "🔲 To Do")
+
+    status_path = (
+        Path(__file__).parent.parent.parent.parent
+        / "game-engine"
+        / "optcg_engine"
+        / "effects"
+        / "CARD_STATUS.md"
+    )
+    if not status_path.exists():
+        return {"ok": False, "error": "CARD_STATUS.md not found"}
+
+    text = status_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    updated = False
+    for i, line in enumerate(lines):
+        if not line.startswith("|"):
+            continue
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) >= 3 and parts[1] == card_id:
+            parts[2] = new_status
+            if note and len(parts) >= 5:
+                parts[4] = note
+            lines[i] = "| " + " | ".join(parts[1:-1]) + " |"
+            updated = True
+            break
+
+    if updated:
+        status_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    # For fail verdicts, append to PENDING_FIXES.jsonl so the fix loop can act on it
+    if verdict == "fail" and note:
+        import json as _json
+        import datetime
+        fixes_path = (
+            Path(__file__).parent.parent.parent.parent
+            / "game-engine"
+            / "optcg_engine"
+            / "effects"
+            / "PENDING_FIXES.jsonl"
+        )
+        entry = {
+            "card_id": card_id,
+            "note": note,
+            "submitted_at": datetime.datetime.utcnow().isoformat(),
+            "fixed_at": None,
+        }
+        with fixes_path.open("a", encoding="utf-8") as f:
+            f.write(_json.dumps(entry) + "\n")
+        print(f"[FIX NEEDED] {card_id}: {note}")
+
+    return {"ok": updated, "card_id": card_id, "new_status": new_status}
+
+
 @router.get("/cards/{card_id}")
 async def get_card(card_id: str):
     """Get a specific card's details."""

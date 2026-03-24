@@ -172,10 +172,16 @@ class CardEffectManager:
         results = []
 
         # Check for hardcoded effects first
+        executed = False
         if has_hardcoded_effect(card.id, 'ON_PLAY'):
-            execute_hardcoded_effect(game_state, player, card, 'ON_PLAY')
+            executed = execute_hardcoded_effect(game_state, player, card, 'ON_PLAY')
 
-        effects = get_effects_by_timing(card, EffectTiming.ON_PLAY)
+        # ONLY run parsed effects if hardcoded didn't execute
+        # This prevents duplicate execution (e.g., "Draw 2" happening twice)
+        if not executed:
+            effects = get_effects_by_timing(card, EffectTiming.ON_PLAY)
+        else:
+            effects = []
 
         for effect in effects:
             # Check DON requirement
@@ -212,17 +218,130 @@ class CardEffectManager:
     ) -> List[EffectResult]:
         """
         Called when an attack is declared. Resolves WHEN_ATTACKING effects.
+        Checks hardcoded effects first, falls back to parser.
         """
         results = []
-        effects = get_effects_by_timing(attacker, EffectTiming.WHEN_ATTACKING)
 
+        # Check hardcoded [When Attacking] effects first
+        if has_hardcoded_effect(attacker.id, 'on_attack'):
+            execute_hardcoded_effect(game_state, player, attacker, 'on_attack')
+            return results  # Hardcoded takes over entirely
+
+        # Parser-based WHEN_ATTACKING effects
+        effects = get_effects_by_timing(attacker, EffectTiming.WHEN_ATTACKING)
         for effect in effects:
             if not check_don_requirement(attacker, effect):
                 continue
-
             result = self._resolve_effect(game_state, player, attacker, effect)
             results.append(result)
 
+        return results
+
+    def on_opponent_attack(
+        self,
+        game_state: 'GameState',
+        attacking_player: 'Player',
+        defending_player: 'Player',
+        attacker: 'Card',
+        target: 'Card'
+    ) -> List[EffectResult]:
+        """
+        Called when an opponent declares an attack. Resolves ON_OPPONENT_ATTACK effects.
+
+        This triggers effects on the DEFENDING player's cards that have
+        "[On Your Opponent's Attack]" timing (e.g., Izo EB01-002).
+
+        Args:
+            game_state: Current game state
+            attacking_player: Player who is attacking
+            defending_player: Player being attacked (whose effects trigger)
+            attacker: The attacking card
+            target: The target of the attack
+
+        Returns:
+            List of effect results
+        """
+        results = []
+
+        # Check hardcoded effects first on defending player's leader
+        if defending_player.leader:
+            if has_hardcoded_effect(defending_player.leader.id, 'ON_OPPONENT_ATTACK'):
+                execute_hardcoded_effect(
+                    game_state, defending_player, defending_player.leader, 'ON_OPPONENT_ATTACK'
+                )
+
+        # Check hardcoded effects on defending player's characters
+        for card in defending_player.cards_in_play:
+            if has_hardcoded_effect(card.id, 'ON_OPPONENT_ATTACK'):
+                execute_hardcoded_effect(game_state, defending_player, card, 'ON_OPPONENT_ATTACK')
+
+        # Check parsed effects on leader
+        if defending_player.leader:
+            effects = get_effects_by_timing(defending_player.leader, EffectTiming.ON_OPPONENT_ATTACK)
+            for effect in effects:
+                if not check_don_requirement(defending_player.leader, effect):
+                    continue
+
+                # Check once-per-turn
+                if effect.once_per_turn:
+                    effect_id = f"{defending_player.leader.id}_ON_OPPONENT_ATTACK"
+                    used = self.used_once_per_turn.get(defending_player.leader.id, [])
+                    if effect_id in used:
+                        continue
+                    used.append(effect_id)
+                    self.used_once_per_turn[defending_player.leader.id] = used
+
+                result = self._resolve_effect(
+                    game_state, defending_player, defending_player.leader, effect
+                )
+                results.append(result)
+
+        # Check parsed effects on defending player's characters
+        for card in defending_player.cards_in_play:
+            effects = get_effects_by_timing(card, EffectTiming.ON_OPPONENT_ATTACK)
+            for effect in effects:
+                if not check_don_requirement(card, effect):
+                    continue
+
+                # Check once-per-turn
+                if effect.once_per_turn:
+                    effect_id = f"{card.id}_ON_OPPONENT_ATTACK"
+                    used = self.used_once_per_turn.get(card.id, [])
+                    if effect_id in used:
+                        continue
+                    used.append(effect_id)
+                    self.used_once_per_turn[card.id] = used
+
+                result = self._resolve_effect(game_state, defending_player, card, effect)
+                results.append(result)
+
+        return results
+
+    def activate_main(
+        self,
+        game_state: 'GameState',
+        player: 'Player',
+        card: 'Card'
+    ) -> List[EffectResult]:
+        """
+        Parser-based fallback for [Activate: Main] effects on a specific card.
+        Called by game_engine.activate_main_effect after hardcoded check fails.
+        """
+        results = []
+        effects = get_effects_by_timing(card, EffectTiming.MAIN)
+        for effect in effects:
+            if not check_don_requirement(card, effect):
+                continue
+            resolver = get_resolver()
+            context = EffectContext(
+                game_state=game_state,
+                source_card=card,
+                source_player=player,
+                opponent=None,
+            )
+            if resolver.can_resolve(effect, context):
+                result = resolver.resolve(effect, context)
+                results.append(result)
         return results
 
     def on_block_declare(
@@ -255,17 +374,22 @@ class CardEffectManager:
     ) -> List[EffectResult]:
         """
         Called when a card is K.O.'d. Resolves ON_KO effects.
+        Checks hardcoded effects first, falls back to parser.
         Also checks for ON_YOUR_CHARACTER_KO effects on other cards (like Ace's leader).
         """
         results = []
 
-        # Resolve ON_KO effects on the KO'd card itself
-        effects = get_effects_by_timing(ko_card, EffectTiming.ON_KO)
-        for effect in effects:
-            if not check_don_requirement(ko_card, effect):
-                continue
-            result = self._resolve_effect(game_state, player, ko_card, effect)
-            results.append(result)
+        # Check hardcoded ON_KO effects first
+        if has_hardcoded_effect(ko_card.id, 'on_ko'):
+            execute_hardcoded_effect(game_state, player, ko_card, 'on_ko')
+        else:
+            # Parser-based ON_KO effects
+            effects = get_effects_by_timing(ko_card, EffectTiming.ON_KO)
+            for effect in effects:
+                if not check_don_requirement(ko_card, effect):
+                    continue
+                result = self._resolve_effect(game_state, player, ko_card, effect)
+                results.append(result)
 
         # Resolve ON_YOUR_CHARACTER_KO effects on player's leader and other characters
         # This handles effects like Ace's "When your Character with 6000 base power or more is K.O.'d"
@@ -521,6 +645,28 @@ class CardEffectManager:
             card.has_banish = False
         elif effect.effect_type == EffectType.GRANT_DOUBLE_ATTACK:
             card.has_doubleattack = False
+
+    def on_opponent_event_play(
+        self,
+        game_state: 'GameState',
+        attacker_player: 'Player',
+        event_card: 'Card'
+    ) -> List[EffectResult]:
+        """Called when a player plays/activates an Event during combat (counter step).
+
+        Fires `on_event_activated` on every card belonging to the *attacker_player*
+        (the one whose turn it is) so effects like Usopp OP01-004 can react.
+        """
+        results = []
+        # Fire hardcoded on_event_activated for leader
+        if attacker_player.leader:
+            if has_hardcoded_effect(attacker_player.leader.id, 'on_event_activated'):
+                execute_hardcoded_effect(game_state, attacker_player, attacker_player.leader, 'on_event_activated')
+        # Fire for each character on the attacker's field
+        for card in list(attacker_player.cards_in_play):
+            if has_hardcoded_effect(card.id, 'on_event_activated'):
+                execute_hardcoded_effect(game_state, attacker_player, card, 'on_event_activated')
+        return results
 
     def _clear_turn_effects(self, player: 'Player'):
         """Clear effects that last only this turn."""

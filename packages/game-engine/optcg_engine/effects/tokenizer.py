@@ -440,7 +440,7 @@ def extract_keywords(text: str) -> List[str]:
 
     patterns = [
         (r'\[Rush\]', 'RUSH'),
-        (r'\[Blocker\]', 'BLOCKER'),
+        (r'(?<!activate )\[Blocker\]', 'BLOCKER'),
         (r'\[Banish\]', 'BANISH'),
         (r'\[Double Attack\]', 'DOUBLE_ATTACK'),
     ]

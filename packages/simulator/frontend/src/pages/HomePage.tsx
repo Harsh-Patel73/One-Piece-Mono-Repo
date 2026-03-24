@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Swords, Users, Bot, Layers, Play } from 'lucide-react'
+import { Swords, Users, Bot, Layers, Play, FlaskConical } from 'lucide-react'
 
 export function HomePage() {
   const navigate = useNavigate()
@@ -88,6 +88,24 @@ export function HomePage() {
           <div className="mt-4">
             <span className="px-3 py-1 bg-op-green/20 text-op-green rounded-full text-sm">
               Solo Practice
+            </span>
+          </div>
+        </button>
+
+        {/* Effect Tester */}
+        <button
+          onClick={() => navigate('/effect-tester')}
+          className="group relative bg-gradient-to-br from-slate-800 to-slate-900 p-8 rounded-2xl border border-slate-700 hover:border-amber-500 transition-all duration-300 text-left"
+        >
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+          <FlaskConical className="w-12 h-12 text-amber-400 mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-2">Effect Tester</h2>
+          <p className="text-slate-400">
+            Verify card effect implementations one by one. Mark each as Pass, Fail, or Skip.
+          </p>
+          <div className="mt-4">
+            <span className="px-3 py-1 bg-amber-500/20 text-amber-400 rounded-full text-sm">
+              Dev Tool
             </span>
           </div>
         </button>

@@ -1,0 +1,15 @@
+{"card_id": "OP01-068", "note": "This card is still dealing double attack even with less than 5 cards in hand. ", "submitted_at": "2026-03-23T20:11:40.264617", "fixed_at": null}
+{"card_id": "OP01-067", "note": "When I attach 1 DON to the crocodile, instead of reducing the cost of my 1 cost event to 0 so essentially free, it is making my total DON go to 0 when I play it on my turn. On the opponents turn it does let me use it correctly for 0 don so free. ", "submitted_at": "2026-03-23T20:12:55.951227", "fixed_at": null}
+{"card_id": "OP01-105", "note": "This card is revealing MY own hand when it should reveal the opponents. ", "submitted_at": "2026-03-23T20:21:35.576015", "fixed_at": null}
+{"card_id": "OP01-111", "note": "This effect works as intended, there should be a prompt though that lets me choose if I want to do this effect. ", "submitted_at": "2026-03-23T20:22:24.750272", "fixed_at": null}
+{"card_id": "OP01-073", "note": "I can now choose the top or bottom but I cannot choose the order that I want to rearrange them to. ", "submitted_at": "2026-03-23T20:25:13.818285", "fixed_at": null}
+{"card_id": "OP01-077", "note": "I can now choose the top or bottom of the deck but I cannot choose the order to rearrange them to now. ", "submitted_at": "2026-03-23T20:25:43.868683", "fixed_at": null}
+{"card_id": "OP01-085", "note": "I am choosing the character that cannot attack, but it is still allowing that character to attack when I pass the turn. ", "submitted_at": "2026-03-23T20:26:53.936532", "fixed_at": null}
+{"card_id": "OP01-088", "note": "I can now choose the top or bottom but I cannot choose the order that I want to rearrange them to.", "submitted_at": "2026-03-23T20:27:25.998536", "fixed_at": null}
+{"card_id": "OP01-096", "note": "I am not being given the option to choose which don I want to return so it is automatically returning the active don. ", "submitted_at": "2026-03-23T20:27:54.149534", "fixed_at": null}
+{"card_id": "OP01-098", "note": "Put an [Artificial Devil Fruit SMILE] in the deck so I can test this effect. ", "submitted_at": "2026-03-23T20:28:19.773386", "fixed_at": null}
+{"card_id": "OP01-099", "note": "Kurozumi Clan characters other than Kurozumi Semimaru can still get KOd in battle. This should not be the case with Kurozumi Semimaru is in play. ", "submitted_at": "2026-03-23T20:29:25.593237", "fixed_at": null}
+{"card_id": "OP01-111", "note": "I should be prompted if I want to use the DON -1 effect, it works as intended but is automatic. ", "submitted_at": "2026-03-23T20:30:18.488904", "fixed_at": null}
+{"card_id": "OP01-116", "note": "Put a [SMILE] type character in the top 5 cards so I can test this effect. ", "submitted_at": "2026-03-23T20:30:43.543694", "fixed_at": null}
+{"card_id": "OP01-118", "note": "I should be allowed to choose which don to return to the don deck. ", "submitted_at": "2026-03-23T20:31:52.808602", "fixed_at": null}
+{"card_id": "OP01-120", "note": "The game is still allowing blockers with a power of 2000 or less to be activated. ", "submitted_at": "2026-03-23T20:32:26.000854", "fixed_at": null}

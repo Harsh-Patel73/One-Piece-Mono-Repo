@@ -109,8 +109,8 @@ class EffectParser:
             (r'add\s+(?:up\s+to\s+)?(\d+)\s+cards?\s+(?:from\s+.+\s+)?to\s+(?:the\s+top\s+of\s+)?(?:your\s+)?Life',
              self._parse_add_life),
 
-            # Search deck
-            (r'(?:look\s+at|reveal|search)\s+(?:the\s+top\s+)?(\d+)?\s*cards?\s+(?:of\s+)?(?:your\s+)?deck',
+            # Search deck: "Look at X cards from the top of your deck" or "reveal the top X cards of deck"
+            (r'(?:look\s+at|reveal|search)\s+(?:the\s+top\s+)?(\d+)?\s*cards?\s+(?:from\s+)?(?:the\s+top\s+)?(?:of\s+)?(?:your\s+)?deck',
              self._parse_search),
 
             # Return to hand: "return X Character(s) to hand"
@@ -875,6 +875,75 @@ class EffectParser:
 
         return restriction if has_restriction else None
 
+    def _parse_search_restriction(self, text: str) -> Optional[TargetRestriction]:
+        """
+        Parse search-specific restrictions from effect text.
+
+        Handles patterns like:
+        - 'type including "Whitebeard Pirates"'
+        - 'a {Straw Hat Crew} type'
+        - 'other than [Izo]'
+        - 'with a cost of 3 or less'
+        """
+        restriction = TargetRestriction()
+        has_restriction = False
+
+        # Type restriction with quotes: 'type including "Type Name"'
+        match = re.search(r'type\s+including\s*["\u201c]([^"\u201d]+)["\u201d]', text, re.IGNORECASE)
+        if match:
+            restriction.types = [match.group(1)]
+            has_restriction = True
+
+        # Type restriction with braces: {Type Name}
+        if not has_restriction:
+            match = re.search(r'\{([^}]+)\}', text)
+            if match:
+                restriction.types = [match.group(1)]
+                has_restriction = True
+
+        # "other than [CardName]" exclusion
+        match = re.search(r'other\s+than\s+\[([^\]]+)\]', text, re.IGNORECASE)
+        if match:
+            # Use "!" prefix to indicate exclusion
+            restriction.name_contains = '!' + match.group(1)
+            has_restriction = True
+
+        # Cost restrictions
+        match = re.search(r'(?:with\s+)?(?:a\s+)?cost\s+(?:of\s+)?(\d+)\s+or\s+less', text, re.IGNORECASE)
+        if match:
+            restriction.cost_max = int(match.group(1))
+            has_restriction = True
+
+        match = re.search(r'(?:with\s+)?(?:a\s+)?cost\s+(?:of\s+)?(\d+)\s+or\s+more', text, re.IGNORECASE)
+        if match:
+            restriction.cost_min = int(match.group(1))
+            has_restriction = True
+
+        # Power restrictions
+        match = re.search(r'(\d+)(?:000)?\s+or\s+less\s+(?:base\s+)?power', text, re.IGNORECASE)
+        if match:
+            power = int(match.group(1))
+            if power < 100:
+                power *= 1000
+            restriction.power_max = power
+            has_restriction = True
+
+        match = re.search(r'(\d+)(?:000)?\s+or\s+more\s+(?:base\s+)?power', text, re.IGNORECASE)
+        if match:
+            power = int(match.group(1))
+            if power < 100:
+                power *= 1000
+            restriction.power_min = power
+            has_restriction = True
+
+        # Color restrictions
+        color_match = re.search(r'\b(red|blue|green|purple|black|yellow)\s+(?:type\s+)?Character', text, re.IGNORECASE)
+        if color_match:
+            restriction.colors = [color_match.group(1).lower()]
+            has_restriction = True
+
+        return restriction if has_restriction else None
+
     def _determine_target_type(self, text: str) -> TargetType:
         """Determine the target type from text context."""
         text_lower = text.lower()
@@ -1162,14 +1231,18 @@ class EffectParser:
         )
 
     def _parse_search(self, match: re.Match, full_text: str) -> Effect:
-        """Parse search/look effect."""
-        count = int(match.group(1)) if match.group(1) else 1
+        """Parse search/look effect with type and name restrictions."""
+        count = int(match.group(1)) if match.group(1) else 5
+
+        # Extract type and name restrictions from the full text
+        restriction = self._parse_search_restriction(full_text)
 
         return Effect(
             effect_type=EffectType.SEARCH,
             timing=EffectTiming.CONTINUOUS,
             target_type=TargetType.YOUR_DECK,
             value=count,
+            target_restriction=restriction,
         )
 
     def _parse_return_to_hand(self, match: re.Match, full_text: str) -> Effect:

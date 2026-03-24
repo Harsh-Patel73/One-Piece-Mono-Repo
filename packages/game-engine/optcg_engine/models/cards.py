@@ -61,14 +61,14 @@ class Card:
         counter = to_int("Counter")
         life = to_int("Life")
 
-        if ("Attribute") != 'null': attribute = ("Attribute")
-        else: attribute = ""
+        attr_val = d.get("Attribute")
+        attribute = attr_val if attr_val and attr_val != 'null' else ""
 
-        if ("Type") != 'null': card_origin = ("Type")
-        else: card_origin = ""
+        type_val = d.get("Type")
+        card_origin = type_val if type_val and type_val != 'null' else ""
 
-        if ("Trigger") != 'null': trigger = ("Trigger")
-        else: trigger = ""
+        trig_val = d.get("Trigger")
+        trigger = html.unescape(trig_val) if trig_val and trig_val != 'null' else ""
 
         color_str = d.get("Color") or ""
         colors = [c.strip() for c in color_str.split("/") if c.strip()]

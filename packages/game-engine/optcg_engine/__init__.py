@@ -3,8 +3,21 @@
 Shared game logic for AI training and web simulation.
 """
 
-from .game_engine import GameEngine, Player
-from .game_rules import GameRules
-
 __version__ = "1.0.0"
-__all__ = ["GameEngine", "Player", "GameRules"]
+
+# Import effects module (the main API for effect handling)
+from .effects import (
+    EffectTiming, EffectType, Effect,
+    get_effect_manager, CardEffectManager,
+    has_hardcoded_effect, execute_hardcoded_effect,
+)
+
+# Game rules functions available at optcg_engine.game_rules.validate_deck
+# Note: GameEngine import is skipped due to missing handlers module
+# The effects module is the primary API for simulator integration
+
+__all__ = [
+    "EffectTiming", "EffectType", "Effect",
+    "get_effect_manager", "CardEffectManager",
+    "has_hardcoded_effect", "execute_hardcoded_effect",
+]

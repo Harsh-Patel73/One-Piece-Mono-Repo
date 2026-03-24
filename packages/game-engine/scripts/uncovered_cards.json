@@ -1,0 +1,92 @@
+[
+  {
+    "id": "P-002",
+    "name": "I Smell Adventure!!!",
+    "effect": "[Main] Return all cards in your hand to your deck and shuffle your deck. Then, draw cards equal to the number you returned to your deck."
+  },
+  {
+    "id": "OP04-047",
+    "name": "Ice Oni",
+    "effect": "[Your Turn] At the end of a battle in which this Character battles your opponent's Character with a cost of 5 or less, place the opponent's Character you battled with at the bottom of the owner's deck."
+  },
+  {
+    "id": "OP02-066",
+    "name": "Impel Down All Stars",
+    "effect": "[Main] You may trash 2 cards from your hand: If your Leader has the {Impel Down} type, draw up to 2 cards."
+  },
+  {
+    "id": "ST29-008",
+    "name": "Nami",
+    "effect": "If your {Egghead} type Character would be K.O.'d by your opponent's effect, you may turn 1 card from the top of your Life cards face-up instead."
+  },
+  {
+    "id": "ST29-008_p1",
+    "name": "Nami",
+    "effect": "If your {Egghead} type Character would be K.O.'d by your opponent's effect, you may turn 1 card from the top of your Life cards face-up instead."
+  },
+  {
+    "id": "OP04-099",
+    "name": "Olin",
+    "effect": "Also treat this card's name as [Charlotte Linlin] according to the rules."
+  },
+  {
+    "id": "OP03-036",
+    "name": "Out-of-the-Bag",
+    "effect": "[Main] You may rest 1 of your {East Blue} type Characters: Set up to 1 of your [Kuro] cards as active."
+  },
+  {
+    "id": "OP10-074",
+    "name": "Pica",
+    "effect": "[Once Per Turn] If this Character would be K.O.'d by your opponent's effect, you may rest 2 of your active DON!! cards instead."
+  },
+  {
+    "id": "OP10-096",
+    "name": "There’s No Longer Any Need for the Seven Warlords of the Sea!!!",
+    "effect": "[Main] K.O. up to 1 of your opponent's {The Seven Warlords of the Sea} type Characters with a cost of 8 or less."
+  },
+  {
+    "id": "OP03-074",
+    "name": "Top Knot",
+    "effect": "[Main] DON!! −2 (You may return the specified number of DON!! cards from your field to your DON!! deck.): Place up to 1 of your opponent's Characters with a cost of 4 or less at the bottom of the owner's deck."
+  },
+  {
+    "id": "OP04-094",
+    "name": "Trueno Bastardo",
+    "effect": "[Main] Choose up to 1 of your opponent's Characters with a cost of 4 or less and K.O. it. If you have 15 or more cards in your trash, choose up to 1 of your opponent's Characters with a cost of 6 or less instead of a Character with a cost of 4 or less."
+  },
+  {
+    "id": "OP08-038",
+    "name": "We Would Never Sell a Comrade to an Enemy!!!",
+    "effect": "[Main] You may rest 2 of your Characters: None of your Characters can be K.O.'d by your opponent's effects until the end of your opponent's next turn."
+  },
+  {
+    "id": "OP12-116",
+    "name": "We'll Ring the Bell Waiting for You!!",
+    "effect": "[Main] Look at 5 cards from the top of your deck; reveal a total of up to 2 {Shandian Warrior} type Character cards or [Mont Blanc Noland] and add them to your hand. Then, place the rest at the bottom of your deck in any order."
+  },
+  {
+    "id": "P-058",
+    "name": "Where the Wind Blows",
+    "effect": "[Main] If your Leader is [Uta], set all of your {FILM} type Characters as active at the end of this turn."
+  },
+  {
+    "id": "P-058_p1",
+    "name": "Where the Wind Blows",
+    "effect": "[Main] If your Leader is [Uta], set all of your {FILM} type Characters as active at the end of this turn."
+  },
+  {
+    "id": "OP02-023",
+    "name": "You May Be a Fool...but I Still Love You",
+    "effect": "[Main] If you have 3 or less Life cards, you cannot add Life cards to your hand using your own effects during this turn."
+  },
+  {
+    "id": "OP02-023_r1",
+    "name": "You May Be a Fool...but I Still Love You",
+    "effect": "[Main] If you have 3 or less Life cards, you cannot add Life cards to your hand using your own effects during this turn."
+  },
+  {
+    "id": "OP06-069_p2",
+    "name": "ヴィンスモーク・レイジュ",
+    "effect": "【登場時】自分の場のドン‼が相手の場のドン‼の枚数以下でかつ、自分の手札が5枚以下の場合、カード2枚を引く。"
+  }
+]

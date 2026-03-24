@@ -22,7 +22,11 @@ def load_card_database(filepath: str) -> Dict[str, Card]:
         cid = entry.get("id_normal") or entry.get("id") or "<no-id>"
         try:
             card = Card.from_json(entry)
-            card_db[card.id_normal] = card
+            # Store by UNIQUE id (not id_normal) to avoid overwrites
+            # Also store by id_normal for fallback lookups, but only if not already present
+            card_db[card.id] = card
+            if card.id_normal and card.id_normal not in card_db:
+                card_db[card.id_normal] = card
         except Exception as e:
             dropped.append((cid, str(e)))
 

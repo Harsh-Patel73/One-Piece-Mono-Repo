@@ -2,13 +2,19 @@
 Game Manager - Handles all active games and rooms with actual game logic.
 """
 
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 import time
 
-from .engine import GameState, Player
+# Import from unified optcg_engine
+import sys
+from pathlib import Path
+# Add game-engine to path
+game_engine_path = Path(__file__).parent.parent.parent.parent / "game-engine"
+sys.path.insert(0, str(game_engine_path))
+from optcg_engine.game_engine import GameState, Player
 from .card_loader import load_card_database
 from .deck_loader import load_deck
 from .models import Card
@@ -17,6 +23,7 @@ from .models import Card
 class GameMode(Enum):
     VS_AI = "vs_ai"
     VS_PLAYER = "vs_player"
+    PLAYTEST = "playtest"  # Solo mode - one player controls both sides
 
 
 class RoomStatus(Enum):
@@ -56,6 +63,8 @@ class ActiveGame:
     sessions: List[PlayerSession]
     game_state: GameState
     room_code: Optional[str] = None
+    is_test_game: bool = False  # True for effect-tester games (auto-resolves combat steps)
+    auto_resolve_counter: bool = True  # False for event-reactive cards (Usopp) that need counter step
     created_at: float = field(default_factory=time.time)
 
 
@@ -191,13 +200,22 @@ class GameManager:
         player_name: str,
         deck_id: str = "red_luffy",
         ai_deck_id: str = "green_yamato",
+        deck_data: Optional[Dict] = None,
         difficulty: str = "medium",
     ) -> Optional[ActiveGame]:
         """Create a game against AI."""
+        import copy
+
         decks_path = Path(__file__).parent.parent / "data" / "decks"
 
         try:
-            p_cards, p_leader = load_deck(str(decks_path / f"{deck_id}.json"), self.card_db)
+            # Load player deck from custom data or preset
+            if deck_data:
+                p_cards, p_leader = self._load_deck_from_data(deck_data)
+            else:
+                p_cards, p_leader = load_deck(str(decks_path / f"{deck_id}.json"), self.card_db)
+
+            # AI always uses preset deck
             ai_cards, ai_leader = load_deck(str(decks_path / f"{ai_deck_id}.json"), self.card_db)
         except Exception as e:
             print(f"[ERROR] Failed to load decks: {e}")
@@ -208,11 +226,16 @@ class GameManager:
 
         game_state = GameState(player, ai_player)
 
+        # Generate a unique game ID
+        import random
+        import string
+        game_id = "".join(random.choices(string.ascii_lowercase + string.digits, k=12))
+
         player_session = PlayerSession(sid=player_sid, name=player_name, player_index=0)
         ai_session = PlayerSession(sid="ai", name=ai_player.name, player_index=1, is_ai=True)
 
         game = ActiveGame(
-            game_id=game_state.game_id,
+            game_id=game_id,
             mode=GameMode.VS_AI,
             sessions=[player_session, ai_session],
             game_state=game_state,
@@ -222,6 +245,128 @@ class GameManager:
         self.player_to_game[player_sid] = game.game_id
 
         return game
+
+    def create_playtest_game(
+        self,
+        player_sid: str,
+        player_name: str,
+        deck_data: Optional[Dict] = None,
+        deck_id: str = "red_luffy",
+    ) -> Optional[ActiveGame]:
+        """Create a solo playtest game where one player controls both sides."""
+        import copy
+        import random
+        import string
+
+        decks_path = Path(__file__).parent.parent / "data" / "decks"
+
+        try:
+            # Load player deck from custom data or preset
+            if deck_data:
+                p1_cards, p1_leader = self._load_deck_from_data(deck_data)
+                # Use same deck for both sides in playtest
+                p2_cards, p2_leader = self._load_deck_from_data(deck_data)
+            else:
+                p1_cards, p1_leader = load_deck(str(decks_path / f"{deck_id}.json"), self.card_db)
+                p2_cards, p2_leader = load_deck(str(decks_path / f"{deck_id}.json"), self.card_db)
+        except Exception as e:
+            print(f"[ERROR] Failed to load decks: {e}")
+            return None
+
+        player1 = Player(f"{player_name} (P1)", p1_cards, p1_leader, player_sid)
+        player2 = Player(f"{player_name} (P2)", p2_cards, p2_leader, player_sid)  # Same SID - same player controls both
+
+        game_state = GameState(player1, player2)
+
+        game_id = "".join(random.choices(string.ascii_lowercase + string.digits, k=12))
+
+        # Both sessions use the same SID - player controls both sides
+        p1_session = PlayerSession(sid=player_sid, name=f"{player_name} (P1)", player_index=0)
+        p2_session = PlayerSession(sid=player_sid, name=f"{player_name} (P2)", player_index=1)
+
+        game = ActiveGame(
+            game_id=game_id,
+            mode=GameMode.PLAYTEST,
+            sessions=[p1_session, p2_session],
+            game_state=game_state,
+        )
+
+        self.games[game.game_id] = game
+        self.player_to_game[player_sid] = game.game_id
+
+        print(f"[PLAYTEST] Created game {game_id} for {player_name}")
+        return game
+
+    def _find_card_by_id(self, card_id: str) -> Optional[Card]:
+        """Find a card by ID, trying multiple lookup strategies."""
+        import re
+
+        # Direct lookup first
+        if card_id in self.card_db:
+            return self.card_db[card_id]
+
+        # Strip variant suffix (_p1, _p2, _r1, etc.) and try base ID
+        base_id = re.sub(r'_[pr]\d+$', '', card_id)
+        if base_id != card_id and base_id in self.card_db:
+            print(f"[DEBUG] Mapped variant {card_id} -> base {base_id}")
+            return self.card_db[base_id]
+
+        # Search by id_normal (for when frontend sends base ID but we have variant)
+        for db_card in self.card_db.values():
+            if getattr(db_card, 'id_normal', None) == card_id:
+                return db_card
+            if getattr(db_card, 'id_normal', None) == base_id:
+                return db_card
+            if getattr(db_card, 'id', None) == card_id:
+                return db_card
+
+        print(f"[DEBUG] Card {card_id} not found (also tried {base_id})")
+        return None
+
+    def _load_deck_from_data(self, deck_data: Dict) -> Tuple[List[Card], Optional[Card]]:
+        """Load a deck from frontend deck data.
+
+        Args:
+            deck_data: {leader: str, cards: {card_id: count}}
+
+        Returns:
+            Tuple of (deck cards list, leader card)
+        """
+        import copy
+
+        deck = []
+        leader = None
+
+        print(f"[DEBUG] Loading deck from data: leader={deck_data.get('leader')}, cards={len(deck_data.get('cards', {}))}")
+
+        # Get leader
+        leader_id = deck_data.get("leader")
+        if leader_id:
+            found_leader = self._find_card_by_id(leader_id)
+            if found_leader:
+                leader = copy.deepcopy(found_leader)
+                print(f"[DEBUG] Found leader: {leader.name} (id={leader.id}, id_normal={getattr(leader, 'id_normal', 'N/A')})")
+            else:
+                print(f"[WARN] Leader {leader_id} not found in {len(self.card_db)} cards, using default")
+                # Fallback to a default leader
+                for card_id, card in self.card_db.items():
+                    if card.card_type == "LEADER":
+                        leader = copy.deepcopy(card)
+                        print(f"[DEBUG] Using fallback leader: {leader.name}")
+                        break
+
+        # Get deck cards
+        cards_dict = deck_data.get("cards", {})
+        for card_id, count in cards_dict.items():
+            found_card = self._find_card_by_id(card_id)
+            if found_card:
+                for _ in range(count):
+                    deck.append(copy.deepcopy(found_card))
+            else:
+                print(f"[WARN] Card {card_id} not found in database")
+
+        print(f"[DEBUG] Loaded deck: {len(deck)} cards, leader={leader.name if leader else 'None'}")
+        return deck, leader
 
     def get_game(self, game_id: str) -> Optional[ActiveGame]:
         return self.games.get(game_id)
@@ -274,16 +419,23 @@ class GameManager:
         """Process play card action."""
         game = self.get_game(game_id)
         if not game:
+            print(f"[DEBUG] process_play_card: game not found")
             return False
 
-        player_idx = self.get_player_index(game, player_sid)
         gs = game.game_state
-        current_idx = 0 if gs.current_player == gs.player1 else 1
 
-        if player_idx != current_idx:
-            return False
+        # In playtest mode, same player controls both sides - always allow
+        if game.mode != GameMode.PLAYTEST:
+            player_idx = self.get_player_index(game, player_sid)
+            current_idx = 0 if gs.current_player == gs.player1 else 1
 
-        return gs.play_card(card_index)
+            print(f"[DEBUG] process_play_card: player_idx={player_idx}, current_idx={current_idx}, turn={gs.turn_count}")
+
+            if player_idx != current_idx:
+                print(f"[DEBUG] process_play_card: not player's turn")
+                return False
+
+        return gs.play_card_by_index(card_index)
 
     def process_attack(self, game_id: str, player_sid: str, attacker_index: int, target_index: int) -> bool:
         """Process attack declaration."""
@@ -291,14 +443,51 @@ class GameManager:
         if not game:
             return False
 
-        player_idx = self.get_player_index(game, player_sid)
         gs = game.game_state
-        current_idx = 0 if gs.current_player == gs.player1 else 1
 
-        if player_idx != current_idx:
-            return False
+        # In playtest mode, same player controls both sides - always allow
+        if game.mode != GameMode.PLAYTEST:
+            player_idx = self.get_player_index(game, player_sid)
+            current_idx = 0 if gs.current_player == gs.player1 else 1
+
+            if player_idx != current_idx:
+                return False
 
         return gs.declare_attack(attacker_index, target_index)
+
+    def process_leader_effect_response(self, game_id: str, player_sid: str, use_effect: bool) -> bool:
+        """Process leader effect step response."""
+        game = self.get_game(game_id)
+        if not game:
+            return False
+
+        return game.game_state.respond_leader_effect(use_effect)
+
+    def process_trigger_response(self, game_id: str, player_sid: str, activate: bool) -> bool:
+        """Process trigger activation response.
+
+        In real multiplayer games, only the player who took damage can respond.
+        In test/playtest games, any player (the tester) can respond.
+        """
+        game = self.get_game(game_id)
+        if not game:
+            return False
+
+        # In non-test games, validate that the responding player is the one
+        # whose life was damaged (the trigger belongs to them).
+        gs = game.game_state
+        if not game.is_test_game and gs.pending_attack:
+            trigger_info = gs.pending_attack.get('pending_trigger')
+            if trigger_info:
+                trigger_player_id = trigger_info.get('player_id')
+                # Find which session belongs to this player
+                trigger_player_idx = 0 if gs.player1.player_id == trigger_player_id else 1
+                if trigger_player_idx < len(game.sessions):
+                    expected_sid = game.sessions[trigger_player_idx].sid
+                    if player_sid != expected_sid:
+                        return False  # Wrong player trying to respond
+
+        return game.game_state.respond_trigger(activate)
 
     def process_blocker_response(self, game_id: str, player_sid: str, blocker_index: Optional[int]) -> bool:
         """Process blocker response."""
@@ -322,17 +511,42 @@ class GameManager:
         if not game:
             return False
 
-        player_idx = self.get_player_index(game, player_sid)
         gs = game.game_state
-        current_idx = 0 if gs.current_player == gs.player1 else 1
 
-        if player_idx != current_idx:
-            return False
+        # In playtest mode, same player controls both sides - always allow
+        if game.mode != GameMode.PLAYTEST:
+            player_idx = self.get_player_index(game, player_sid)
+            current_idx = 0 if gs.current_player == gs.player1 else 1
+
+            if player_idx != current_idx:
+                return False
 
         return gs.attach_don(card_index, amount)
 
     def process_end_turn(self, game_id: str, player_sid: str) -> bool:
         """Process end turn action."""
+        game = self.get_game(game_id)
+        if not game:
+            return False
+
+        gs = game.game_state
+
+        # In playtest mode, same player controls both sides - always allow
+        if game.mode == GameMode.PLAYTEST:
+            gs.next_turn()
+            return True
+
+        player_idx = self.get_player_index(game, player_sid)
+        current_idx = 0 if gs.current_player == gs.player1 else 1
+
+        if player_idx != current_idx:
+            return False
+
+        gs.next_turn()
+        return True
+
+    def process_activate_effect(self, game_id: str, player_sid: str, card_index: int) -> bool:
+        """Process [Activate: Main] effect activation."""
         game = self.get_game(game_id)
         if not game:
             return False
@@ -344,8 +558,31 @@ class GameManager:
         if player_idx != current_idx:
             return False
 
-        gs.next_turn()
-        return True
+        return gs.activate_main_effect(card_index)
+
+    def process_effect_choice(self, game_id: str, player_sid: str, choice_id: str, selected: List[str]) -> bool:
+        """Process a player's response to an effect choice."""
+        game = self.get_game(game_id)
+        if not game:
+            print(f"[DEBUG] process_effect_choice: game not found for {game_id}")
+            return False
+
+        gs = game.game_state
+
+        # Verify there's a pending choice
+        if not gs.pending_choice:
+            print(f"[DEBUG] process_effect_choice: no pending_choice (choice_id={choice_id}, selected={selected})")
+            return False
+
+        # Verify the choice ID matches
+        if gs.pending_choice.choice_id != choice_id:
+            print(f"[DEBUG] process_effect_choice: choice_id mismatch: expected={gs.pending_choice.choice_id}, got={choice_id}")
+            return False
+
+        # Resolve the choice
+        result = gs.resolve_pending_choice(selected)
+        print(f"[DEBUG] process_effect_choice: resolve result={result}")
+        return result
 
     # ========================================================================
     # AI Actions

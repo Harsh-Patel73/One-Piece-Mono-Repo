@@ -3,7 +3,9 @@ import { HomePage } from './pages/HomePage'
 import { LobbyPage } from './pages/LobbyPage'
 import { GamePage } from './pages/GamePage'
 import { DeckBuilderPage } from './pages/DeckBuilderPage'
-import { PlaytestPage } from './pages/PlaytestPage'
+import { PlaytestPageStyled } from './pages/PlaytestPageStyled'
+import { PlaytestPageBackend } from './pages/PlaytestPageBackend'
+import { EffectTesterPage } from './pages/EffectTesterPage'
 
 function App() {
   return (
@@ -14,7 +16,9 @@ function App() {
         <Route path="/lobby/:roomCode" element={<LobbyPage />} />
         <Route path="/game/:gameId" element={<GamePage />} />
         <Route path="/deck-builder" element={<DeckBuilderPage />} />
-        <Route path="/playtest" element={<PlaytestPage />} />
+        <Route path="/playtest" element={<PlaytestPageBackend />} />
+        <Route path="/playtest-old" element={<PlaytestPageStyled />} />
+        <Route path="/effect-tester" element={<EffectTesterPage />} />
       </Routes>
     </div>
   )

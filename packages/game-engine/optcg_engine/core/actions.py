@@ -386,25 +386,9 @@ class ActionValidator:
 
     @staticmethod
     def _get_end_phase_actions(game_state, player_index: int) -> List[Action]:
-        """Get valid end phase actions (discard to hand limit)."""
-        from .phases import HAND_LIMIT
-
-        player = game_state.players[player_index]
-        hand_size = len(player.hand)
-
-        if hand_size <= HAND_LIMIT:
-            return [PASS_ACTION(player_index)]
-
-        # Must discard down to 7
-        discard_count = hand_size - HAND_LIMIT
-        actions = []
-
-        # Generate all combinations of cards to discard
-        from itertools import combinations
-        for combo in combinations(range(hand_size), discard_count):
-            actions.append(create_discard_action(player_index, combo))
-
-        return actions
+        """Get valid end phase actions (no hand limit - just pass)."""
+        # Hand limit removed - players can have unlimited cards in hand
+        return [PASS_ACTION(player_index)]
 
     @staticmethod
     def _can_play_card(game_state, player_index: int, card) -> bool:

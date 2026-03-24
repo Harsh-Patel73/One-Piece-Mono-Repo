@@ -31,6 +31,7 @@ class GamePhase(Enum):
 
     # Combat sub-phases (during Main phase attacks)
     ATTACK_DECLARATION = auto() # Attacker chooses target
+    LEADER_EFFECT_STEP = auto() # Defender may activate leader ability (e.g. -2000 power)
     BLOCKER_STEP = auto()       # Defender may activate blocker
     COUNTER_STEP = auto()       # Counter cards and effects
     DAMAGE_STEP = auto()        # Resolve damage
@@ -54,6 +55,7 @@ class PhaseHandler:
     # Combat sub-phase order
     COMBAT_PHASE_ORDER = [
         GamePhase.ATTACK_DECLARATION,
+        GamePhase.LEADER_EFFECT_STEP,
         GamePhase.BLOCKER_STEP,
         GamePhase.COUNTER_STEP,
         GamePhase.DAMAGE_STEP,
@@ -90,6 +92,7 @@ class PhaseHandler:
             GamePhase.MAIN: ['play_card', 'attach_don', 'attack', 'activate_effect', 'pass'],
             GamePhase.END: ['discard'],
             GamePhase.ATTACK_DECLARATION: ['select_target'],
+            GamePhase.LEADER_EFFECT_STEP: ['use_leader_effect', 'decline_leader_effect'],
             GamePhase.BLOCKER_STEP: ['activate_blocker', 'decline_blocker'],
             GamePhase.COUNTER_STEP: ['use_counter', 'pass_counter'],
             GamePhase.DAMAGE_STEP: [],  # Automatic
@@ -99,8 +102,8 @@ class PhaseHandler:
         return action_type in allowed
 
 
-# Hand size limit
-HAND_LIMIT = 7
+# Hand size limit removed - players can have unlimited cards in hand
+# HAND_LIMIT = 7
 
 # Maximum DON pool size
 MAX_DON = 10

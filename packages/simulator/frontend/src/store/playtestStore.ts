@@ -2,7 +2,7 @@ import { create } from 'zustand'
 
 // Constants from Vinsmoke Engine
 const MAX_DON = 10
-const HAND_LIMIT = 7
+// Note: One Piece TCG has NO hand limit
 const FIELD_LIMIT = 5
 
 export interface PlaytestCard {
@@ -14,6 +14,7 @@ export interface PlaytestCard {
   counter: number | null
   colors: string[]
   type: string
+  traits: string | string[] | null  // Card trait/type like "Navy", "Straw Hat Crew", etc.
   imageUrl: string | null
   effect: string | null
   trigger: string | null
@@ -70,58 +71,869 @@ const hasOnPlayEffect = (card: PlaytestCard): boolean => {
   return effect.includes('[On Play]')
 }
 
-// Parse [On Play] effect to determine its type
-interface OnPlayEffectInfo {
-  type: 'draw_trash' | 'look_top' | 'search' | 'unknown'
-  drawCount?: number
-  trashCount?: number
-  lookCount?: number
-  condition?: string
-  filterType?: string
+// Check if card has an [On K.O.] effect
+const hasOnKOEffect = (card: PlaytestCard): boolean => {
+  const effect = card.effect || ''
+  return effect.includes('[On K.O.]')
 }
 
-const parseOnPlayEffect = (effect: string): OnPlayEffectInfo => {
-  // Pattern for "draw X cards and trash Y card(s)"
-  const drawTrashMatch = effect.match(/draw (\d+) cards? and trash (\d+) cards?/i)
-  if (drawTrashMatch) {
-    // Check for life condition
-    const lifeCondition = effect.match(/(\d+) or less Life/i)
+// Check if card has a [When Attacking] effect
+const hasWhenAttackingEffect = (card: PlaytestCard): boolean => {
+  const effect = card.effect || ''
+  return effect.includes('[When Attacking]')
+}
+
+// Check DON requirement for effect (e.g., [DON!! x1], [DON!! x2])
+const getDonRequirement = (effect: string, timing: string): number => {
+  // Look for DON requirement before the timing keyword
+  const pattern = new RegExp(`\\[DON!!\\s*x(\\d+)\\]\\s*\\[${timing}\\]`, 'i')
+  const match = effect.match(pattern)
+  return match ? parseInt(match[1]) : 0
+}
+
+// Check if card has an [Activate: Main] effect
+const hasActivateMainEffect = (card: PlaytestCard): boolean => {
+  const effect = card.effect || ''
+  return effect.includes('[Activate: Main]')
+}
+
+// Parse [Activate: Main] effect
+interface ActivateMainEffectInfo {
+  type: 'draw' | 'search' | 'ko_opponent' | 'power_boost' | 'power_reduce' | 'return_to_hand' | 'bottom_deck' | 'play_character' | 'unknown'
+  // Costs
+  restSelf: boolean
+  trashSelf: boolean
+  trashFromHand: number
+  restDonCount: number
+  // Once per turn
+  oncePerTurn: boolean
+  // Effect params
+  drawCount?: number
+  lookCount?: number
+  powerChange?: number
+  costMax?: number
+  powerMax?: number
+  traitFilter?: string
+  condition?: string
+}
+
+const parseActivateMainEffect = (effect: string): ActivateMainEffectInfo => {
+  // Extract just the [Activate: Main] portion
+  const mainMatch = effect.match(/\[Activate: Main\](.*?)(?:<br>|$)/is)
+  if (!mainMatch) return { type: 'unknown', restSelf: false, trashSelf: false, trashFromHand: 0, restDonCount: 0, oncePerTurn: false }
+
+  const mainEffect = mainMatch[1]
+
+  // Check for Once Per Turn
+  const oncePerTurn = /\[Once Per Turn\]/i.test(mainEffect)
+
+  // Parse costs
+  const restSelf = /(?:rest|Rest) this (?:Character|card)/i.test(mainEffect)
+  const trashSelf = /(?:trash|Trash) this (?:Character|card)/i.test(mainEffect)
+
+  let trashFromHand = 0
+  const trashHandMatch = mainEffect.match(/trash (\d+) cards? from your hand/i)
+  if (trashHandMatch) trashFromHand = parseInt(trashHandMatch[1])
+
+  let restDonCount = 0
+  const restDonMatch = mainEffect.match(/[➀①]|rest (\d+) (?:of your )?DON/i)
+  if (restDonMatch) restDonCount = restDonMatch[1] ? parseInt(restDonMatch[1]) : 1
+
+  // Parse condition (leader type requirement)
+  let condition: string | undefined
+  const leaderMatch = mainEffect.match(/If your Leader (?:has the |is )\{?([^}]+)\}? type/i)
+  if (leaderMatch) condition = `leader_${leaderMatch[1]}`
+
+  // Parse effect type
+  // Draw
+  const drawMatch = mainEffect.match(/[Dd]raw (\d+) cards?/i)
+  if (drawMatch) {
     return {
-      type: 'draw_trash',
-      drawCount: parseInt(drawTrashMatch[1]),
-      trashCount: parseInt(drawTrashMatch[2]),
-      condition: lifeCondition ? `life_lte_${lifeCondition[1]}` : undefined
+      type: 'draw',
+      restSelf, trashSelf, trashFromHand, restDonCount, oncePerTurn,
+      drawCount: parseInt(drawMatch[1]),
+      condition
     }
   }
 
-  // Pattern for "Look at X cards from the top of your deck"
-  const lookMatch = effect.match(/[Ll]ook at (\d+) cards? from the top of your deck/i)
+  // Look at deck / Search
+  const lookMatch = mainEffect.match(/[Ll]ook at (\d+) cards? from (?:the top of )?your deck/i)
   if (lookMatch) {
-    // Check for type filter (e.g., "Whitebeard Pirates")
-    const typeMatch = effect.match(/type including ['"]?([^'"]+)['"]?/i)
-    return {
-      type: 'look_top',
-      lookCount: parseInt(lookMatch[1]),
-      filterType: typeMatch ? typeMatch[1] : undefined
-    }
-  }
+    let traitFilter: string | undefined
+    const traitMatch = mainEffect.match(/\{([^}]+)\}/)
+    if (traitMatch) traitFilter = traitMatch[1]
 
-  // Pattern for search deck
-  if (effect.toLowerCase().includes('search') || effect.toLowerCase().includes('reveal')) {
-    const lookCount = effect.match(/(\d+) cards?/i)
     return {
       type: 'search',
-      lookCount: lookCount ? parseInt(lookCount[1]) : 5
+      restSelf, trashSelf, trashFromHand, restDonCount, oncePerTurn,
+      lookCount: parseInt(lookMatch[1]),
+      traitFilter,
+      condition
+    }
+  }
+
+  // K.O. opponent's character
+  const koMatch = mainEffect.match(/K\.?O\.? (?:up to )?(\d+) (?:of )?your opponent'?s.*Characters? with (?:a )?cost (?:of )?(\d+) or less/i)
+  if (koMatch) {
+    return {
+      type: 'ko_opponent',
+      restSelf, trashSelf, trashFromHand, restDonCount, oncePerTurn,
+      costMax: parseInt(koMatch[2]),
+      condition
+    }
+  }
+
+  // Power boost self "gains +X000 power"
+  const powerBoostMatch = mainEffect.match(/(?:this Character|gains) \+(\d+) power/i)
+  if (powerBoostMatch) {
+    return {
+      type: 'power_boost',
+      restSelf, trashSelf, trashFromHand, restDonCount, oncePerTurn,
+      powerChange: parseInt(powerBoostMatch[1]),
+      condition
+    }
+  }
+
+  // Power reduce opponent
+  const powerReduceMatch = mainEffect.match(/[Gg]ive (?:up to )?(\d+) (?:of )?your opponent'?s Characters? [−\-](\d+)/i)
+  if (powerReduceMatch) {
+    return {
+      type: 'power_reduce',
+      restSelf, trashSelf, trashFromHand, restDonCount, oncePerTurn,
+      powerChange: -parseInt(powerReduceMatch[2]),
+      condition
+    }
+  }
+
+  // Bottom deck opponent
+  const bottomMatch = mainEffect.match(/[Pp]lace (?:up to )?(\d+) (?:of )?(?:your opponent'?s )?Characters? with (?:a )?cost (?:of )?(\d+) or less at the bottom/i)
+  if (bottomMatch) {
+    return {
+      type: 'bottom_deck',
+      restSelf, trashSelf, trashFromHand, restDonCount, oncePerTurn,
+      costMax: parseInt(bottomMatch[2]),
+      condition
+    }
+  }
+
+  // Play character from hand
+  if (/[Pp]lay (?:up to )?\d+ .* Character/i.test(mainEffect)) {
+    let traitFilter: string | undefined
+    const traitMatch = mainEffect.match(/\{([^}]+)\}/)
+    if (traitMatch) traitFilter = traitMatch[1]
+
+    const costMatch = mainEffect.match(/cost (?:of )?(\d+) or less/i)
+
+    return {
+      type: 'play_character',
+      restSelf, trashSelf, trashFromHand, restDonCount, oncePerTurn,
+      costMax: costMatch ? parseInt(costMatch[1]) : undefined,
+      traitFilter,
+      condition
+    }
+  }
+
+  return { type: 'unknown', restSelf, trashSelf, trashFromHand, restDonCount, oncePerTurn }
+}
+
+// Parse [When Attacking] effect
+interface WhenAttackingEffectInfo {
+  type: 'draw' | 'draw_trash' | 'ko_opponent' | 'return_to_hand' | 'power_boost' | 'power_reduce' | 'bottom_deck' | 'disable_blocker' | 'give_don' | 'add_don' | 'rest_opponent' | 'unknown'
+  donRequirement: number
+  drawCount?: number
+  trashCount?: number
+  powerChange?: number
+  costMax?: number
+  powerMax?: number
+  condition?: string
+  targetSelf?: boolean
+}
+
+const parseWhenAttackingEffect = (effect: string): WhenAttackingEffectInfo => {
+  const donRequirement = getDonRequirement(effect, 'When Attacking')
+
+  // Extract just the [When Attacking] portion
+  const attackMatch = effect.match(/\[When Attacking\](.*?)(?:\[|<br>|$)/is)
+  if (!attackMatch) return { type: 'unknown', donRequirement }
+
+  const attackEffect = attackMatch[1]
+
+  // Parse condition
+  let condition: string | undefined
+  const lifeCondition = attackEffect.match(/If you have (\d+) or (?:more|less) Life/i)
+  if (lifeCondition) {
+    condition = attackEffect.includes('or more') ? `life_gte_${lifeCondition[1]}` : `life_lte_${lifeCondition[1]}`
+  }
+  const handCondition = attackEffect.match(/if you have (\d+) or less cards in your hand/i)
+  if (handCondition) {
+    condition = `hand_lte_${handCondition[1]}`
+  }
+
+  // Pattern 1: Draw and trash "Draw X card(s) and trash Y card(s)"
+  const drawTrashMatch = attackEffect.match(/[Dd]raw (\d+) cards? and trash (\d+) cards?/i)
+  if (drawTrashMatch) {
+    return {
+      type: 'draw_trash',
+      donRequirement,
+      drawCount: parseInt(drawTrashMatch[1]),
+      trashCount: parseInt(drawTrashMatch[2]),
+      condition
+    }
+  }
+
+  // Pattern 2: Simple draw "Draw X card(s)"
+  const drawMatch = attackEffect.match(/[Dd]raw (\d+) cards?/i)
+  if (drawMatch) {
+    return {
+      type: 'draw',
+      donRequirement,
+      drawCount: parseInt(drawMatch[1]),
+      condition
+    }
+  }
+
+  // Pattern 3: K.O. opponent's character with power condition
+  const koPowerMatch = attackEffect.match(/K\.?O\.? (?:up to )?(\d+) (?:of )?your opponent'?s Characters? with (\d+) power or less/i)
+  if (koPowerMatch) {
+    return {
+      type: 'ko_opponent',
+      donRequirement,
+      powerMax: parseInt(koPowerMatch[2]),
+      condition
+    }
+  }
+
+  // Pattern 4: K.O. with cost condition
+  const koCostMatch = attackEffect.match(/K\.?O\.? (?:up to )?(\d+) (?:of )?your opponent'?s Characters? with (?:a )?cost (?:of )?(\d+) or less/i)
+  if (koCostMatch) {
+    return {
+      type: 'ko_opponent',
+      donRequirement,
+      costMax: parseInt(koCostMatch[2]),
+      condition
+    }
+  }
+
+  // Pattern 5: Return to hand
+  const returnMatch = attackEffect.match(/[Rr]eturn (?:up to )?(\d+) (?:of )?your opponent'?s Characters? with (?:a )?cost (?:of )?(\d+) or less to (?:the )?owner'?s hand/i)
+  if (returnMatch) {
+    return {
+      type: 'return_to_hand',
+      donRequirement,
+      costMax: parseInt(returnMatch[2]),
+      condition
+    }
+  }
+
+  // Pattern 6: Power boost to self "This Character gains +X000 power"
+  const selfPowerMatch = attackEffect.match(/[Tt]his Character gains \+(\d+) power/i)
+  if (selfPowerMatch) {
+    return {
+      type: 'power_boost',
+      donRequirement,
+      powerChange: parseInt(selfPowerMatch[1]),
+      targetSelf: true,
+      condition
+    }
+  }
+
+  // Pattern 7: Power reduce opponent "Give up to 1 of your opponent's Characters −X000 power"
+  const powerReduceMatch = attackEffect.match(/[Gg]ive (?:up to )?(\d+) (?:of )?your opponent'?s Characters? [−\-](\d+) power/i)
+  if (powerReduceMatch) {
+    return {
+      type: 'power_reduce',
+      donRequirement,
+      powerChange: -parseInt(powerReduceMatch[2]),
+      condition
+    }
+  }
+
+  // Pattern 8: Bottom deck opponent's character
+  const bottomMatch = attackEffect.match(/[Pp]lace (?:up to )?(\d+) (?:of )?(?:your opponent'?s )?Characters? with (?:a )?cost (?:of )?(\d+) or less at the bottom/i)
+  if (bottomMatch) {
+    return {
+      type: 'bottom_deck',
+      donRequirement,
+      costMax: parseInt(bottomMatch[2]),
+      condition
+    }
+  }
+
+  // Pattern 9: Disable blocker "cannot activate a [Blocker]"
+  if (/cannot activate.*\[?Blocker\]?/i.test(attackEffect)) {
+    const powerLimit = attackEffect.match(/(\d+) or less power/i)
+    return {
+      type: 'disable_blocker',
+      donRequirement,
+      powerMax: powerLimit ? parseInt(powerLimit[1]) : undefined,
+      condition
+    }
+  }
+
+  // Pattern 10: Give DON to leader/character
+  const giveDonMatch = attackEffect.match(/give (?:up to )?(\d+) (?:rested )?DON/i)
+  if (giveDonMatch) {
+    return {
+      type: 'give_don',
+      donRequirement,
+      drawCount: parseInt(giveDonMatch[1]),  // reusing for DON count
+      condition
+    }
+  }
+
+  // Pattern 11: Add DON from deck
+  const addDonMatch = attackEffect.match(/add (?:up to )?(\d+) DON/i)
+  if (addDonMatch) {
+    return {
+      type: 'add_don',
+      donRequirement,
+      drawCount: parseInt(addDonMatch[1]),
+      condition
+    }
+  }
+
+  // Pattern 12: Rest opponent's character
+  const restMatch = attackEffect.match(/rest (?:up to )?(\d+) (?:of )?your opponent'?s Characters?/i)
+  if (restMatch) {
+    return {
+      type: 'rest_opponent',
+      donRequirement,
+      costMax: 99,  // Default no cost limit
+      condition
+    }
+  }
+
+  return { type: 'unknown', donRequirement }
+}
+
+// Parse [On K.O.] effect
+interface OnKOEffectInfo {
+  type: 'draw' | 'return_to_hand' | 'play_from_trash' | 'rest_opponent' | 'unknown'
+  drawCount?: number
+  condition?: string
+  leaderCondition?: string  // e.g., "[Boa Hancock]" or "multicolored"
+  traitFilter?: string
+  costMax?: number
+}
+
+const parseOnKOEffect = (effect: string): OnKOEffectInfo => {
+  // Extract just the [On K.O.] portion of the effect
+  const koMatch = effect.match(/\[On K\.O\.\](.*?)(?:\[|<br>|$)/is)
+  if (!koMatch) return { type: 'unknown' }
+
+  const koEffect = koMatch[1]
+
+  // Parse condition for leader name/multicolored
+  let condition: string | undefined
+  let leaderCondition: string | undefined
+
+  // Check for leader condition like "If your Leader is [Boa Hancock] or multicolored"
+  const leaderMatch = koEffect.match(/If your Leader is \[([^\]]+)\] or (\w+)/i)
+  if (leaderMatch) {
+    leaderCondition = leaderMatch[1]
+    condition = leaderMatch[2]  // e.g., "multicolored"
+  }
+
+  // Check for life condition
+  const lifeCondition = koEffect.match(/If you have (\d+) or less Life/i)
+  if (lifeCondition) {
+    condition = `life_lte_${lifeCondition[1]}`
+  }
+
+  // Pattern 1: Draw cards "[On K.O.] Draw X card(s)"
+  const drawMatch = koEffect.match(/draw (\d+) cards?/i)
+  if (drawMatch) {
+    return {
+      type: 'draw',
+      drawCount: parseInt(drawMatch[1]),
+      condition,
+      leaderCondition,
+    }
+  }
+
+  // Pattern 2: Return to hand (self) "[On K.O.] Return this card to hand"
+  if (/return this card to (?:your )?hand/i.test(koEffect)) {
+    return {
+      type: 'return_to_hand',
+      condition,
+    }
+  }
+
+  // Pattern 3: Play from trash "[On K.O.] ...play this Character...from your trash"
+  if (/play this Character.*from your trash/i.test(koEffect)) {
+    return {
+      type: 'play_from_trash',
+      condition,
+    }
+  }
+
+  // Pattern 4: Rest opponent's cards
+  const restMatch = koEffect.match(/[Rr]est (?:up to )?(\d+)(?: of)? (?:your )?opponent'?s/i)
+  if (restMatch) {
+    return {
+      type: 'rest_opponent',
+      drawCount: parseInt(restMatch[1]),  // reusing drawCount for count
+      condition,
     }
   }
 
   return { type: 'unknown' }
 }
 
+// Parse [On Play] effect to determine its type
+interface OnPlayEffectInfo {
+  type: 'draw' | 'draw_trash' | 'look_top' | 'search' | 'draw_give_don' | 'add_don' | 'set_don_active' | 'give_power' | 'ko_opponent' | 'bottom_deck_opponent' | 'return_to_hand' | 'unknown'
+  drawCount?: number
+  trashCount?: number
+  lookCount?: number
+  condition?: string
+  filterType?: string
+  // Filter constraints for searcher cards
+  costMax?: number
+  costMin?: number
+  powerMax?: number
+  powerMin?: number
+  cardType?: string  // CHARACTER, EVENT, etc.
+  traitFilter?: string  // e.g., "Straw Hat Crew", "Land of Wano"
+  // DON effects
+  giveDonCount?: number
+  giveDonRested?: boolean
+  addDonCount?: number
+  addDonRested?: boolean  // true = rest the DON, false = set active
+  setDonActiveCount?: number
+  // Power modification
+  powerChange?: number  // negative for -power
+  // Target selection
+  targetOpponent?: boolean
+  // Return to hand effects
+  returnCount?: number
+  // Leader type condition
+  leaderTypeCondition?: string
+}
+
+// Parse conditions like "If you have X or less Life cards"
+const parseCondition = (effect: string): string | undefined => {
+  const lifeCondition = effect.match(/(?:If you have |have )(\d+) or less Life/i)
+  if (lifeCondition) return `life_lte_${lifeCondition[1]}`
+
+  const lifeMinCondition = effect.match(/(?:If you have |have )(\d+) or more Life/i)
+  if (lifeMinCondition) return `life_gte_${lifeMinCondition[1]}`
+
+  const leaderCondition = effect.match(/If your Leader (?:has the |is )\{?([^}]+)\}?/i)
+  if (leaderCondition) return `leader_${leaderCondition[1].replace(/[\[\]]/g, '')}`
+
+  return undefined
+}
+
+const parseOnPlayEffect = (effect: string): OnPlayEffectInfo => {
+  const condition = parseCondition(effect)
+
+  // Pattern 1: "draw X cards and trash Y card(s)"
+  const drawTrashMatch = effect.match(/draw (\d+) cards? and trash (\d+) cards?/i)
+  if (drawTrashMatch) {
+    return {
+      type: 'draw_trash',
+      drawCount: parseInt(drawTrashMatch[1]),
+      trashCount: parseInt(drawTrashMatch[2]),
+      condition
+    }
+  }
+
+  // Pattern 2: Yamato-style "draw X cards...give up to Y rested DON"
+  const drawGiveDonMatch = effect.match(/draw (\d+) cards?.*give (?:up to )?(\d+) rested DON/i)
+  if (drawGiveDonMatch) {
+    return {
+      type: 'draw_give_don',
+      drawCount: parseInt(drawGiveDonMatch[1]),
+      giveDonCount: parseInt(drawGiveDonMatch[2]),
+      giveDonRested: true,
+      condition
+    }
+  }
+
+  // Pattern 3: "Add up to X DON!! card from your DON!! deck and [rest it/set it as active]"
+  const addDonMatch = effect.match(/[Aa]dd (?:up to )?(\d+) DON!* cards? from your DON!* deck(?: and (rest|set)(?: it)?)?/i)
+  if (addDonMatch) {
+    const count = parseInt(addDonMatch[1])
+    const restOrActive = addDonMatch[2]?.toLowerCase()
+    return {
+      type: 'add_don',
+      addDonCount: count,
+      addDonRested: restOrActive !== 'set',  // default to rested unless "set as active"
+      condition
+    }
+  }
+
+  // Pattern 4: "set up to X of your DON!! cards as active"
+  const setDonActiveMatch = effect.match(/set (?:up to )?(\d+) of your DON!* cards? as active/i)
+  if (setDonActiveMatch) {
+    return {
+      type: 'set_don_active',
+      setDonActiveCount: parseInt(setDonActiveMatch[1]),
+      condition
+    }
+  }
+
+  // Pattern 5: "K.O. up to 1 of your opponent's Characters with X [cost/power] or less"
+  const koOpponentMatch = effect.match(/K\.?O\.? (?:up to )?(\d+) of your opponent'?s Characters? with (?:a )?(?:base )?(?:cost|power) (?:of )?(\d+) or less/i)
+  if (koOpponentMatch) {
+    const isCost = /cost/i.test(effect)
+    return {
+      type: 'ko_opponent',
+      targetOpponent: true,
+      costMax: isCost ? parseInt(koOpponentMatch[2]) : undefined,
+      powerMax: !isCost ? parseInt(koOpponentMatch[2]) : undefined,
+      condition
+    }
+  }
+
+  // Pattern 5b: "Trash up to 1 of your opponent's Characters with X power or less"
+  const trashOpponentMatch = effect.match(/[Tt]rash (?:up to )?(\d+) of your opponent'?s Characters? with (?:a )?(\d+) power or less/i)
+  if (trashOpponentMatch) {
+    return {
+      type: 'ko_opponent',  // treat same as KO for playtest
+      targetOpponent: true,
+      powerMax: parseInt(trashOpponentMatch[2]),
+      condition
+    }
+  }
+
+  // Pattern 6: "Place up to 1 of your opponent's Characters with a cost of X or less at the bottom"
+  const bottomDeckMatch = effect.match(/[Pp]lace (?:up to )?(\d+) (?:of )?your opponent'?s Characters? with (?:a )?(?:base )?cost (?:of )?(\d+) or less at the bottom/i)
+  if (bottomDeckMatch) {
+    return {
+      type: 'bottom_deck_opponent',
+      targetOpponent: true,
+      costMax: parseInt(bottomDeckMatch[2]),
+      condition
+    }
+  }
+
+  // Pattern 7: "Give up to 1 of your opponent's Characters −X000 power"
+  const powerModMatch = effect.match(/[Gg]ive (?:up to )?(\d+) (?:of )?your opponent'?s Characters? [−\-](\d+) power/i)
+  if (powerModMatch) {
+    return {
+      type: 'give_power',
+      targetOpponent: true,
+      powerChange: -parseInt(powerModMatch[2]),
+      condition
+    }
+  }
+
+  // Pattern 7b: "Return up to X of your opponent's Characters with a cost of Y or less to the owner's hand"
+  const returnToHandMatch = effect.match(/[Rr]eturn (?:up to )?(\d+) (?:of )?your opponent'?s Characters? with (?:a )?cost (?:of )?(\d+) or less to (?:the )?owner'?s hand/i)
+  if (returnToHandMatch) {
+    // Check for leader type condition like "If your Leader's type includes..."
+    let leaderTypeCondition: string | undefined
+    const leaderTypeMatch = effect.match(/If your Leader'?s type includes ['"]?([^'"]+)['"]?/i)
+    if (leaderTypeMatch) leaderTypeCondition = leaderTypeMatch[1]
+
+    return {
+      type: 'return_to_hand',
+      targetOpponent: true,
+      returnCount: parseInt(returnToHandMatch[1]),
+      costMax: parseInt(returnToHandMatch[2]),
+      leaderTypeCondition,
+      condition
+    }
+  }
+
+  // Pattern 8: "Look at X cards from the top of your deck" or "Look at the top X cards of your deck"
+  const lookMatch = effect.match(/[Ll]ook at (\d+) cards? from the top of your deck/i)
+    || effect.match(/[Ll]ook at the top (\d+) cards? of your deck/i)
+  if (lookMatch) {
+    const lookCount = parseInt(lookMatch[1])
+
+    // Parse cost restrictions
+    let costMax: number | undefined
+    let costMin: number | undefined
+    const costMaxMatch = effect.match(/cost (?:of )?(\d+) or less/i)
+    const costMinMatch = effect.match(/cost (?:of )?(\d+) or (?:higher|more)/i)
+    if (costMaxMatch) costMax = parseInt(costMaxMatch[1])
+    if (costMinMatch) costMin = parseInt(costMinMatch[1])
+
+    // Parse type filter (CHARACTER, EVENT) - be specific about the context
+    // Look for patterns like "reveal up to 1 Character" NOT just "Character" anywhere
+    let cardType: string | undefined
+    const characterSelectMatch = effect.match(/(?:reveal|add|choose|search).*?(?:up to )?\d+\s+Character/i)
+    const eventSelectMatch = effect.match(/(?:reveal|add|choose|search).*?(?:up to )?\d+\s+Event/i)
+    const genericCardMatch = effect.match(/(?:reveal|add|choose).*?(?:up to )?\d+\s+card(?!.*(?:Character|Event))/i)
+
+    // Only set cardType if explicitly selecting that type, not just mentioning it
+    if (characterSelectMatch && !genericCardMatch) cardType = 'CHARACTER'
+    else if (eventSelectMatch && !genericCardMatch) cardType = 'EVENT'
+    // If it says "card" without specifying type, leave cardType undefined (any type allowed)
+
+    // Parse trait filter (e.g., "{Straw Hat Crew}", "[Whitebeard Pirates] type", or 'type including "Whitebeard Pirates"')
+    let traitFilter: string | undefined
+    const traitMatch = effect.match(/\{([^}]+)\}/i)
+      || effect.match(/\[([^\]]+)\] type/i)  // [Whitebeard Pirates] type
+      || effect.match(/type including ['"]?([^'"]+)['"]?/i)
+    if (traitMatch) traitFilter = traitMatch[1]
+
+    return {
+      type: 'look_top',
+      lookCount,
+      costMax,
+      costMin,
+      cardType,
+      traitFilter,
+      filterType: traitFilter,
+      condition
+    }
+  }
+
+  // Pattern 9: Simple "draw X cards" (without trash)
+  const simpleDrawMatch = effect.match(/\[On Play\].*?draw (\d+) cards?/i)
+  if (simpleDrawMatch && !effect.match(/trash/i)) {
+    return {
+      type: 'draw',
+      drawCount: parseInt(simpleDrawMatch[1]),
+      condition
+    }
+  }
+
+  // Pattern 10: Search/reveal deck
+  if (effect.toLowerCase().includes('search') || (effect.toLowerCase().includes('reveal') && effect.toLowerCase().includes('deck'))) {
+    const lookCount = effect.match(/(\d+) cards?/i)
+
+    let costMax: number | undefined
+    let costMin: number | undefined
+    const costMaxMatch = effect.match(/cost (?:of )?(\d+) or less/i)
+    const costMinMatch = effect.match(/cost (?:of )?(\d+) or (?:higher|more)/i)
+    if (costMaxMatch) costMax = parseInt(costMaxMatch[1])
+    if (costMinMatch) costMin = parseInt(costMinMatch[1])
+
+    // Parse type filter - be specific about context
+    let cardType: string | undefined
+    const characterSelectMatch = effect.match(/(?:reveal|add|choose|search).*?(?:up to )?\d+\s+Character/i)
+    const eventSelectMatch = effect.match(/(?:reveal|add|choose|search).*?(?:up to )?\d+\s+Event/i)
+    const genericCardMatch = effect.match(/(?:reveal|add|choose).*?(?:up to )?\d+\s+card(?!.*(?:Character|Event))/i)
+
+    if (characterSelectMatch && !genericCardMatch) cardType = 'CHARACTER'
+    else if (eventSelectMatch && !genericCardMatch) cardType = 'EVENT'
+
+    let traitFilter: string | undefined
+    const traitMatch = effect.match(/\{([^}]+)\}/i) || effect.match(/type including ['"]?([^'"]+)['"]?/i)
+    if (traitMatch) traitFilter = traitMatch[1]
+
+    return {
+      type: 'search',
+      lookCount: lookCount ? parseInt(lookCount[1]) : 5,
+      costMax,
+      costMin,
+      cardType,
+      traitFilter,
+      condition
+    }
+  }
+
+  return { type: 'unknown' }
+}
+
+// Check if condition is met
+const checkCondition = (condition: string | undefined, player: PlaytestPlayer): boolean => {
+  if (!condition) return true
+
+  if (condition.startsWith('life_lte_')) {
+    const threshold = parseInt(condition.split('_')[2])
+    return player.lifeCards.length <= threshold
+  }
+  if (condition.startsWith('life_gte_')) {
+    const threshold = parseInt(condition.split('_')[2])
+    return player.lifeCards.length >= threshold
+  }
+  // Leader conditions - for now, always pass (would need leader type data)
+  if (condition.startsWith('leader_')) {
+    return true  // TODO: Check leader type when data is available
+  }
+
+  return true
+}
+
+// Create a filter function from effect info
+const createSelectionFilter = (effectInfo: OnPlayEffectInfo): ((card: PlaytestCard) => boolean) | undefined => {
+  const { costMax, costMin, powerMax, powerMin, cardType, traitFilter } = effectInfo
+
+  // If no filter constraints, return undefined (allow all)
+  if (costMax === undefined && costMin === undefined && powerMax === undefined && powerMin === undefined && !cardType && !traitFilter) {
+    return undefined
+  }
+
+  return (card: PlaytestCard) => {
+    // Cost max check
+    if (costMax !== undefined && (card.cost === null || card.cost > costMax)) return false
+    // Cost min check
+    if (costMin !== undefined && (card.cost === null || card.cost < costMin)) return false
+    // Power max check
+    if (powerMax !== undefined && (card.power === null || card.power > powerMax)) return false
+    // Power min check
+    if (powerMin !== undefined && (card.power === null || card.power < powerMin)) return false
+    // Card type check (CHARACTER, EVENT, STAGE)
+    if (cardType && card.type !== cardType) return false
+    // Trait filter check - check card's trait field, effect text, and name
+    if (traitFilter) {
+      // Normalize the trait filter (remove quotes, extra spaces)
+      const traitLower = traitFilter.toLowerCase().replace(/['"]/g, '').trim()
+
+      // Handle traits field - could be string or array
+      let cardTraitsNormalized = ''
+      if (card.traits) {
+        if (Array.isArray(card.traits)) {
+          // If array, join with / separator
+          cardTraitsNormalized = (card.traits as string[]).join('/').toLowerCase()
+        } else {
+          cardTraitsNormalized = String(card.traits).toLowerCase()
+        }
+      }
+
+      const effectText = (card.effect || '').toLowerCase()
+      const cardName = card.name.toLowerCase()
+
+      // For trait matching, split the card's traits by "/" and check each one
+      // This handles "The Four Emperors/Whitebeard Pirates" matching "Whitebeard Pirates"
+      const traitParts = cardTraitsNormalized.split('/').map(t => t.trim())
+      const hasTraitInField = traitParts.some(part => part.includes(traitLower) || traitLower.includes(part))
+
+      // Also check if the trait appears as a substring anywhere in the traits string
+      const hasTraitAsSubstring = cardTraitsNormalized.includes(traitLower)
+
+      const hasTraitInEffect = effectText.includes(traitLower)
+      const hasTraitInName = cardName.includes(traitLower)
+
+      // Must match trait in at least one place
+      if (!hasTraitInField && !hasTraitAsSubstring && !hasTraitInEffect && !hasTraitInName) {
+        return false
+      }
+    }
+    return true
+  }
+}
+
+// Create filter description from effect info
+const createFilterDescription = (effectInfo: OnPlayEffectInfo): string | undefined => {
+  const parts: string[] = []
+
+  if (effectInfo.cardType) parts.push(effectInfo.cardType)
+  if (effectInfo.costMax !== undefined) parts.push(`cost ${effectInfo.costMax} or less`)
+  if (effectInfo.costMin !== undefined) parts.push(`cost ${effectInfo.costMin} or more`)
+  if (effectInfo.traitFilter) parts.push(`{${effectInfo.traitFilter}}`)
+
+  return parts.length > 0 ? parts.join(', ') : undefined
+}
+
 // Get counter value from a character card
 const getCounterValue = (card: PlaytestCard): number => {
   if (card.type !== 'CHARACTER') return 0
   return card.counter || 0
+}
+
+// Check if leader matches condition for On KO effects
+const checkLeaderCondition = (leader: PlaytestCard | null, leaderCondition: string | undefined, condition: string | undefined): boolean => {
+  if (!leaderCondition && !condition) return true
+  if (!leader) return false
+
+  // Check for specific leader name
+  if (leaderCondition) {
+    const leaderName = leader.name.toLowerCase()
+    if (leaderName.includes(leaderCondition.toLowerCase())) return true
+  }
+
+  // Check for multicolored leader
+  if (condition === 'multicolored') {
+    const colors = leader.colors || []
+    if (colors.length > 1) return true
+  }
+
+  // If we have a leader condition but didn't match, check if condition alone passes
+  if (leaderCondition && condition === 'multicolored') {
+    // Either leader name OR multicolored
+    const colors = leader.colors || []
+    return colors.length > 1
+  }
+
+  return false
+}
+
+// Execute On KO effect and return updated state parts
+interface OnKOResult {
+  drawnCards: PlaytestCard[]
+  returnToHand: boolean
+  playFromTrash: boolean
+  logs: string[]
+}
+
+const executeOnKOEffect = (
+  koCard: PlaytestCard,
+  owner: PlaytestPlayer,
+  opponent: PlaytestPlayer,
+): OnKOResult => {
+  const result: OnKOResult = {
+    drawnCards: [],
+    returnToHand: false,
+    playFromTrash: false,
+    logs: [],
+  }
+
+  if (!hasOnKOEffect(koCard)) return result
+
+  const effectInfo = parseOnKOEffect(koCard.effect || '')
+  if (effectInfo.type === 'unknown') return result
+
+  result.logs.push(`  [On K.O.] ${koCard.name} effect triggered!`)
+
+  // Check conditions
+  if (effectInfo.condition?.startsWith('life_lte_')) {
+    const threshold = parseInt(effectInfo.condition.split('_')[2])
+    if (owner.lifeCards.length > threshold) {
+      result.logs.push(`    Condition not met (need ${threshold} or less life, have ${owner.lifeCards.length})`)
+      return result
+    }
+  }
+
+  // Check leader condition
+  if (effectInfo.leaderCondition || effectInfo.condition === 'multicolored') {
+    if (!checkLeaderCondition(owner.leader, effectInfo.leaderCondition, effectInfo.condition)) {
+      result.logs.push(`    Leader condition not met`)
+      return result
+    }
+  }
+
+  // Execute based on effect type
+  switch (effectInfo.type) {
+    case 'draw':
+      const drawCount = effectInfo.drawCount || 1
+      for (let i = 0; i < drawCount && owner.deck.length > 0; i++) {
+        const drawnCard = owner.deck.shift()!
+        result.drawnCards.push(drawnCard)
+      }
+      result.logs.push(`    Drew ${result.drawnCards.length} card(s)`)
+      break
+
+    case 'return_to_hand':
+      result.returnToHand = true
+      result.logs.push(`    ${koCard.name} returns to hand`)
+      break
+
+    case 'play_from_trash':
+      result.playFromTrash = true
+      result.logs.push(`    ${koCard.name} can be played from trash (rested)`)
+      break
+
+    case 'rest_opponent':
+      const restCount = effectInfo.drawCount || 1
+      let rested = 0
+      for (const card of opponent.field) {
+        if (!card.isResting && rested < restCount) {
+          card.isResting = true
+          rested++
+          result.logs.push(`    Rested opponent's ${card.name}`)
+        }
+      }
+      break
+  }
+
+  return result
 }
 
 export interface PlaytestPlayer {
@@ -163,7 +975,7 @@ interface PlaytestState {
   combat: CombatState | null  // Current combat in progress
   gameOver: boolean
   winner: 0 | 1 | null
-  handLimitPending: { player: 0 | 1, excessCount: number } | null  // Pending hand limit discard
+  activatedAbilitiesThisTurn: string[]  // Track card instanceIds that used Once Per Turn abilities
 }
 
 interface PlaytestStore extends PlaytestState {
@@ -182,6 +994,7 @@ interface PlaytestStore extends PlaytestState {
   returnToHand: (player: 0 | 1, zone: string, index: number) => void
   takeDamage: (player: 0 | 1) => void
   endTurn: () => void
+  activateAbility: (player: 0 | 1, zone: 'leader' | 'field', index: number) => void
 
   // Effect resolution
   lookAtTopCards: (player: 0 | 1, count: number, filter?: { minCost?: number, maxCost?: number, type?: string }, filterDesc?: string) => void
@@ -197,9 +1010,6 @@ interface PlaytestStore extends PlaytestState {
   skipCounter: () => void
   resolveDamage: () => void
   cancelCombat: () => void
-
-  // Hand limit enforcement
-  discardForHandLimit: (handIndices: number[]) => void
 
   // Selection
   selectCard: (player: 0 | 1, zone: string, index: number) => void
@@ -246,6 +1056,7 @@ const createCardInstance = (cardData: any): PlaytestCard => ({
   counter: cardData.counter ?? null,
   colors: cardData.colors || [],
   type: cardData.type || 'CHARACTER',
+  traits: cardData.traits || cardData.cardTraits || null,  // Card trait like "Navy", "Straw Hat Crew"
   imageUrl: cardData.imageUrl || cardData.image_link || null,
   effect: cardData.effect || null,
   trigger: cardData.trigger || null,
@@ -269,7 +1080,7 @@ const initialState: PlaytestState = {
   combat: null,
   gameOver: false,
   winner: null,
-  handLimitPending: null,
+  activatedAbilitiesThisTurn: [],
 }
 
 export const usePlaytestStore = create<PlaytestStore>((set, get) => ({
@@ -493,7 +1304,13 @@ export const usePlaytestStore = create<PlaytestStore>((set, get) => ({
       if (effectInfo.type === 'look_top') {
         const lookCount = effectInfo.lookCount || 5
         const cardsToReveal = p.deck.slice(0, lookCount)
+        const selectionFilter = createSelectionFilter(effectInfo)
+        const filterDescription = createFilterDescription(effectInfo)
+
         logs.push(`  Looking at top ${lookCount} cards...`)
+        if (filterDescription) {
+          logs.push(`  Filter: ${filterDescription}`)
+        }
 
         set({
           [playerKey]: {
@@ -511,11 +1328,228 @@ export const usePlaytestStore = create<PlaytestStore>((set, get) => ({
             effectType: 'look_top',
             revealedCards: cardsToReveal,
             selectionCount: 1,
-            filterDescription: effectInfo.filterType ? `Type: ${effectInfo.filterType}` : undefined,
+            selectionFilter,
+            filterDescription,
             onComplete: 'to_hand',
           },
         })
         return
+      }
+
+      // Handle draw_give_don effect (like OP13-054 Yamato)
+      if (effectInfo.type === 'draw_give_don') {
+        // Check life condition if present
+        let conditionMet = true
+        if (effectInfo.condition?.startsWith('life_lte_')) {
+          const lifeThreshold = parseInt(effectInfo.condition.split('_')[2])
+          conditionMet = p.lifeCards.length <= lifeThreshold
+        }
+
+        if (conditionMet) {
+          const drawCount = effectInfo.drawCount || 0
+          const giveDonCount = effectInfo.giveDonCount || 0
+
+          // Draw cards
+          const drawnCards: PlaytestCard[] = []
+          const remainingDeck = [...p.deck]
+          for (let i = 0; i < drawCount && remainingDeck.length > 0; i++) {
+            drawnCards.push(remainingDeck.shift()!)
+          }
+
+          logs.push(`  Drew ${drawnCards.length} card(s).`)
+
+          // Give rested DON to leader
+          // After paying cost, DON becomes rested. We can give up to giveDonCount of that to leader.
+          let donGiven = 0
+          let newLeader = p.leader
+          // Calculate rested DON AFTER cost payment (cost becomes rested)
+          const restedDonAfterCost = p.donRested + cost
+          if (giveDonCount > 0 && restedDonAfterCost > 0 && p.leader) {
+            // Give up to giveDonCount rested DON to leader
+            const actualDonToGive = Math.min(giveDonCount, restedDonAfterCost)
+            if (actualDonToGive > 0) {
+              newLeader = { ...p.leader, attachedDon: p.leader.attachedDon + actualDonToGive }
+              donGiven = actualDonToGive
+              logs.push(`  Gave ${donGiven} rested DON to ${p.leader.name}. (+${donGiven * 1000} power)`)
+            }
+          }
+
+          set({
+            [playerKey]: {
+              ...p,
+              leader: newLeader,
+              hand: [...newHand, ...drawnCards],
+              deck: remainingDeck,
+              field: [...p.field, playedCard],
+              donActive: p.donActive - cost,
+              donRested: p.donRested + cost - donGiven,  // Some rested DON went to leader
+            },
+            logs,
+            selectedCard: null,
+          })
+          return
+        } else {
+          logs.push(`  Condition not met (need ${effectInfo.condition?.replace('life_lte_', '')} or less life).`)
+        }
+      }
+
+      // Handle simple draw effect
+      if (effectInfo.type === 'draw') {
+        const conditionMet = checkCondition(effectInfo.condition, p)
+
+        if (conditionMet) {
+          const drawCount = effectInfo.drawCount || 0
+          const drawnCards: PlaytestCard[] = []
+          const remainingDeck = [...p.deck]
+          for (let i = 0; i < drawCount && remainingDeck.length > 0; i++) {
+            drawnCards.push(remainingDeck.shift()!)
+          }
+
+          logs.push(`  Drew ${drawnCards.length} card(s).`)
+
+          set({
+            [playerKey]: {
+              ...p,
+              hand: [...newHand, ...drawnCards],
+              deck: remainingDeck,
+              field: [...p.field, playedCard],
+              donActive: p.donActive - cost,
+              donRested: p.donRested + cost,
+            },
+            logs,
+            selectedCard: null,
+          })
+          return
+        } else {
+          logs.push(`  Condition not met.`)
+        }
+      }
+
+      // Handle add DON from DON deck
+      if (effectInfo.type === 'add_don') {
+        const conditionMet = checkCondition(effectInfo.condition, p)
+
+        if (conditionMet) {
+          const addCount = effectInfo.addDonCount || 0
+          const actualAdd = Math.min(addCount, p.donDeck)
+
+          if (actualAdd > 0) {
+            const newDonDeck = p.donDeck - actualAdd
+            const addToActive = !effectInfo.addDonRested
+            const newDonActive = addToActive ? p.donActive - cost + actualAdd : p.donActive - cost
+            const newDonRested = addToActive ? p.donRested + cost : p.donRested + cost + actualAdd
+
+            logs.push(`  Added ${actualAdd} DON from DON deck${effectInfo.addDonRested ? ' (rested)' : ' (active)'}.`)
+
+            set({
+              [playerKey]: {
+                ...p,
+                hand: newHand,
+                field: [...p.field, playedCard],
+                donDeck: newDonDeck,
+                donActive: newDonActive,
+                donRested: newDonRested,
+              },
+              logs,
+              selectedCard: null,
+            })
+            return
+          }
+        } else {
+          logs.push(`  Condition not met.`)
+        }
+      }
+
+      // Handle set DON as active
+      if (effectInfo.type === 'set_don_active') {
+        const conditionMet = checkCondition(effectInfo.condition, p)
+
+        if (conditionMet) {
+          const setActiveCount = effectInfo.setDonActiveCount || 0
+          // After paying cost, we have some rested DON
+          const restedAfterCost = p.donRested + cost
+          const actualSetActive = Math.min(setActiveCount, restedAfterCost)
+
+          if (actualSetActive > 0) {
+            const newDonActive = p.donActive - cost + actualSetActive
+            const newDonRested = restedAfterCost - actualSetActive
+
+            logs.push(`  Set ${actualSetActive} DON as active.`)
+
+            set({
+              [playerKey]: {
+                ...p,
+                hand: newHand,
+                field: [...p.field, playedCard],
+                donActive: newDonActive,
+                donRested: newDonRested,
+              },
+              logs,
+              selectedCard: null,
+            })
+            return
+          }
+        } else {
+          logs.push(`  Condition not met.`)
+        }
+      }
+
+      // Handle return to hand effect (like Atmos OP08-040)
+      if (effectInfo.type === 'return_to_hand') {
+        // Check leader type condition if present
+        let conditionMet = true
+        if (effectInfo.leaderTypeCondition && p.leader) {
+          // Check if leader's type includes the required trait
+          const leaderTraits = (p.leader.traits || '').toString().toLowerCase()
+          const requiredTrait = effectInfo.leaderTypeCondition.toLowerCase()
+          conditionMet = leaderTraits.includes(requiredTrait)
+        }
+
+        if (conditionMet) {
+          const costMax = effectInfo.costMax || 99
+          const returnCount = effectInfo.returnCount || 1
+          const opponent = player === 0 ? state.player2 : state.player1
+          const opponentKey = player === 0 ? 'player2' : 'player1'
+
+          // Find valid targets (opponent's characters with cost <= costMax)
+          const validTargets = opponent.field.filter(c => (c.cost || 0) <= costMax)
+
+          if (validTargets.length > 0) {
+            logs.push(`  Return to hand effect: Select up to ${returnCount} of opponent's Characters (cost ${costMax} or less)`)
+
+            // For now, auto-select the first valid target(s)
+            // In a full implementation, this would trigger a selection UI
+            const targetsToReturn = validTargets.slice(0, returnCount)
+            const newOpponentField = opponent.field.filter(c => !targetsToReturn.includes(c))
+            const newOpponentHand = [...opponent.hand, ...targetsToReturn.map(c => ({ ...c, attachedDon: 0, isResting: false }))]
+
+            for (const target of targetsToReturn) {
+              logs.push(`  ${target.name} returned to opponent's hand!`)
+            }
+
+            set({
+              [playerKey]: {
+                ...p,
+                hand: newHand,
+                field: [...p.field, playedCard],
+                donActive: p.donActive - cost,
+                donRested: p.donRested + cost,
+              },
+              [opponentKey]: {
+                ...opponent,
+                field: newOpponentField,
+                hand: newOpponentHand,
+              },
+              logs,
+              selectedCard: null,
+            })
+            return
+          } else {
+            logs.push(`  No valid targets for return to hand effect.`)
+          }
+        } else {
+          logs.push(`  Leader type condition not met.`)
+        }
       }
     }
 
@@ -738,18 +1772,8 @@ export const usePlaytestStore = create<PlaytestStore>((set, get) => ({
   endTurn: () => {
     const state = get()
 
-    // Check hand limit before ending turn (7 cards max per Vinsmoke Engine rules)
     const currentPlayerKey = state.activePlayer === 0 ? 'player1' : 'player2'
     const currentP = state[currentPlayerKey]
-
-    if (currentP.hand.length > HAND_LIMIT) {
-      const excessCount = currentP.hand.length - HAND_LIMIT
-      set({
-        handLimitPending: { player: state.activePlayer, excessCount },
-        logs: [...state.logs, `${currentP.name} has ${currentP.hand.length} cards in hand. Must discard ${excessCount} card(s) to meet hand limit of ${HAND_LIMIT}.`],
-      })
-      return // Cannot end turn until hand limit is met
-    }
 
     const nextPlayer = state.activePlayer === 0 ? 1 : 0
     const nextPlayerKey = nextPlayer === 0 ? 'player1' : 'player2'
@@ -777,15 +1801,17 @@ export const usePlaytestStore = create<PlaytestStore>((set, get) => ({
     const donToDraw = 2
     const actualDonDraw = Math.min(donToDraw, nextP.donDeck)
 
-    // Update turn number (increments when going back to Player 1)
-    const newTurn = nextPlayer === 0 ? state.turn + 1 : state.turn
+    // Update turn number (increments every time a player ends their turn)
+    // Turn 1 = P1's first turn, Turn 2 = P2's first turn, Turn 3 = P1's second turn, etc.
+    const newTurn = state.turn + 1
 
     const logs = [
       ...state.logs,
       `--- ${currentP.name} ends turn ---`,
+      `  DON returned: ${leaderDon} from leader, ${fieldDon} from field, ${currentP.donRested} rested, ${currentP.donActive} active = ${totalDonReturned} total`,
       `--- Turn ${newTurn} - ${nextP.name}'s turn ---`,
-      `Refresh: All ${nextP.name}'s cards activated, DON returned to active.`,
-      `DON Phase: ${nextP.name} draws ${actualDonDraw} DON.`,
+      `Refresh: All ${nextP.name}'s cards activated, DON returned to active (${nextTotalDon} DON).`,
+      `DON Phase: ${nextP.name} draws ${actualDonDraw} DON. (Total: ${nextTotalDon + actualDonDraw})`,
     ]
 
     set({
@@ -807,12 +1833,206 @@ export const usePlaytestStore = create<PlaytestStore>((set, get) => ({
       activePlayer: nextPlayer as 0 | 1,
       turn: newTurn,
       isFirstTurn: false,
+      activatedAbilitiesThisTurn: [],  // Reset Once Per Turn abilities
       logs,
       selectedCard: null,
     })
 
     // Draw phase: Draw 1 card (happens after the first turn)
     get().drawCard(nextPlayer as 0 | 1)
+  },
+
+  activateAbility: (player, zone, index) => {
+    set(state => {
+      if (state.gameOver) return { logs: [...state.logs, 'Game is over!'] }
+      if (player !== state.activePlayer) return { logs: [...state.logs, 'Not your turn!'] }
+
+      const playerKey = player === 0 ? 'player1' : 'player2'
+      const opponentKey = player === 0 ? 'player2' : 'player1'
+      const p = state[playerKey]
+      const opponent = state[opponentKey]
+
+      // Get the card
+      const card = zone === 'leader' ? p.leader : p.field[index]
+      if (!card) return { logs: [...state.logs, 'Card not found!'] }
+
+      // Check if card has [Activate: Main] effect
+      if (!hasActivateMainEffect(card)) {
+        return { logs: [...state.logs, `${card.name} has no [Activate: Main] ability.`] }
+      }
+
+      const effectInfo = parseActivateMainEffect(card.effect || '')
+
+      // Check Once Per Turn
+      if (effectInfo.oncePerTurn && state.activatedAbilitiesThisTurn.includes(card.instanceId)) {
+        return { logs: [...state.logs, `${card.name}'s ability can only be used once per turn.`] }
+      }
+
+      // Check if card is already rested (for abilities that require resting self)
+      if (effectInfo.restSelf && card.isResting) {
+        return { logs: [...state.logs, `${card.name} is already rested.`] }
+      }
+
+      // Check DON cost
+      if (effectInfo.restDonCount > p.donActive) {
+        return { logs: [...state.logs, `Not enough active DON! Need ${effectInfo.restDonCount}, have ${p.donActive}.`] }
+      }
+
+      const logs = [...state.logs, `${p.name} activates ${card.name}'s [Activate: Main] ability!`]
+
+      // Pay costs
+      let newField = [...p.field]
+      let newHand = [...p.hand]
+      let newTrash = [...p.trash]
+      let newDeck = [...p.deck]
+      let newDonActive = p.donActive
+      let newDonRested = p.donRested
+      let newOpponentField = [...opponent.field]
+      let newOpponentHand = [...opponent.hand]
+      let newOpponentDeck = [...opponent.deck]
+
+      // Rest self
+      if (effectInfo.restSelf && zone === 'field') {
+        newField[index] = { ...newField[index], isResting: true }
+        logs.push(`  Rested ${card.name}.`)
+      }
+
+      // Trash self
+      if (effectInfo.trashSelf && zone === 'field') {
+        const trashed = newField.splice(index, 1)[0]
+        newTrash.push({ ...trashed, attachedDon: 0 })
+        logs.push(`  Trashed ${card.name}.`)
+      }
+
+      // Rest DON
+      if (effectInfo.restDonCount > 0) {
+        newDonActive -= effectInfo.restDonCount
+        newDonRested += effectInfo.restDonCount
+        logs.push(`  Rested ${effectInfo.restDonCount} DON.`)
+      }
+
+      // Trash from hand (auto-select lowest cost for now)
+      if (effectInfo.trashFromHand > 0) {
+        const sorted = [...newHand].sort((a, b) => (a.cost || 0) - (b.cost || 0))
+        for (let i = 0; i < effectInfo.trashFromHand && sorted.length > 0; i++) {
+          const toTrash = sorted.shift()!
+          const idx = newHand.findIndex(c => c.instanceId === toTrash.instanceId)
+          if (idx >= 0) {
+            newHand.splice(idx, 1)
+            newTrash.push(toTrash)
+            logs.push(`  Trashed ${toTrash.name} from hand.`)
+          }
+        }
+      }
+
+      // Execute effect
+      switch (effectInfo.type) {
+        case 'draw':
+          const drawCount = effectInfo.drawCount || 1
+          for (let i = 0; i < drawCount && newDeck.length > 0; i++) {
+            const drawn = newDeck.shift()!
+            newHand.push(drawn)
+          }
+          logs.push(`  Drew ${drawCount} card(s).`)
+          break
+
+        case 'ko_opponent':
+          const koTargets = newOpponentField.filter(c => (c.cost || 0) <= (effectInfo.costMax || 99))
+          if (koTargets.length > 0) {
+            const target = koTargets[0]
+            const idx = newOpponentField.findIndex(c => c.instanceId === target.instanceId)
+            if (idx >= 0) {
+              newOpponentField.splice(idx, 1)
+              logs.push(`  K.O.'d opponent's ${target.name}!`)
+            }
+          } else {
+            logs.push(`  No valid K.O. targets.`)
+          }
+          break
+
+        case 'power_boost':
+          if (zone === 'field' && !effectInfo.trashSelf) {
+            // Would need to track power modifiers - for now just log
+            logs.push(`  ${card.name} gains +${effectInfo.powerChange} power this turn.`)
+          }
+          break
+
+        case 'power_reduce':
+          if (newOpponentField.length > 0) {
+            logs.push(`  Gave opponent's ${newOpponentField[0].name} ${effectInfo.powerChange} power this turn.`)
+          }
+          break
+
+        case 'bottom_deck':
+          const bottomTargets = newOpponentField.filter(c => (c.cost || 0) <= (effectInfo.costMax || 99))
+          if (bottomTargets.length > 0) {
+            const target = bottomTargets[0]
+            const idx = newOpponentField.findIndex(c => c.instanceId === target.instanceId)
+            if (idx >= 0) {
+              newOpponentField.splice(idx, 1)
+              newOpponentDeck.push({ ...target, attachedDon: 0, isResting: false })
+              logs.push(`  Placed ${target.name} at the bottom of opponent's deck!`)
+            }
+          } else {
+            logs.push(`  No valid targets.`)
+          }
+          break
+
+        case 'search':
+          // Would need UI for selection - for now auto-select
+          if (effectInfo.lookCount && newDeck.length > 0) {
+            const lookCount = Math.min(effectInfo.lookCount, newDeck.length)
+            logs.push(`  Looking at top ${lookCount} cards...`)
+            // For now, just draw the first matching card
+            if (effectInfo.traitFilter) {
+              const topCards = newDeck.slice(0, lookCount)
+              const match = topCards.find(c => {
+                const traits = (c.traits || '').toString().toLowerCase()
+                return traits.includes(effectInfo.traitFilter!.toLowerCase())
+              })
+              if (match) {
+                const idx = newDeck.findIndex(c => c.instanceId === match.instanceId)
+                if (idx >= 0) {
+                  newDeck.splice(idx, 1)
+                  newHand.push(match)
+                  logs.push(`  Added ${match.name} to hand.`)
+                }
+              } else {
+                logs.push(`  No matching card found.`)
+              }
+            }
+          }
+          break
+
+        default:
+          logs.push(`  Effect type '${effectInfo.type}' not fully implemented yet.`)
+      }
+
+      // Track Once Per Turn usage
+      const newActivated = effectInfo.oncePerTurn
+        ? [...state.activatedAbilitiesThisTurn, card.instanceId]
+        : state.activatedAbilitiesThisTurn
+
+      return {
+        [playerKey]: {
+          ...p,
+          field: newField,
+          hand: newHand,
+          deck: newDeck,
+          trash: newTrash,
+          donActive: newDonActive,
+          donRested: newDonRested,
+        },
+        [opponentKey]: {
+          ...opponent,
+          field: newOpponentField,
+          hand: newOpponentHand,
+          deck: newOpponentDeck,
+        },
+        activatedAbilitiesThisTurn: newActivated,
+        logs,
+      }
+    })
   },
 
   selectCard: (player, zone, index) => {
@@ -893,7 +2113,7 @@ export const usePlaytestStore = create<PlaytestStore>((set, get) => ({
     set(state => {
       if (!state.effectResolution) return state
 
-      const { player, effectType, revealedCards, onComplete, selectionCount } = state.effectResolution
+      const { player, effectType, revealedCards, onComplete, selectionCount, selectionFilter, filterDescription } = state.effectResolution
       const playerKey = player === 0 ? 'player1' : 'player2'
       const p = state[playerKey]
 
@@ -903,6 +2123,16 @@ export const usePlaytestStore = create<PlaytestStore>((set, get) => ({
         return {
           effectResolution: null,
           logs: [...state.logs, `${p.name} chose no cards.`],
+        }
+      }
+
+      // Validate selection against filter (for searcher effects)
+      if (selectionFilter && selectedCards.length > 0) {
+        const invalidCards = selectedCards.filter(card => !selectionFilter(card))
+        if (invalidCards.length > 0) {
+          return {
+            logs: [...state.logs, `Invalid selection: ${invalidCards.map(c => c.name).join(', ')} does not match filter${filterDescription ? ` (${filterDescription})` : ''}.`],
+          }
         }
       }
 
@@ -1041,8 +2271,8 @@ export const usePlaytestStore = create<PlaytestStore>((set, get) => ({
       if (state.activePlayer === 0 && state.turn < 3) {
         return { canAttack: false, reason: 'Leader cannot attack until turn 3' }
       }
-      if (state.activePlayer === 1 && state.turn < 2) {
-        return { canAttack: false, reason: 'Leader cannot attack until turn 2' }
+      if (state.activePlayer === 1 && state.turn < 4) {
+        return { canAttack: false, reason: 'Leader cannot attack until turn 4' }
       }
     }
 
@@ -1109,28 +2339,190 @@ export const usePlaytestStore = create<PlaytestStore>((set, get) => ({
 
       // Calculate powers
       // DON is ONLY active for attacker (it's their turn) - from Vinsmoke Engine
-      const attackerPower = (attacker.power || 0) + (attacker.attachedDon * 1000)
+      let attackerPower = (attacker.power || 0) + (attacker.attachedDon * 1000)
       // DON is NOT active for defender (it's not their turn)
       const defenderBasePower = target.power || 0
 
+      const logs = [...state.logs]
+
+      // Track state changes from When Attacking effects
+      let newAttackerField = [...attacker_p.field]
+      let newDefenderField = [...defender_p.field]
+      let newAttackerHand = [...attacker_p.hand]
+      let newAttackerDeck = [...attacker_p.deck]
+      let newAttackerTrash = [...attacker_p.trash]
+      let newDefenderHand = [...defender_p.hand]
+      let newDefenderDeck = [...defender_p.deck]
+      let blockerDisabledPower: number | undefined = undefined
+
+      // Execute [When Attacking] effect if present
+      if (hasWhenAttackingEffect(attacker)) {
+        const effectInfo = parseWhenAttackingEffect(attacker.effect || '')
+
+        // Check DON requirement
+        const hasEnoughDon = attacker.attachedDon >= effectInfo.donRequirement
+
+        if (hasEnoughDon && effectInfo.type !== 'unknown') {
+          logs.push(`  [When Attacking] ${attacker.name} effect triggered!`)
+
+          // Check conditions
+          let conditionMet = true
+          if (effectInfo.condition?.startsWith('life_gte_')) {
+            const threshold = parseInt(effectInfo.condition.split('_')[2])
+            conditionMet = attacker_p.lifeCards.length >= threshold
+          } else if (effectInfo.condition?.startsWith('life_lte_')) {
+            const threshold = parseInt(effectInfo.condition.split('_')[2])
+            conditionMet = attacker_p.lifeCards.length <= threshold
+          } else if (effectInfo.condition?.startsWith('hand_lte_')) {
+            const threshold = parseInt(effectInfo.condition.split('_')[2])
+            conditionMet = attacker_p.hand.length <= threshold
+          }
+
+          if (!conditionMet) {
+            logs.push(`    Condition not met.`)
+          } else {
+            // Execute effect based on type
+            switch (effectInfo.type) {
+              case 'draw':
+                const drawCount = effectInfo.drawCount || 1
+                for (let i = 0; i < drawCount && newAttackerDeck.length > 0; i++) {
+                  const drawn = newAttackerDeck.shift()!
+                  newAttackerHand.push(drawn)
+                }
+                logs.push(`    Drew ${drawCount} card(s).`)
+                break
+
+              case 'draw_trash':
+                // Draw first
+                const dCount = effectInfo.drawCount || 1
+                for (let i = 0; i < dCount && newAttackerDeck.length > 0; i++) {
+                  const drawn = newAttackerDeck.shift()!
+                  newAttackerHand.push(drawn)
+                }
+                logs.push(`    Drew ${dCount} card(s).`)
+                // Then trash (auto-select lowest cost for now)
+                const tCount = effectInfo.trashCount || 1
+                const sortedHand = [...newAttackerHand].sort((a, b) => (a.cost || 0) - (b.cost || 0))
+                for (let i = 0; i < tCount && sortedHand.length > 0; i++) {
+                  const toTrash = sortedHand.shift()!
+                  const idx = newAttackerHand.findIndex(c => c.instanceId === toTrash.instanceId)
+                  if (idx >= 0) {
+                    newAttackerHand.splice(idx, 1)
+                    newAttackerTrash.push(toTrash)
+                    logs.push(`    Trashed ${toTrash.name}.`)
+                  }
+                }
+                break
+
+              case 'ko_opponent':
+                // Find valid targets
+                const koTargets = newDefenderField.filter(c => {
+                  if (effectInfo.powerMax !== undefined && (c.power || 0) > effectInfo.powerMax) return false
+                  if (effectInfo.costMax !== undefined && (c.cost || 0) > effectInfo.costMax) return false
+                  return true
+                })
+                if (koTargets.length > 0) {
+                  const koTarget = koTargets[0]
+                  const idx = newDefenderField.findIndex(c => c.instanceId === koTarget.instanceId)
+                  if (idx >= 0) {
+                    newDefenderField.splice(idx, 1)
+                    logs.push(`    K.O.'d opponent's ${koTarget.name}!`)
+                  }
+                } else {
+                  logs.push(`    No valid K.O. targets.`)
+                }
+                break
+
+              case 'return_to_hand':
+                const returnTargets = newDefenderField.filter(c => (c.cost || 0) <= (effectInfo.costMax || 99))
+                if (returnTargets.length > 0) {
+                  const returnTarget = returnTargets[0]
+                  const idx = newDefenderField.findIndex(c => c.instanceId === returnTarget.instanceId)
+                  if (idx >= 0) {
+                    newDefenderField.splice(idx, 1)
+                    newDefenderHand.push({ ...returnTarget, attachedDon: 0, isResting: false })
+                    logs.push(`    Returned ${returnTarget.name} to opponent's hand!`)
+                  }
+                } else {
+                  logs.push(`    No valid targets to return.`)
+                }
+                break
+
+              case 'power_boost':
+                const boost = effectInfo.powerChange || 0
+                attackerPower += boost
+                logs.push(`    ${attacker.name} gains +${boost} power this battle! (Now: ${attackerPower})`)
+                break
+
+              case 'power_reduce':
+                // Apply to first opponent character for now
+                if (newDefenderField.length > 0) {
+                  logs.push(`    Gave opponent's ${newDefenderField[0].name} ${effectInfo.powerChange} power this turn.`)
+                }
+                break
+
+              case 'bottom_deck':
+                const bottomTargets = newDefenderField.filter(c => (c.cost || 0) <= (effectInfo.costMax || 99))
+                if (bottomTargets.length > 0) {
+                  const bottomTarget = bottomTargets[0]
+                  const idx = newDefenderField.findIndex(c => c.instanceId === bottomTarget.instanceId)
+                  if (idx >= 0) {
+                    newDefenderField.splice(idx, 1)
+                    newDefenderDeck.push({ ...bottomTarget, attachedDon: 0, isResting: false })
+                    logs.push(`    Placed ${bottomTarget.name} at the bottom of opponent's deck!`)
+                  }
+                } else {
+                  logs.push(`    No valid targets.`)
+                }
+                break
+
+              case 'disable_blocker':
+                blockerDisabledPower = effectInfo.powerMax
+                logs.push(`    Opponent cannot activate Blocker${effectInfo.powerMax ? ` with ${effectInfo.powerMax} or less power` : ''} this battle.`)
+                break
+
+              case 'rest_opponent':
+                const activeOpponentCards = newDefenderField.filter(c => !c.isResting)
+                if (activeOpponentCards.length > 0) {
+                  const toRest = activeOpponentCards[0]
+                  const idx = newDefenderField.findIndex(c => c.instanceId === toRest.instanceId)
+                  if (idx >= 0) {
+                    newDefenderField[idx] = { ...toRest, isResting: true }
+                    logs.push(`    Rested opponent's ${toRest.name}!`)
+                  }
+                }
+                break
+            }
+          }
+        } else if (!hasEnoughDon && effectInfo.donRequirement > 0) {
+          logs.push(`  [When Attacking] ${attacker.name} needs ${effectInfo.donRequirement} DON attached (has ${attacker.attachedDon}).`)
+        }
+      }
+
+      logs.push(`${attacker_p.name}'s ${attacker.name} (Power: ${attackerPower}) attacks ${target.name}!`)
+
       // Find available blockers (defender's active characters with [Blocker])
+      // Apply blocker disable effect if active
       const availableBlockers: { index: number, card: PlaytestCard }[] = []
-      defender_p.field.forEach((card, index) => {
+      newDefenderField.forEach((card, index) => {
         if (hasBlocker(card) && !card.isResting) {
+          // Check if blocker is disabled by When Attacking effect
+          if (blockerDisabledPower !== undefined && (card.power || 0) <= blockerDisabledPower) {
+            // Blocker is disabled, don't add to available blockers
+            return
+          }
           availableBlockers.push({ index, card })
         }
       })
 
       // Find available counter cards in defender's hand
       const availableCounters: { index: number, card: PlaytestCard, value: number }[] = []
-      defender_p.hand.forEach((card, index) => {
+      newDefenderHand.forEach((card, index) => {
         const counterValue = getCounterValue(card)
         if (counterValue > 0) {
           availableCounters.push({ index, card, value: counterValue })
         }
       })
-
-      const logs = [...state.logs, `${attacker_p.name}'s ${attacker.name} (Power: ${attackerPower}) attacks ${target.name}!`]
 
       // Create combat state
       const combat: CombatState = {
@@ -1167,7 +2559,23 @@ export const usePlaytestStore = create<PlaytestStore>((set, get) => ({
         logs.push(`[DAMAGE STEP] Resolving combat...`)
       }
 
-      return { combat, logs }
+      // Return updated state including When Attacking effect changes
+      return {
+        [activePlayerKey]: {
+          ...attacker_p,
+          hand: newAttackerHand,
+          deck: newAttackerDeck,
+          trash: newAttackerTrash,
+        },
+        [defenderKey]: {
+          ...defender_p,
+          field: newDefenderField,
+          hand: newDefenderHand,
+          deck: newDefenderDeck,
+        },
+        combat,
+        logs
+      }
     })
   },
 
@@ -1426,14 +2834,40 @@ export const usePlaytestStore = create<PlaytestStore>((set, get) => ({
           // KO character
           const koCard = newDefenderField[currentTargetIndex]
           newDefenderField.splice(currentTargetIndex, 1)
-          newDefenderTrash.push({ ...koCard, attachedDon: 0 })
           logs.push(`${attacker.name} KO's ${currentTarget.name}!`)
+
+          // Check for On K.O. effects on the KO'd card
+          const koResult = executeOnKOEffect(koCard, defender_p, attacker_p)
+          logs.push(...koResult.logs)
+
+          // Handle On K.O. results
+          if (koResult.returnToHand) {
+            // Card returns to hand instead of trash
+            newDefenderHand.push({ ...koCard, attachedDon: 0, isResting: false })
+          } else if (koResult.playFromTrash) {
+            // Card goes to trash, then gets played rested (for Marco-style effects)
+            // For now, add to field rested - in actual game this has more conditions
+            newDefenderField.push({ ...koCard, attachedDon: 0, isResting: true })
+            logs.push(`  ${koCard.name} played from trash (rested)`)
+          } else {
+            // Normal KO - card goes to trash
+            newDefenderTrash.push({ ...koCard, attachedDon: 0 })
+          }
+
+          // Add drawn cards to defender's hand
+          if (koResult.drawnCards.length > 0) {
+            newDefenderHand.push(...koResult.drawnCards)
+          }
+
           // Return attached DON to active
           // Note: Defender's DON stays rested (it's not their turn)
         }
       } else {
         logs.push(`Attack is defended! (${attackerPower} vs ${totalDefense})`)
       }
+
+      // Update defender's deck if cards were drawn by On K.O. effect
+      const newDefenderDeck = [...defender_p.deck]
 
       return {
         [attackerKey]: {
@@ -1445,6 +2879,7 @@ export const usePlaytestStore = create<PlaytestStore>((set, get) => ({
           ...defender_p,
           leader: newDefenderLeader,
           field: newDefenderField,
+          deck: newDefenderDeck,
           lifeCards: newDefenderLife,
           hand: newDefenderHand,
           trash: newDefenderTrash,
@@ -1462,41 +2897,6 @@ export const usePlaytestStore = create<PlaytestStore>((set, get) => ({
       combat: null,
       logs: [...state.logs, 'Combat cancelled.'],
     }))
-  },
-
-  discardForHandLimit: (handIndices) => {
-    set(state => {
-      if (!state.handLimitPending) return state
-
-      const { player, excessCount } = state.handLimitPending
-      const playerKey = player === 0 ? 'player1' : 'player2'
-      const p = state[playerKey]
-
-      if (handIndices.length !== excessCount) {
-        return { logs: [...state.logs, `Must discard exactly ${excessCount} cards.`] }
-      }
-
-      const newHand = [...p.hand]
-      const newTrash = [...p.trash]
-      const logs = [...state.logs]
-
-      // Sort in reverse order to avoid shifting issues
-      const sortedIndices = [...handIndices].sort((a, b) => b - a)
-      for (const idx of sortedIndices) {
-        const card = newHand[idx]
-        if (card) {
-          newHand.splice(idx, 1)
-          newTrash.push(card)
-          logs.push(`${p.name} discards ${card.name} (hand limit).`)
-        }
-      }
-
-      return {
-        [playerKey]: { ...p, hand: newHand, trash: newTrash },
-        handLimitPending: null,
-        logs,
-      }
-    })
   },
 
   addLog: (message) => {
