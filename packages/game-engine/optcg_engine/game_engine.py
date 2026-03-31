@@ -783,14 +783,15 @@ class GameState:
                 return True  # Choice created; will resolve via resolve_pending_choice
 
         if cost <= available:
-            # Spend DON
+            # Spend DON — guard against cost=0 (e.g. Crocodile OP01-067 -1 modifier reducing
+            # an event to 0): without the guard the loop never breaks and rests ALL active DON.
             used = 0
             for i in range(len(self.current_player.don_pool)):
+                if used >= cost:
+                    break
                 if self.current_player.don_pool[i] == "active":
                     self.current_player.don_pool[i] = "rested"
                     used += 1
-                    if used == cost:
-                        break
 
             # Remove from hand
             if card in self.current_player.hand:

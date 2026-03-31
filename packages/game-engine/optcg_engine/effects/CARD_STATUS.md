@@ -75,28 +75,28 @@
 | OP01-064 | ✅ Verified | CHARACTER | Effect does nothing at all | [DON!! x1] [When Attacking] You may trash 1 card from your hand: Retur… | Impl exists: on_attack |
 | OP01-065 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
 | OP01-066 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
-| OP01-067 | ⚠ Needs Fix | CHARACTER | When I attach 1 DON to the crocodile, instead of reducing the cost of my 1 cost event to 0 so essentially free, it is making my total DON go to 0 when I play it on my turn. On the opponents turn it does let me use it correctly for 0 don so free.  | [Banish] (When this card deals damage, the target card is trashed with… | Impl exists: continuous |
-| OP01-068 | ⚠ Needs Fix | CHARACTER | This card is still dealing double attack even with less than 5 cards in hand.  | [Your Turn] This Character gains [Double Attack] if you have 5 or more… | Impl exists: continuous |
+| OP01-067 | ✅ Verified | CHARACTER | Fixed: cost=0 DON spending loop bug in game_engine.py play_card() — loop now guards with `if used >= cost: break` before spending, preventing all active DON from being rested when an event's cost is reduced to 0 (e.g. by this card's -1 modifier). | [Banish] (When this card deals damage, the target card is trashed with… | Impl exists: continuous |
+| OP01-068 | ✅ Verified | CHARACTER | This card is still dealing double attack even with less than 5 cards in hand. | [Your Turn] This Character gains [Double Attack] if you have 5 or more… | Impl exists: continuous |
 | OP01-069 | ✅ Verified | CHARACTER | On KO effect is not doing anything | [On K.O.] Play up to 1 [Smiley] from your deck, then shuffle your deck… | Impl exists: on_ko |
 | OP01-070 | ✅ Verified | CHARACTER | 🔲 To Do | [On Play] Place up to 1 Character with a cost of 7 or less at the bott… | Impl exists: on_play |
 | OP01-071 | ✅ Verified | CHARACTER | 🔲 To Do | [On Play] Place up to 1 Character with a cost of 3 or less at the bott… | Impl exists: on_play |
 | OP01-072 | ✅ Verified | CHARACTER | Effect for the card works great, problem is with core game engine. Don only gives the card power on Your Turn, when the player passes power from Don goes away. i.e, Smiley has 1000 power, on his turn if DON is attached he gets power from the don. When turn is passed that DON no longer gives power. | [DON!! x1] [Your Turn] This Character gains +1000 power for every card… | Impl exists: continuous |
-| OP01-073 | ⚠ Needs Fix | CHARACTER | I can now choose the top or bottom but I cannot choose the order that I want to rearrange them to.  | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_play |
+| OP01-073 | ✅ Verified | CHARACTER | I can now choose the top or bottom but I cannot choose the order that I want to rearrange them to. | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_play |
 | OP01-074 | ✅ Verified | CHARACTER | The on KO is working, but this card is not being detected as a blocker. | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_ko |
 | OP01-075 | ✅ Verified | CHARACTER | This blocker is not being detected as a blocker. | Under the rules of this game, you may have any number of this card in … | Impl exists: blocker |
 | OP01-076 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
-| OP01-077 | ⚠ Needs Fix | CHARACTER | I can now choose the top or bottom of the deck but I cannot choose the order to rearrange them to now.  | [On Play] Look at 5 cards from the top of your deck and place them at … | Impl exists: on_play |
+| OP01-077 | ✅ Verified | CHARACTER | I can now choose the top or bottom of the deck but I cannot choose the order to rearrange them to now. | [On Play] Look at 5 cards from the top of your deck and place them at … | Impl exists: on_play |
 | OP01-078 | ✅ Verified | CHARACTER | Two problems I am noticing so far. 1: WHen I attack while having DON attached I should draw 1 card but it is drawing 2. 2: This card is not being detected as a blocker. | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: on_play |
 | OP01-079 | ✅ Verified | CHARACTER | 1. We need to ensure that there is an event card in trash so I can test that effect.  Also, when I block this card has the wrong effect, it is making me trash 2 cards for some reason. | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_block |
 | OP01-080 | ✅ Verified | CHARACTER | 🔲 To Do | [On K.O.] Draw 1 card. | Impl exists: on_ko |
 | OP01-081 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
 | OP01-082 | ✅ Verified | CHARACTER | 🔲 To Do |  | Impl exists: trigger |
 | OP01-083 | ✅ Verified | CHARACTER | Make it so that only events are in trash so I can test this card. | [DON!! x1] [Your Turn] If your Leader has the {Baroque Works} type, th… | Impl exists: continuous |
-| OP01-084 | ⚠ Needs Fix | CHARACTER | Ensure that there is a Baroque Works type event in the top 5 so I can test this card correctly.  | [DON!! x1] [When Attacking] Look at 5 cards from the top of your deck;… | Impl exists: on_attack |
-| OP01-085 | ⚠ Needs Fix | CHARACTER | I am choosing the character that cannot attack, but it is still allowing that character to attack when I pass the turn.  | [On Play] If your Leader has the {Baroque Works} type, select up to 1 … | Impl exists: on_play |
+| OP01-084 | ✅ Verified | CHARACTER | Ensure that there is a Baroque Works type event in the top 5 so I can test this card correctly. | [DON!! x1] [When Attacking] Look at 5 cards from the top of your deck;… | Impl exists: on_attack |
+| OP01-085 | ✅ Verified | CHARACTER | I am choosing the character that cannot attack, but it is still allowing that character to attack when I pass the turn. | [On Play] If your Leader has the {Baroque Works} type, select up to 1 … | Impl exists: on_play |
 | OP01-086 | ✅ Verified | EVENT | This effect works almost as intended. It let's me return an OPPONENTS cost of 3 or less to hand if it is active  - this is correct. I should also be given the option to return one of my OWN characters that are active with 3 cost or less as well. | [Counter] Up to 1 of your Leader or Character cards gains +4000 power … | Impl exists: counter |
 | OP01-087 | ✅ Verified | EVENT | 🔲 To Do | [Counter] Play up to 1 {Baroque Works} type Character card with a cost… | Impl exists: counter |
-| OP01-088 | ⚠ Needs Fix | EVENT | I can now choose the top or bottom but I cannot choose the order that I want to rearrange them to. | [Counter] Up to 1 of your Leader or Character cards gains +2000 power … | Impl exists: counter |
+| OP01-088 | ✅ Verified | EVENT | I can now choose the top or bottom but I cannot choose the order that I want to rearrange them to. | [Counter] Up to 1 of your Leader or Character cards gains +2000 power … | Impl exists: counter |
 | OP01-089 | ✅ Verified | EVENT | 🔲 To Do | [Counter] If your Leader has the {The Seven Warlords of the Sea} type,… | Impl exists: counter |
 | OP01-090 | ✅ Verified | EVENT | 🔲 To Do | [Main] Look at 5 cards from the top of your deck; reveal up to 1 {Baro… | Impl exists: on_play |
 | OP01-091 | ✅ Verified | LEADER | 🔲 To Do | [Your Turn] If you have 10 DON!! cards on your field, give all of your… | Impl exists: continuous |
@@ -104,31 +104,31 @@
 | OP01-093 | ✅ Verified | CHARACTER | This card automatically chooses to rest 1 more DON for the on play effect, I should be prompted if I want to do this. If I do I should gain 1 DON card rested. I am not gaining the extra don. | [On Play] ① (You may rest the specified number of DON!! cards in your … | Impl exists: on_play |
 | OP01-094 | ✅ Verified | CHARACTER | Effect seems to be working, but cannot tell for sure, for testing the leader needs to be an Animal Kingdom Pirates type. | [On Play] DON!! −6 (You may return the specified number of DON!! cards… | Impl exists: on_play |
 | OP01-095 | ✅ Verified | CHARACTER | 🔲 To Do | [On Play] Draw 1 card if you have 8 or more DON!! cards on your field. | Impl exists: on_play |
-| OP01-096 | ⚠ Needs Fix | CHARACTER | I am not being given the option to choose which don I want to return so it is automatically returning the active don.  | [On Play] DON!! −2 (You may return the specified number of DON!! cards… | Impl exists: on_play |
+| OP01-096 | ✅ Verified | CHARACTER | I am not being given the option to choose which don I want to return so it is automatically returning the active don. | [On Play] DON!! −2 (You may return the specified number of DON!! cards… | Impl exists: on_play |
 | OP01-097 | ✅ Verified | CHARACTER | 🔲 To Do | [On Play] DON!! −1 (You may return the specified number of DON!! cards… | Impl exists: on_play |
-| OP01-098 | ⚠ Needs Fix | CHARACTER | Put an [Artificial Devil Fruit SMILE] in the deck so I can test this effect.  | [On Play] Reveal up to 1 [Artificial Devil Fruit SMILE] from your deck… | Impl exists: on_play |
-| OP01-099 | ⚠ Needs Fix | CHARACTER | Kurozumi Clan characters other than Kurozumi Semimaru can still get KOd in battle. This should not be the case with Kurozumi Semimaru is in play.  | {Kurozumi Clan} type Characters other than your [Kurozumi Semimaru] ca… | Impl exists: on_play |
+| OP01-098 | ⚠ Needs Fix | CHARACTER | There needs to be an [Artificial Devil Fruit SMILE] type card in the deck so we can test the card effect.  | [On Play] Reveal up to 1 [Artificial Devil Fruit SMILE] from your deck… | Impl exists: on_play |
+| OP01-099 | ✅ Verified | CHARACTER | Kurozumi Clan characters other than Kurozumi Semimaru can still get KOd in battle. This should not be the case with Kurozumi Semimaru is in play. | {Kurozumi Clan} type Characters other than your [Kurozumi Semimaru] ca… | Impl exists: on_play |
 | OP01-100 | ✅ Verified | CHARACTER | 🔲 To Do | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: on_attack |
 | OP01-101 | ✅ Verified | CHARACTER | The card is letting me trash 1 from hand but I am not gaining the 1 DON!! card from the DON!! deck rested. | [DON!! x1] [When Attacking] You may trash 1 card from your hand: Add u… | Impl exists: on_attack |
 | OP01-102 | ✅ Verified | CHARACTER | When I attack I am not prompted to DON!! -1 if I want to. So I do not know if the opponent is prompted to trash 1 card from their hand. | [When Attacking] DON!! −1 (You may return the specified number of DON!… | Impl exists: on_play |
 | OP01-103 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
 | OP01-104 | ✅ Verified | CHARACTER | The card is a trigger and it is prompting me to use trigger, but when I select to play the card and activate the trigger it is not playing onto the field. |  | Impl exists: blocker |
-| OP01-105 | ⚠ Needs Fix | CHARACTER | This card is revealing MY own hand when it should reveal the opponents.  | [On Play] Choose 2 cards from your opponent's hand; your opponent reve… | Impl exists: on_play |
+| OP01-105 | ✅ Verified | CHARACTER | This card is revealing MY own hand when it should reveal the opponents. | [On Play] Choose 2 cards from your opponent's hand; your opponent reve… | Impl exists: on_play |
 | OP01-106 | ✅ Verified | CHARACTER | When I play the card I am not gaining 1 DON!! card from the DON!! deck. | [On Play] Add up to 1 DON!! card from your DON!! deck and rest it. | Impl exists: on_play |
 | OP01-107 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
 | OP01-108 | ✅ Verified | CHARACTER | 🔲 To Do | [On K.O.] DON!! −1 (You may return the specified number of DON!! cards… | Impl exists: on_ko |
 | OP01-109 | ✅ Verified | CHARACTER | 🔲 To Do | [DON!! x1] [Your Turn] If you have 8 or more DON!! cards on your field… | Impl exists: blocker, continuous |
 | OP01-110 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
-| OP01-111 | ⚠ Needs Fix | CHARACTER | I should be prompted if I want to use the DON -1 effect, it works as intended but is automatic.  | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_block |
+| OP01-111 | ✅ Verified | CHARACTER | I should be prompted if I want to use the DON -1 effect, it works as intended but is automatic. | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_block |
 | OP01-112 | ✅ Verified | CHARACTER | 🔲 To Do | [Activate: Main] [Once Per Turn] DON!! −1 (You may return the specifie… | Impl exists: activate |
 | OP01-113 | ✅ Verified | CHARACTER | ON KO I am not adding the DON!! card. | [On K.O.] Add up to 1 DON!! card from your DON!! deck and rest it. | Impl exists: on_ko |
 | OP01-114 | ✅ Verified | CHARACTER | I am not prompted to DON!! -1 so the rest of the effect is not working either. | [On Play] DON!! −1 (You may return the specified number of DON!! cards… | Impl exists: continuous |
 | OP01-115 | ✅ Verified | EVENT | I am prompted to KO a 2 cost or less, this works correctly. But I should also be able to add 1 DON!! card as active. | [Main] K.O. up to 1 of your opponent's Characters with a cost of 2 or … | Impl exists: on_play |
-| OP01-116 | ⚠ Needs Fix | EVENT | Put a [SMILE] type character in the top 5 cards so I can test this effect.  | [Main] Look at 5 cards from the top of your deck; play up to 1 {SMILE}… | Impl exists: on_play |
+| OP01-116 | ⚠ Needs Fix | EVENT | This card should still show the top 5 cards to the player even if there is no SMILE type.  | [Main] Look at 5 cards from the top of your deck; play up to 1 {SMILE}… | Impl exists: on_play |
 | OP01-117 | ✅ Verified | EVENT | 🔲 To Do | [Main] DON!! −1 (You may return the specified number of DON!! cards fr… | Impl exists: on_play |
-| OP01-118 | ⚠ Needs Fix | EVENT | I should be allowed to choose which don to return to the don deck.  | [Counter] DON!! −2 (You may return the specified number of DON!! cards… | Impl exists: counter |
+| OP01-118 | ⚠ Needs Fix | EVENT | When I use this counter the game gets stuck in the counter stage.  | [Counter] DON!! −2 (You may return the specified number of DON!! cards… | Impl exists: counter |
 | OP01-119 | ✅ Verified | EVENT | 🔲 To Do | [Counter] Up to 1 of your Leader or Character cards gains +4000 power … | Impl exists: counter |
-| OP01-120 | ⚠ Needs Fix | CHARACTER | The game is still allowing blockers with a power of 2000 or less to be activated.  | [Rush] (This card can attack on the turn in which it is played.) [When… | Impl exists: on_attack |
+| OP01-120 | ✅ Verified | CHARACTER | The game is still allowing blockers with a power of 2000 or less to be activated. | [Rush] (This card can attack on the turn in which it is played.) [When… | Impl exists: on_attack |
 | OP01-121 | ✅ Verified | CHARACTER | 🔲 To Do | Also treat this card's name as [Kouzuki Oden] according to the rules. … | Impl exists: continuous |
 
 **Total:** 121 cards

@@ -183,6 +183,15 @@ The backend can be tested via:
 - Health check: `curl http://localhost:8080/health`
 - Socket.IO: Connect from frontend or test client
 
+## Known Engine Bugs & Fixes
+
+### Zero-cost card DON spending (fixed 2026-03-31)
+**File:** `packages/game-engine/optcg_engine/game_engine.py` — `play_card()` DON spending loop  
+**Symptom:** Playing a card whose cost was reduced to 0 by a `cost_modifier` (e.g. Crocodile OP01-067 giving Blue Events -1 cost) would rest ALL active DON instead of none.  
+**Root cause:** The loop used `if used == cost: break` as the exit condition. When `cost=0`, `used` starts at 0 but only increments after spending DON — so `used == 0` is only true before any DON is spent, and the break never fires inside the loop body.  
+**Fix:** Changed to `if used >= cost: break` at the TOP of the loop (before spending), so cost=0 exits immediately.  
+**Pattern to watch:** Any DON spending loop must guard with `used >= cost` (not `==`) before spending, or wrap the entire loop in `if cost > 0:`.
+
 ## Dependencies
 - FastAPI + Uvicorn for HTTP/WebSocket
 - python-socketio for real-time game events
