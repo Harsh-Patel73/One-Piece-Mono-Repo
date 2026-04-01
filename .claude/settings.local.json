@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git clone:*)",
+      "Bash(pip show:*)",
+      "Bash(py --version)",
+      "Bash(npm --version)",
+      "Bash(docker --version)",
+      "Bash(docker compose:*)",
+      "Bash(export PATH=\"$PATH:/c/Users/harsh/AppData/Local/Programs/Python/Python312:/c/Users/harsh/AppData/Local/Programs/Python/Python312/Scripts:/c/Program Files/nodejs:/c/Users/harsh/AppData/Roaming/npm\")",
+      "Bash(pip install:*)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/nodejs:/c/Users/harsh/AppData/Roaming/npm\")",
+      "Bash(npm install:*)",
+      "Bash(export PATH=\"$PATH:/c/Users/harsh/AppData/Local/Python/bin:/c/Program Files/nodejs:/c/Users/harsh/AppData/Roaming/npm\")",
+      "Bash(export PATH=\"$PATH:/c/Users/harsh/AppData/Local/Python/bin\")",
+      "Bash(python -m uvicorn main:socket_app --host 0.0.0.0 --port 8080 --reload)",
+      "Bash(python -c \"import fastapi; print\\(fastapi.__file__\\)\")",
+      "Bash(python -m pip install fastapi uvicorn[standard] python-socketio pydantic aiofiles python-multipart numpy)",
+      "Bash(npm run:*)",
+      "Bash(python3 -c \":*)",
+      "Bash(python -c \":*)",
+      "Bash(taskkill //F //PID 21576)",
+      "Bash(taskkill //F //PID 33740)",
+      "Bash(git config:*)",
+      "Bash(git commit:*)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //F //PID 30216)",
+      "Bash(python -m uvicorn main:app --host 0.0.0.0 --port 8080 --reload)",
+      "Bash(python3:*)",
+      "Bash(/c/Users/harsh/OPTCG-Monorepo/repo/packages/game-engine/optcg_engine/effects/CARD_STATUS.md:*)",
+      "Bash(xargs grep:*)",
+      "Bash(ls -la \"C:\\\\Users\\\\harsh\\\\OPTCG-Monorepo\\\\repo\\\\packages\\\\simulator\\\\frontend\\\\public\\\\images\"\" 2>/dev/null || echo \"Directory not found or empty \")",
+      "Bash(npx tsc:*)",
+      "Bash(ls /c/Users/harsh/OPTCG-Monorepo/repo/packages/simulator/frontend/tsconfig*)"
+    ]
+  }
+}
