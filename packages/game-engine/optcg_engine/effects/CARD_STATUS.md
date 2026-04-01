@@ -75,7 +75,7 @@
 | OP01-064 | ✅ Verified | CHARACTER | Effect does nothing at all | [DON!! x1] [When Attacking] You may trash 1 card from your hand: Retur… | Impl exists: on_attack |
 | OP01-065 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
 | OP01-066 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
-| OP01-067 | ✅ Verified | CHARACTER | Fixed: cost=0 DON spending loop bug in game_engine.py play_card() — loop now guards with `if used >= cost: break` before spending, preventing all active DON from being rested when an event's cost is reduced to 0 (e.g. by this card's -1 modifier). | [Banish] (When this card deals damage, the target card is trashed with… | Impl exists: continuous |
+| OP01-067 | ✅ Verified | CHARACTER | Fixed: cost=0 DON spending loop bug was already fixed but server needed restart (uvicorn --reload only watches backend dir, not game-engine package). | [Banish] (When this card deals damage, the target card is trashed with… | Impl exists: continuous |
 | OP01-068 | ✅ Verified | CHARACTER | This card is still dealing double attack even with less than 5 cards in hand. | [Your Turn] This Character gains [Double Attack] if you have 5 or more… | Impl exists: continuous |
 | OP01-069 | ✅ Verified | CHARACTER | On KO effect is not doing anything | [On K.O.] Play up to 1 [Smiley] from your deck, then shuffle your deck… | Impl exists: on_ko |
 | OP01-070 | ✅ Verified | CHARACTER | 🔲 To Do | [On Play] Place up to 1 Character with a cost of 7 or less at the bott… | Impl exists: on_play |
@@ -106,7 +106,7 @@
 | OP01-095 | ✅ Verified | CHARACTER | 🔲 To Do | [On Play] Draw 1 card if you have 8 or more DON!! cards on your field. | Impl exists: on_play |
 | OP01-096 | ✅ Verified | CHARACTER | I am not being given the option to choose which don I want to return so it is automatically returning the active don. | [On Play] DON!! −2 (You may return the specified number of DON!! cards… | Impl exists: on_play |
 | OP01-097 | ✅ Verified | CHARACTER | 🔲 To Do | [On Play] DON!! −1 (You may return the specified number of DON!! cards… | Impl exists: on_play |
-| OP01-098 | ⚠ Needs Fix | CHARACTER | There needs to be an [Artificial Devil Fruit SMILE] type card in the deck so we can test the card effect.  | [On Play] Reveal up to 1 [Artificial Devil Fruit SMILE] from your deck… | Impl exists: on_play |
+| OP01-098 | ✅ Verified | CHARACTER | Fixed: was searching deck by card name instead of card_origin (Type field) for SMILE. Changed to check card_origin for 'smile'. | [On Play] Reveal up to 1 [Artificial Devil Fruit SMILE] from your deck… | Impl exists: on_play |
 | OP01-099 | ✅ Verified | CHARACTER | Kurozumi Clan characters other than Kurozumi Semimaru can still get KOd in battle. This should not be the case with Kurozumi Semimaru is in play. | {Kurozumi Clan} type Characters other than your [Kurozumi Semimaru] ca… | Impl exists: on_play |
 | OP01-100 | ✅ Verified | CHARACTER | 🔲 To Do | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: on_attack |
 | OP01-101 | ✅ Verified | CHARACTER | The card is letting me trash 1 from hand but I am not gaining the 1 DON!! card from the DON!! deck rested. | [DON!! x1] [When Attacking] You may trash 1 card from your hand: Add u… | Impl exists: on_attack |
@@ -124,9 +124,9 @@
 | OP01-113 | ✅ Verified | CHARACTER | ON KO I am not adding the DON!! card. | [On K.O.] Add up to 1 DON!! card from your DON!! deck and rest it. | Impl exists: on_ko |
 | OP01-114 | ✅ Verified | CHARACTER | I am not prompted to DON!! -1 so the rest of the effect is not working either. | [On Play] DON!! −1 (You may return the specified number of DON!! cards… | Impl exists: continuous |
 | OP01-115 | ✅ Verified | EVENT | I am prompted to KO a 2 cost or less, this works correctly. But I should also be able to add 1 DON!! card as active. | [Main] K.O. up to 1 of your opponent's Characters with a cost of 2 or … | Impl exists: on_play |
-| OP01-116 | ⚠ Needs Fix | EVENT | This card should still show the top 5 cards to the player even if there is no SMILE type.  | [Main] Look at 5 cards from the top of your deck; play up to 1 {SMILE}… | Impl exists: on_play |
+| OP01-116 | ✅ Verified | EVENT | Fixed: rewrote to use search_top_cards helper which always shows all top cards and handles deck ordering, even when no valid SMILE target exists. | [Main] Look at 5 cards from the top of your deck; play up to 1 {SMILE}… | Impl exists: on_play |
 | OP01-117 | ✅ Verified | EVENT | 🔲 To Do | [Main] DON!! −1 (You may return the specified number of DON!! cards fr… | Impl exists: on_play |
-| OP01-118 | ⚠ Needs Fix | EVENT | When I use this counter the game gets stuck in the counter stage.  | [Counter] DON!! −2 (You may return the specified number of DON!! cards… | Impl exists: counter |
+| OP01-118 | ✅ Verified | EVENT | Fixed: DON return callback used wrong keyword arg `power_change=2000` instead of positional `power_amount`. TypeError left game stuck in counter stage. | [Counter] DON!! −2 (You may return the specified number of DON!! cards… | Impl exists: counter |
 | OP01-119 | ✅ Verified | EVENT | 🔲 To Do | [Counter] Up to 1 of your Leader or Character cards gains +4000 power … | Impl exists: counter |
 | OP01-120 | ✅ Verified | CHARACTER | The game is still allowing blockers with a power of 2000 or less to be activated. | [Rush] (This card can attack on the turn in which it is played.) [When… | Impl exists: on_attack |
 | OP01-121 | ✅ Verified | CHARACTER | 🔲 To Do | Also treat this card's name as [Kouzuki Oden] according to the rules. … | Impl exists: continuous |
@@ -136,3 +136,134 @@
 **Needs Fix:** 10
 **To Do (audit):** 88
 **Verified:** 23
+
+---
+
+# Card Effect Status — OP02
+
+> 15 new effects added: OP02-021, 045, 046, 047, 048, 067, 068, 069, 070, 089, 090, 091, 117, 118, 119
+> All others were pre-existing in op02_effects.py or have no effect (vanilla).
+
+| ID | Name | Type | Status | Notes |
+|----|------|------|--------|-------|
+| OP02-001 | Edward.Newgate | LEADER | 🔲 To Do | end_of_turn: add 1 life to hand |
+| OP02-002 | Monkey.D.Garp | LEADER | 🔲 To Do | on_don_attached: opp char -1 cost |
+| OP02-003 | Atmos | CHARACTER | ⬜ No Effect | |
+| OP02-004 | Edward.Newgate | CHARACTER | 🔲 To Do | on_play: leader +2000 / on_attack: DON x2 KO ≤3000 |
+| OP02-005 | Curly.Dadan | CHARACTER | 🔲 To Do | on_play: look 5, reveal red cost 1 char |
+| OP02-006 | Kingdew | CHARACTER | ⬜ No Effect | |
+| OP02-007 | Thatch | CHARACTER | ⬜ No Effect | |
+| OP02-008 | Jozu | CHARACTER | 🔲 To Do | continuous: DON x1 + WB leader + ≤2 life → Rush |
+| OP02-009 | Squard | CHARACTER | 🔲 To Do | on_play: if WB leader, -4000 opp + add life to hand |
+| OP02-010 | Dogura | CHARACTER | 🔲 To Do | activate: rest self → play red cost 1 from hand |
+| OP02-011 | Vista | CHARACTER | 🔲 To Do | on_play: KO opp ≤3000 power |
+| OP02-012 | Blenheim | CHARACTER | 🔲 To Do | blocker |
+| OP02-013 | Portgas.D.Ace | CHARACTER | 🔲 To Do | on_play: -3000 to 2 opp chars; Rush if WB leader |
+| OP02-014 | Whitey Bay | CHARACTER | 🔲 To Do | continuous: DON x1, attack active chars |
+| OP02-015 | Makino | CHARACTER | 🔲 To Do | activate: rest self → red cost 1 char +3000 |
+| OP02-016 | Magura | CHARACTER | 🔲 To Do | on_play: red cost 1 char +3000 |
+| OP02-017 | Masked Deuce | CHARACTER | 🔲 To Do | on_attack: DON x2, KO opp ≤2000 power |
+| OP02-018 | Marco | CHARACTER | 🔲 To Do | blocker; on_ko: trash WB card → play self rested if ≤2 life |
+| OP02-019 | Rakuyo | CHARACTER | 🔲 To Do | continuous: DON x1, WB chars +1000 |
+| OP02-020 | LittleOars Jr. | CHARACTER | ⬜ No Effect | |
+| OP02-021 | Seaquake | EVENT | 🔲 To Do | on_play: if WB leader, KO opp ≤3000 power |
+| OP02-022 | Whitebeard Pirates | EVENT | 🔲 To Do | on_play: look 5, reveal WB char; trigger |
+| OP02-023 | You May Be a Fool | EVENT | 🔲 To Do | on_play: if ≤3 life, can't add life to hand |
+| OP02-024 | Moby Dick | STAGE | 🔲 To Do | continuous: if ≤1 life, WB chars +2000 |
+| OP02-025 | Kin'emon | LEADER | 🔲 To Do | activate: if ≤1 char, next Land of Wano cost 3+ costs -1 |
+| OP02-026 | Sanji | LEADER | 🔲 To Do | on_play_character: if ≤3 chars, set 2 DON active |
+| OP02-027 | Inuarashi | CHARACTER | 🔲 To Do | continuous: if all DON rested, immune to opp removal |
+| OP02-028 | Usopp | CHARACTER | ⬜ No Effect | |
+| OP02-029 | Carrot | CHARACTER | 🔲 To Do | end_of_turn: set 1 DON active |
+| OP02-030 | Kouzuki Oden | CHARACTER | 🔲 To Do | activate: rest 3 DON → set active; on_ko: play green LoW cost 3 |
+| OP02-031 | Kouzuki Toki | CHARACTER | 🔲 To Do | continuous: if Oden char, gain Blocker |
+| OP02-032 | Shishilian | CHARACTER | 🔲 To Do | on_play: rest 2 DON → set Minks ≤5 active |
+| OP02-033 | Jinbe | CHARACTER | ⬜ No Effect | |
+| OP02-034 | Tony Tony.Chopper | CHARACTER | 🔲 To Do | on_attack: DON x1, rest opp cost 2 or less |
+| OP02-035 | Trafalgar Law | CHARACTER | 🔲 To Do | activate: rest 1 DON, return self → play cost 3 from hand |
+| OP02-036 | Nami | CHARACTER | 🔲 To Do | on_play/on_attack: rest 1 DON → look 3, reveal FILM card |
+| OP02-037 | Nico Robin | CHARACTER | 🔲 To Do | on_play: play FILM/SHC cost 2 or less from hand |
+| OP02-038 | Nekomamushi | CHARACTER | 🔲 To Do | blocker |
+| OP02-039 | Franky | CHARACTER | ⬜ No Effect | |
+| OP02-040 | Brook | CHARACTER | 🔲 To Do | on_play: play FILM/SHC cost 3 or less from hand |
+| OP02-041 | Monkey.D.Luffy | CHARACTER | 🔲 To Do | blocker; on_play: play FILM/SHC cost 4 or less from hand |
+| OP02-042 | Yamato | CHARACTER | 🔲 To Do | on_play: rest opp cost 6 or less (treated as Oden) |
+| OP02-043 | Roronoa Zoro | CHARACTER | ⬜ No Effect | |
+| OP02-044 | Wanda | CHARACTER | 🔲 To Do | on_play: play Minks cost 3 or less from hand |
+| OP02-045 | Three Sword Style Oni Giri | EVENT | 🔲 To Do | counter: +6000 to leader; play vanilla char cost 3 or less |
+| OP02-046 | Diable Jambe Venaison Shoot | EVENT | 🔲 To Do | on_play: KO opp rested char cost 4 or less |
+| OP02-047 | Paradise Totsuka | EVENT | 🔲 To Do | on_play: rest opp char cost 4 or less |
+| OP02-048 | Land of Wano | STAGE | 🔲 To Do | activate: trash LoW from hand + rest stage → set 1 DON active |
+| OP02-049 | Emporio.Ivankov | LEADER | 🔲 To Do | end_of_turn: if 0 hand, draw 2 |
+| OP02-050 | Inazuma | CHARACTER | 🔲 To Do | continuous: if ≤1 hand, +2000; blocker |
+| OP02-051 | Emporio.Ivankov | CHARACTER | 🔲 To Do | on_play: draw to 3, play blue Impel Down cost 6 or less |
+| OP02-052 | Cabaji | CHARACTER | 🔲 To Do | on_play: if Mohji in play, draw 2 trash 1 |
+| OP02-053 | Crocodile | CHARACTER | ⬜ No Effect | |
+| OP02-054 | Gecko Moria | CHARACTER | ⬜ No Effect | |
+| OP02-055 | Dracule Mihawk | CHARACTER | ⬜ No Effect | |
+| OP02-056 | Donquixote Doflamingo | CHARACTER | 🔲 To Do | on_play: look 3 arrange; on_attack: DON x1, trash 1 → place opp ≤1 at bottom |
+| OP02-057 | Bartholomew Kuma | CHARACTER | 🔲 To Do | on_play: look 2, reveal Seven Warlords card |
+| OP02-058 | Buggy | CHARACTER | 🔲 To Do | on_play: look 5, reveal blue Impel Down card |
+| OP02-059 | Boa Hancock | CHARACTER | 🔲 To Do | on_attack: draw 1, trash 1, trash up to 3 more |
+| OP02-060 | Mohji | CHARACTER | ⬜ No Effect | |
+| OP02-061 | Morley | CHARACTER | 🔲 To Do | on_attack: if ≤1 hand, opp can't use Blocker cost 5 or less |
+| OP02-062 | Monkey.D.Luffy | CHARACTER | 🔲 To Do | on_play/on_attack: trash 2 → return cost 4 or less + Double Attack |
+| OP02-063 | Mr.1(Daz.Bonez) | CHARACTER | 🔲 To Do | on_play: add blue Event cost 1 from trash |
+| OP02-064 | Mr.2.Bon.Kurei | CHARACTER | 🔲 To Do | on_attack: DON x1, trash 1 → place opp ≤2 at bottom; self to bottom |
+| OP02-065 | Mr.3(Galdino) | CHARACTER | 🔲 To Do | blocker; end_of_turn: trash 1 → set self active |
+| OP02-066 | Impel Down All Stars | EVENT | 🔲 To Do | on_play: trash 2; if Impel Down leader, draw 2 |
+| OP02-067 | Arabesque Brick Fist | EVENT | 🔲 To Do | on_play: return opp char cost 4 or less to hand |
+| OP02-068 | Gum-Gum Rain | EVENT | 🔲 To Do | counter: may trash 1 → +3000 power |
+| OP02-069 | DEATH WINK | EVENT | 🔲 To Do | counter: +6000 to leader; draw to 2 |
+| OP02-070 | New Kama Land | STAGE | 🔲 To Do | activate: rest stage; if Ivankov: draw 1, trash 1, trash up to 3 more |
+| OP02-071 | Magellan | LEADER | 🔲 To Do | on_don_return: +1000 power this turn |
+| OP02-072 | Zephyr | LEADER | 🔲 To Do | on_attack: DON -4 → KO opp ≤3 cost + leader +1000 |
+| OP02-073 | Little Sadi | CHARACTER | 🔲 To Do | on_play: play Jailer Beast from hand |
+| OP02-074 | Saldeath | CHARACTER | 🔲 To Do | continuous: Blugori gains Blocker |
+| OP02-075 | Shiki | CHARACTER | ⬜ No Effect | |
+| OP02-076 | Shiryu | CHARACTER | 🔲 To Do | on_play: DON -1 → KO opp cost 1 or less |
+| OP02-077 | Solitaire | CHARACTER | ⬜ No Effect | |
+| OP02-078 | Daifugo | CHARACTER | 🔲 To Do | on_play: DON -2 → play SMILE cost 3 or less from hand |
+| OP02-079 | Douglas Bullet | CHARACTER | 🔲 To Do | on_play: DON -1 → rest opp cost 4 or less |
+| OP02-080 | Dobon | CHARACTER | ⬜ No Effect | |
+| OP02-081 | Domino | CHARACTER | 🔲 To Do | blocker |
+| OP02-082 | Byrnndi World | CHARACTER | 🔲 To Do | activate: DON -8 → +792000 power |
+| OP02-083 | Hannyabal | CHARACTER | 🔲 To Do | on_play: look 5, reveal purple Impel Down card |
+| OP02-084 | Blugori | CHARACTER | ⬜ No Effect | |
+| OP02-085 | Magellan | CHARACTER | 🔲 To Do | on_play: DON -1 → opp returns 1 DON; on_ko: opp returns 2 DON; your_turn: if opp ≤1 life, +1000 |
+| OP02-086 | Minokoala | CHARACTER | 🔲 To Do | blocker; on_ko: if Impel Down leader, add 1 DON rested |
+| OP02-087 | Minotaur | CHARACTER | 🔲 To Do | Double Attack; on_ko: if Impel Down leader, add 1 DON rested |
+| OP02-088 | Sphinx | CHARACTER | ⬜ No Effect | |
+| OP02-089 | Judgment of Hell | EVENT | 🔲 To Do | counter: DON -1; give up to 2 opp leader/chars -2000 each |
+| OP02-090 | Hydra | EVENT | 🔲 To Do | on_play: DON -1; return opp char to hand |
+| OP02-091 | Venom Road | EVENT | 🔲 To Do | on_play: add 1 DON from deck, set active |
+| OP02-092 | Impel Down | STAGE | 🔲 To Do | activate: trash 1 + rest stage → look 3, reveal Impel Down card |
+| OP02-093 | Smoker | LEADER | 🔲 To Do | activate: DON x1; opp char -1 cost; if cost 0 exists, +1000 |
+| OP02-094 | Isuka | CHARACTER | 🔲 To Do | on_attack: DON x1; once per turn: if KO opp, set self active |
+| OP02-095 | Onigumo | CHARACTER | 🔲 To Do | continuous: if cost 0 char exists, gain Banish |
+| OP02-096 | Kuzan | CHARACTER | 🔲 To Do | on_play: draw 1; on_attack: opp char -4 cost |
+| OP02-097 | Komille | CHARACTER | ⬜ No Effect | |
+| OP02-098 | Koby | CHARACTER | 🔲 To Do | on_play: may trash 1 → KO opp cost 3 or less |
+| OP02-099 | Sakazuki | CHARACTER | 🔲 To Do | on_play: may trash 1 → KO opp cost 5 or less |
+| OP02-100 | Jango | CHARACTER | 🔲 To Do | continuous: if Fullbody in play, can't be KO in battle |
+| OP02-101 | Strawberry | CHARACTER | 🔲 To Do | on_attack: if cost 0 char exists, opp can't Blocker cost 5 or less |
+| OP02-102 | Smoker | CHARACTER | 🔲 To Do | continuous: can't be KO by effects; on_attack: if cost 0, +2000 |
+| OP02-103 | Sengoku | CHARACTER | 🔲 To Do | on_attack: DON x1; opp char -2 cost |
+| OP02-104 | Sentomaru | CHARACTER | ⬜ No Effect | |
+| OP02-105 | Tashigi | CHARACTER | 🔲 To Do | on_attack: DON x1; opp char -3 cost |
+| OP02-106 | Tsuru | CHARACTER | 🔲 To Do | on_play: opp char -2 cost |
+| OP02-107 | Doberman | CHARACTER | ⬜ No Effect | |
+| OP02-108 | Donquixote Rosinante | CHARACTER | 🔲 To Do | blocker |
+| OP02-109 | Jaguar.D.Saul | CHARACTER | ⬜ No Effect | |
+| OP02-110 | Hina | CHARACTER | 🔲 To Do | blocker; on_block: opp cost 6 or less can't attack this turn |
+| OP02-111 | Fullbody | CHARACTER | 🔲 To Do | on_attack: if Jango in play, +3000 power |
+| OP02-112 | Bell-mere | CHARACTER | 🔲 To Do | activate: rest self → opp char -1 cost + own leader/char +1000 |
+| OP02-113 | Helmeppo | CHARACTER | 🔲 To Do | on_attack: opp char -2 cost; if cost 0, +2000; trigger |
+| OP02-114 | Borsalino | CHARACTER | 🔲 To Do | continuous (opp turn): +1000 + can't KO by effects; blocker |
+| OP02-115 | Monkey.D.Garp | CHARACTER | 🔲 To Do | on_attack: DON x2; KO opp cost 0 char |
+| OP02-116 | Yamakaji | CHARACTER | ⬜ No Effect | |
+| OP02-117 | Ice Age | EVENT | 🔲 To Do | on_play: opp char -5 cost |
+| OP02-118 | Yasakani Sacred Jewel | EVENT | 🔲 To Do | counter: may trash 1 → chosen char can't be KO in battle |
+| OP02-119 | Meteor Volcano | EVENT | 🔲 To Do | on_play: KO opp char cost 1 or less |
+| OP02-120 | Uta | CHARACTER | 🔲 To Do | on_play: DON -2 → leader and all chars +1000 until next turn |
+| OP02-121 | Kuzan | CHARACTER | 🔲 To Do | continuous: all opp chars -5 cost; on_play: KO opp cost 0 char |

@@ -1427,10 +1427,13 @@ def op01_097_queen_char(game_state, player, card):
 def op01_098_orochi(game_state, player, card):
     # Card text: [On Play] Reveal up to 1 [Artificial Devil Fruit SMILE] from your deck and add
     # it to your hand. Then, shuffle your deck.
+    # Search by card_origin (Type field), not name — SMILE is a type, not a card name.
+    # The card text uses {Artificial Devil Fruit SMILE} which refers to TYPE containing "SMILE".
     for i, deck_card in enumerate(player.deck):
-        if 'artificial devil fruit smile' in (getattr(deck_card, 'name', '') or '').lower():
+        if 'smile' in (getattr(deck_card, 'card_origin', '') or '').lower():
             found = player.deck.pop(i)
             player.hand.append(found)
+            game_state._log(f"Kurozumi Orochi: Revealed {found.name} and added to hand")
             break
     random.shuffle(player.deck)
     return True
@@ -1984,41 +1987,16 @@ def op01_090_baroque_works(game_state, player, card):
 def op01_116_smile_event(game_state, player, card):
     # Card text: [Main] Look at 5 cards from the top of your deck; play up to 1 {SMILE} type
     # Character card with a cost of 3 or less. Then, place the rest at the bottom of your deck.
-    if not player.deck:
-        return True
-    top5 = player.deck[:5]
-    smiles = [c for c in top5
-              if getattr(c, 'card_type', '') == 'CHARACTER'
-              and 'smile' in (c.card_origin or '').lower()
-              and (getattr(c, 'cost', 0) or 0) <= 3]
-    # Move top5 to bottom; callback will pick one to play to field
-    for c in top5:
-        if c in player.deck:
-            player.deck.remove(c)
-    for c in top5:
-        player.deck.append(c)
-    if not smiles:
-        game_state._log("[EFFECT] SMILE: No SMILE Characters in top 5, all placed at bottom")
-        return True
-    from ...game_engine import PendingChoice
-    import uuid
-    options = [{"id": c.id, "label": f"{c.name} (Cost: {c.cost or 0})",
-                "card_id": c.id, "card_name": c.name} for c in smiles]
-    game_state.pending_choice = PendingChoice(
-        choice_id=f"smile_{uuid.uuid4().hex[:8]}",
-        choice_type="select_target",
-        prompt="Choose a SMILE Character cost 3 or less to play from top 5",
-        options=options,
-        min_selections=0,
-        max_selections=1,
-        source_card_id=card.id,
-        source_card_name=card.name,
-        callback_action="smile_play_to_field",
-        callback_data={"player_id": player.player_id,
-                       "top5_ids": [c.id for c in top5],
-                       "smile_cards": [{"id": c.id, "name": c.name} for c in smiles]},
-    )
-    return True
+    # Uses search_top_cards so the player always sees the top 5 cards, even when no SMILE match.
+    from ...effects.hardcoded import search_top_cards
+    def smile_char_filter(c):
+        return (getattr(c, 'card_type', '') == 'CHARACTER'
+                and 'smile' in (getattr(c, 'card_origin', '') or '').lower()
+                and (getattr(c, 'cost', 0) or 0) <= 3)
+    return search_top_cards(game_state, player, 5, add_count=1,
+                            filter_fn=smile_char_filter,
+                            source_card=card, play_to_field=True,
+                            prompt="SMILE: Choose a SMILE Character (cost 3 or less) to play from top 5")
 
 
 # =============================================================================

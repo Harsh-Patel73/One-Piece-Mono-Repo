@@ -807,6 +807,29 @@ function PlayerBoard({
         </div>
       </div>
 
+      {/* DON!! Pool — visual cards */}
+      {player.donPool.length > 0 && (
+        <div className="flex items-center gap-0.5 px-1">
+          <span className="text-[8px] text-yellow-400/50 mr-1">DON!!</span>
+          {player.donPool.map((state, i) => (
+            <div
+              key={i}
+              className={`transition-all duration-300 ${state === 'rested' ? 'rotate-90 mx-1' : ''}`}
+              title={`DON #${i + 1} (${state})`}
+            >
+              <div className={`w-5 h-7 rounded-sm border flex items-center justify-center text-[7px] font-black
+                ${state === 'active'
+                  ? 'border-yellow-400 bg-gradient-to-b from-yellow-500 to-amber-700 text-yellow-100 shadow-sm shadow-yellow-500/30'
+                  : 'border-stone-500 bg-gradient-to-b from-stone-500 to-stone-700 text-stone-300 opacity-60'
+                }`}
+              >
+                D
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Trash viewer */}
       {trashOpen && (
         <div className="bg-stone-800/90 border border-stone-600 rounded p-2 max-h-32 overflow-y-auto">
@@ -951,6 +974,15 @@ function CardDisplay({ card, size, isSelected, onClick, showCost, canAfford, isO
   const donBonus = isOwnerTurn ? (card.attachedDon * 1000) : 0
   const power = card.power ? card.power + donBonus : null
 
+  // Detect modified power/cost (effect-based changes, not DON bonus)
+  const basePower = card.basePower ?? card.power
+  const baseCost = card.baseCost ?? card.cost
+  const powerModified = basePower !== null && card.power !== null && card.power !== basePower
+  const costModified = baseCost !== null && card.cost !== null && card.cost !== baseCost
+  const powerUp = powerModified && (card.power ?? 0) > (basePower ?? 0)
+  const powerDown = powerModified && (card.power ?? 0) < (basePower ?? 0)
+  const costDown = costModified && (card.cost ?? 0) < (baseCost ?? 0)
+
   const [hovered, setHovered] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const [rect, setRect] = useState<DOMRect | null>(null)
@@ -969,7 +1001,7 @@ function CardDisplay({ card, size, isSelected, onClick, showCost, canAfford, isO
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
-      <div className={`${widths[size]} aspect-[2.5/3.5] rounded border-2 overflow-hidden transition-all ${
+      <div className={`relative ${widths[size]} aspect-[2.5/3.5] rounded border-2 overflow-hidden transition-all ${
         isSelected ? 'border-yellow-400 shadow-lg shadow-yellow-400/30'
         : canAfford === false ? 'border-red-500/50'
         : canAfford === true ? 'border-green-500/50 hover:border-green-400'
@@ -982,15 +1014,34 @@ function CardDisplay({ card, size, isSelected, onClick, showCost, canAfford, isO
             {card.name}
           </div>
         )}
+        {/* Cost reduction indicator — top-left badge */}
+        {costDown && (
+          <div className="absolute top-0 left-0 bg-blue-600/90 text-white text-[7px] font-bold px-0.5 rounded-br leading-tight"
+            title={`Cost reduced: ${baseCost} → ${card.cost}`}>
+            {card.cost}
+          </div>
+        )}
+        {/* Power modification indicator — bottom overlay */}
+        {powerModified && (
+          <div className={`absolute bottom-0 inset-x-0 text-[7px] font-bold text-center leading-tight py-px
+            ${powerUp ? 'bg-green-600/80 text-green-100' : 'bg-red-600/80 text-red-100'}`}
+            title={`Power: ${basePower} → ${card.power}`}>
+            {powerUp ? '\u25B2' : '\u25BC'}{card.power}
+          </div>
+        )}
       </div>
       {card.attachedDon > 0 && (
         <div className="text-[9px] text-yellow-400 text-center">+{card.attachedDon}</div>
       )}
       {power !== null && power > 0 && (
-        <div className="text-[9px] text-amber-300 font-bold text-center">{power.toLocaleString()}</div>
+        <div className={`text-[9px] font-bold text-center ${
+          powerUp ? 'text-green-400' : powerDown ? 'text-red-400' : 'text-amber-300'
+        }`}>{power.toLocaleString()}</div>
       )}
       {showCost && card.cost !== null && (
-        <div className={`text-[9px] text-center ${canAfford ? 'text-green-400' : 'text-red-400'}`}>{card.cost}</div>
+        <div className={`text-[9px] text-center ${
+          costDown ? 'text-blue-400 font-bold' : canAfford ? 'text-green-400' : 'text-red-400'
+        }`}>{card.cost}{costDown ? ` (was ${baseCost})` : ''}</div>
       )}
       {hovered && rect && <CardHoverPreview card={card} anchorRect={rect} />}
     </div>

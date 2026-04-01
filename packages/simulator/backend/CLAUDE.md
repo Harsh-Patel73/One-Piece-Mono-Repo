@@ -192,6 +192,28 @@ The backend can be tested via:
 **Fix:** Changed to `if used >= cost: break` at the TOP of the loop (before spending), so cost=0 exits immediately.  
 **Pattern to watch:** Any DON spending loop must guard with `used >= cost` (not `==`) before spending, or wrap the entire loop in `if cost > 0:`.
 
+**Dev note:** Uvicorn `--reload` only watches `packages/simulator/backend/`. Changes to `packages/game-engine/` require a full server restart to take effect (even though it's an editable pip install).
+
+### Type/origin field confusion (fixed 2026-03-31)
+**File:** `packages/game-engine/optcg_engine/effects/sets/op01_effects.py` — OP01-098  
+**Symptom:** Card effect searched for SMILE cards by `name` field but found nothing.  
+**Root cause:** Card text uses `{Artificial Devil Fruit SMILE}` which refers to the card's **Type** (mapped to `card_origin` in the Card model), not name. The JSON field `Type` → `card_origin` contains values like `"Animal Kingdom Pirates/SMILE"`.  
+**Fix:** Changed to check `card_origin` for `'smile'` substring.  
+**Pattern to watch:** Whenever card text uses `{curly braces}` around a type name, search `card_origin`, NOT `name`. Use `'keyword' in (card_origin or '').lower()` to match partial types (e.g. SMILE in "Animal Kingdom Pirates/SMILE").
+
+### "Look at top N" effects must always show cards (fixed 2026-03-31)
+**File:** `packages/game-engine/optcg_engine/effects/sets/op01_effects.py` — OP01-116  
+**Symptom:** When no SMILE targets existed in the top 5 cards, the player never saw the cards.  
+**Fix:** Replaced custom implementation with the `search_top_cards()` helper from `effects/hardcoded.py`, which already handles showing all top cards (even non-selectable ones) and deck ordering for remaining cards.  
+**Pattern to watch:** Always use `search_top_cards()` for "look at top N" effects. It handles: showing all cards, filtering selectable ones, play-to-field vs add-to-hand, and ordering remaining cards to bottom. Don't reimplement this logic inline.
+
+### Wrong keyword argument in callback (fixed 2026-03-31)
+**File:** `packages/game-engine/optcg_engine/game_engine.py` — OP01-118 DON return callback  
+**Symptom:** Using Ulti-Mortar counter event froze the game in counter stage.  
+**Root cause:** The DON return callback called `create_power_effect_choice(..., power_change=2000)` but the parameter is named `power_amount`. This `TypeError` was silently swallowed, leaving the pending choice unresolved.  
+**Fix:** Changed to positional argument `create_power_effect_choice(self, player, targets, 2000, ...)`.  
+**Pattern to watch:** When calling helper functions in callbacks, use positional args or verify keyword names match the function signature exactly. Uncaught TypeErrors in callbacks leave the game stuck.
+
 ## Dependencies
 - FastAPI + Uvicorn for HTTP/WebSocket
 - python-socketio for real-time game events

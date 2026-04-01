@@ -113,7 +113,9 @@ export interface PlaytestCard {
   name: string
   cardType: string
   cost: number | null
+  baseCost: number | null
   power: number | null
+  basePower: number | null
   counter: number | null
   effect: string | null
   trigger: string | null
@@ -137,6 +139,7 @@ export interface PlaytestPlayer {
   donActive: number
   donRested: number
   donDeck: number
+  donPool: ('active' | 'rested')[]
 }
 
 export interface PendingChoice {
@@ -211,7 +214,9 @@ function convertCard(card: BackendCard, index: number): PlaytestCard {
     name: card.name,
     cardType: card.card_type,
     cost: card.cost,
+    baseCost: card.base_cost ?? card.cost,
     power: card.power,
+    basePower: card.base_power ?? card.power,
     counter: card.counter,
     effect: card.effect,
     trigger: card.trigger,
@@ -235,7 +240,9 @@ function convertPlayer(player: BackendPlayer): PlaytestPlayer {
       name: 'Life Card',
       cardType: 'HIDDEN',
       cost: null,
+      baseCost: null,
       power: null,
+      basePower: null,
       counter: null,
       effect: null,
       trigger: null,
@@ -253,7 +260,9 @@ function convertPlayer(player: BackendPlayer): PlaytestPlayer {
       name: 'Card',
       cardType: 'HIDDEN',
       cost: null,
+      baseCost: null,
       power: null,
+      basePower: null,
       counter: null,
       effect: null,
       trigger: null,
@@ -269,6 +278,7 @@ function convertPlayer(player: BackendPlayer): PlaytestPlayer {
     donActive: player.don_active,
     donRested: player.don_total - player.don_active,
     donDeck: Math.max(0, 10 - player.don_total),
+    donPool: player.don_pool || [],
   }
 }
 
@@ -285,6 +295,7 @@ function createEmptyPlayer(name: string): PlaytestPlayer {
     donActive: 0,
     donRested: 0,
     donDeck: 10,
+    donPool: [],
   }
 }
 

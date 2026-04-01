@@ -10,7 +10,7 @@ from ..hardcoded import (
     create_play_from_hand_choice, create_power_effect_choice, create_rest_choice,
     create_return_to_hand_choice, create_set_active_choice,
     create_target_choice, draw_cards, get_opponent, register_effect,
-    search_top_cards, trash_from_hand,
+    return_don_to_deck, search_top_cards, trash_from_hand,
 )
 
 
@@ -1430,3 +1430,279 @@ def op02_092_impel_down(game_state, player, card):
         prompt="Choose 1 card from hand to trash (cost for Impel Down search)")
 
 
+# =============================================================================
+# MISSING EVENT & STAGE EFFECTS — OP02
+# =============================================================================
+
+# --- OP02-021: Seaquake (Red Event) ---
+@register_effect("OP02-021", "on_play", "[Main] If Whitebeard Pirates leader, K.O. opponent's 3000 power or less")
+def op02_021_seaquake(game_state, player, card):
+    """[Main] If your Leader has the Whitebeard Pirates type, K.O. up to 1 opponent
+    Character with 3000 power or less."""
+    if not (player.leader and 'whitebeard pirates' in (player.leader.card_origin or '').lower()):
+        return False
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play if (c.power or 0) + getattr(c, 'power_modifier', 0) <= 3000]
+    if not targets:
+        return True
+    return create_ko_choice(game_state, player, targets, source_card=card,
+                             prompt="Seaquake: K.O. opponent's Character with 3000 power or less")
+
+
+# --- OP02-045: Three Sword Style Oni Giri (Green Counter Event) ---
+@register_effect("OP02-045", "counter", "[Counter] Leader/Char gains +6000; play vanilla cost 3 or less from hand")
+def op02_045_oni_giri(game_state, player, card):
+    """[Counter] Up to 1 of your Leader or Character cards gains +6000 power during this
+    battle. Then, play up to 1 Character card with a cost of 3 or less and no base
+    effect from your hand."""
+    # Apply +6000 to leader (most common counter target); avoids needing a choice
+    # so the single pending choice can be used for the play-character step
+    if player.leader:
+        player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 6000
+        game_state._log(f"Oni Giri: {player.leader.name} gains +6000 power")
+    # Find vanilla characters (no effect text) with cost ≤ 3 in hand
+    vanilla_targets = [
+        c for c in player.hand
+        if c.card_type == 'CHARACTER'
+        and not (c.effect or '').strip()
+        and (c.cost or 0) <= 3
+    ]
+    if vanilla_targets:
+        return create_play_from_hand_choice(
+            game_state, player, vanilla_targets, source_card=card,
+            prompt="Oni Giri: Play a vanilla Character (no base effect, cost 3 or less) from hand"
+        )
+    return True
+
+
+# --- OP02-046: Diable Jambe Venaison Shoot (Green Main Event) ---
+@register_effect("OP02-046", "on_play", "[Main] K.O. opponent's rested Character with cost 4 or less")
+def op02_046_diable_jambe(game_state, player, card):
+    """[Main] K.O. up to 1 of your opponent's rested Characters with a cost of 4 or less."""
+    opponent = get_opponent(game_state, player)
+    targets = [
+        c for c in opponent.cards_in_play
+        if c.is_resting and (c.cost or 0) <= 4
+    ]
+    if not targets:
+        return True
+    return create_ko_choice(game_state, player, targets, source_card=card,
+                             prompt="Diable Jambe: K.O. opponent's rested Character with cost 4 or less")
+
+
+# --- OP02-047: Paradise Totsuka (Green Main Event) ---
+@register_effect("OP02-047", "on_play", "[Main] Rest opponent's Character with cost 4 or less")
+def op02_047_paradise_totsuka(game_state, player, card):
+    """[Main] Rest up to 1 of your opponent's Characters with a cost of 4 or less."""
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play if (c.cost or 0) <= 4 and not c.is_resting]
+    if not targets:
+        return True
+    return create_rest_choice(game_state, player, targets, source_card=card,
+                               prompt="Paradise Totsuka: Rest opponent's Character with cost 4 or less")
+
+
+# --- OP02-048: Land of Wano (Green Stage) ---
+@register_effect("OP02-048", "activate", "[Activate: Main] Trash Land of Wano card from hand, rest Stage: set 1 DON active")
+def op02_048_land_of_wano_stage(game_state, player, card):
+    """[Activate: Main] You may trash 1 {Land of Wano} type card from your hand and
+    rest this Stage: Set up to 1 of your DON!! cards as active."""
+    if card.is_resting:
+        return False
+    if getattr(card, 'main_activated_this_turn', False):
+        return False
+    # Need a Land of Wano card in hand to pay cost
+    low_cards = [
+        c for c in player.hand
+        if 'land of wano' in (getattr(c, 'card_origin', '') or '').lower()
+    ]
+    if not low_cards:
+        return False
+    # Pay cost: trash 1 Land of Wano card and rest this Stage
+    trash_card = low_cards[0]
+    player.hand.remove(trash_card)
+    player.trash.append(trash_card)
+    game_state._log(f"Land of Wano Stage: trashed {trash_card.name}")
+    card.is_resting = True
+    card.main_activated_this_turn = True
+    # Set 1 rested DON active
+    for i, d in enumerate(player.don_pool):
+        if d == "rested":
+            player.don_pool[i] = "active"
+            game_state._log("Land of Wano Stage: set 1 DON active")
+            break
+    return True
+
+
+# --- OP02-067: Arabesque Brick Fist (Blue Main Event) ---
+@register_effect("OP02-067", "on_play", "[Main] Return a Character with cost 4 or less to owner's hand")
+def op02_067_arabesque(game_state, player, card):
+    """[Main] Return up to 1 Character with a cost of 4 or less to the owner's hand."""
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play if (c.cost or 0) <= 4]
+    if not targets:
+        return True
+    return create_return_to_hand_choice(game_state, player, targets, source_card=card,
+                                        prompt="Arabesque Brick Fist: Return opponent's cost 4 or less Character to hand")
+
+
+# --- OP02-068: Gum-Gum Rain (Blue Counter Event) ---
+@register_effect("OP02-068", "counter", "[Counter] May trash 1 from hand: Leader/Char gains +3000 power")
+def op02_068_gum_gum_rain(game_state, player, card):
+    """[Counter] You may trash 1 card from your hand: Up to 1 of your Leader or
+    Character cards gains +3000 power during this battle."""
+    # "You may trash 1": only grant power if hand is available to pay the cost
+    if not player.hand:
+        return True  # No hand cards — optional cost can't be paid, effect fizzles
+    # Auto-trash 1 card from hand as the cost
+    trash_from_hand(player, 1, game_state, card)
+    # Apply +3000 to a chosen leader/character
+    targets = ([player.leader] if player.leader else []) + player.cards_in_play
+    if not targets:
+        return True
+    return create_power_effect_choice(
+        game_state, player, targets, 3000,
+        source_card=card,
+        prompt="Gum-Gum Rain: Choose Leader or Character to give +3000 power"
+    )
+
+
+# --- OP02-069: DEATH WINK (Blue Counter Event) ---
+@register_effect("OP02-069", "counter", "[Counter] Leader/Char gains +6000; draw to 2 cards in hand")
+def op02_069_death_wink(game_state, player, card):
+    """[Counter] Up to 1 of your Leader or Character cards gains +6000 power during
+    this battle. Then, draw cards so that you have 2 cards in your hand."""
+    # Apply +6000 to leader directly (avoid PendingChoice so drawing can happen inline)
+    if player.leader:
+        player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 6000
+        game_state._log(f"DEATH WINK: {player.leader.name} gains +6000 power")
+    # Draw to 2 cards in hand
+    current = len(player.hand)
+    if current < 2:
+        draw_cards(player, 2 - current)
+        game_state._log(f"DEATH WINK: drew {2 - current} card(s) to reach 2 in hand")
+    return True
+
+
+# --- OP02-070: New Kama Land (Blue Stage) ---
+@register_effect("OP02-070", "activate", "[Activate: Main] Rest stage: if Ivankov leader, draw 1, trash 1, may trash 3 more")
+def op02_070_new_kama_land(game_state, player, card):
+    """[Activate: Main] You may rest this Stage: If your Leader is [Emporio.Ivankov],
+    draw 1 card and trash 1 card from your hand. Then, trash up to 3 cards from hand."""
+    if card.is_resting:
+        return False
+    if getattr(card, 'main_activated_this_turn', False):
+        return False
+    if not (player.leader and 'ivankov' in player.leader.name.lower()):
+        return False
+    # Pay cost: rest this Stage
+    card.is_resting = True
+    card.main_activated_this_turn = True
+    # Draw 1, then trash 1 (required), then trash up to 3 more (optional)
+    draw_cards(player, 1)
+    trash_from_hand(player, 1, game_state, card)
+    trash_from_hand(player, min(3, len(player.hand)))
+    game_state._log("New Kama Land: drew 1, trashed up to 4 cards")
+    return True
+
+
+# --- OP02-089: Judgment of Hell (Purple Counter Event) ---
+@register_effect("OP02-089", "counter", "[Counter] DON!! -1: Give up to 2 opponent leader/chars -2000 power each")
+def op02_089_judgment_of_hell(game_state, player, card):
+    """[Counter] DON!! −1: Give up to a total of 2 of your opponent's Leader or
+    Characters −2000 power each during this battle."""
+    opponent = get_opponent(game_state, player)
+    targets = ([opponent.leader] if opponent.leader else []) + opponent.cards_in_play
+    if not targets:
+        return True
+    return create_power_effect_choice(
+        game_state, player, targets, -2000,
+        source_card=card,
+        prompt="Judgment of Hell: Choose up to 2 opponent Leader/Characters to give -2000 power",
+        min_selections=0, max_selections=2
+    )
+
+
+# --- OP02-090: Hydra (Purple Main Event) ---
+@register_effect("OP02-090", "on_play", "[Main] DON!! -1: Give opponent char -3000 power; return it to owner's hand")
+def op02_090_hydra(game_state, player, card):
+    """[Main] DON!! −1: Give up to 1 of your opponent's Characters −3000 power during
+    this turn. Then, return that Character to the owner's hand."""
+    # DON!! -1 return cost: remove 1 DON from pool (prefer rested first)
+    for i, d in enumerate(player.don_pool):
+        if d == "rested":
+            player.don_pool.pop(i)
+            game_state._log("Hydra: returned 1 rested DON to deck")
+            break
+    else:
+        # No rested DON — remove active if available
+        for i, d in enumerate(player.don_pool):
+            if d == "active":
+                player.don_pool.pop(i)
+                game_state._log("Hydra: returned 1 active DON to deck")
+                break
+    opponent = get_opponent(game_state, player)
+    targets = opponent.cards_in_play[:]
+    if not targets:
+        return True
+    # The -3000 is moot since the card returns to hand; use return_to_hand_choice
+    return create_return_to_hand_choice(
+        game_state, player, targets, source_card=card,
+        prompt="Hydra: Choose opponent's Character to return to hand (-3000 power)"
+    )
+
+
+# --- OP02-091: Venom Road (Purple Main Event) ---
+@register_effect("OP02-091", "on_play", "[Main] Add 1 DON!! from deck and set as active")
+def op02_091_venom_road(game_state, player, card):
+    """[Main] Add up to 1 DON!! card from your DON!! deck and set it as active."""
+    add_don_from_deck(player, 1, set_active=True)
+    game_state._log("Venom Road: added 1 DON from deck (active)")
+    return True
+
+
+# --- OP02-117: Ice Age (Black Main Event) ---
+@register_effect("OP02-117", "on_play", "[Main] Give opponent's Character -5 cost this turn")
+def op02_117_ice_age(game_state, player, card):
+    """[Main] Give up to 1 of your opponent's Characters −5 cost during this turn."""
+    opponent = get_opponent(game_state, player)
+    targets = opponent.cards_in_play[:]
+    if not targets:
+        return True
+    return create_cost_reduction_choice(
+        game_state, player, targets, -5,
+        source_card=card,
+        prompt="Ice Age: Choose opponent's Character to give -5 cost this turn"
+    )
+
+
+# --- OP02-118: Yasakani Sacred Jewel (Black Counter Event) ---
+@register_effect("OP02-118", "counter", "[Counter] May trash 1 from hand: chosen Character cannot be K.O.'d this battle")
+def op02_118_yasakani(game_state, player, card):
+    """[Counter] You may trash 1 card from your hand: Select up to 1 of your Characters.
+    The selected Character cannot be K.O.'d during this battle."""
+    # Optional: "you may trash 1" — only protect if there are characters to protect
+    if not player.cards_in_play:
+        return True
+    # Auto-trash 1 from hand if available (pays the optional cost)
+    if player.hand:
+        trash_from_hand(player, 1, game_state, card)
+    # Create choice for which own character to protect
+    return create_set_active_choice(
+        game_state, player, player.cards_in_play[:],
+        source_card=card,
+        callback_action="protect_from_ko_in_battle",
+        prompt="Yasakani Sacred Jewel: Choose your Character that cannot be K.O.'d this battle"
+    )
+
+
+# --- OP02-119: Meteor Volcano (Black Main Event) ---
+@register_effect("OP02-119", "on_play", "[Main] K.O. opponent's Character with cost 1 or less")
+def op02_119_meteor_volcano(game_state, player, card):
+    """[Main] K.O. up to 1 of your opponent's Characters with a cost of 1 or less."""
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play if (c.cost or 0) <= 1]
+    if not targets:
+        return True
+    return create_ko_choice(game_state, player, targets, source_card=card,
+                             prompt="Meteor Volcano: K.O. opponent's Character with cost 1 or less")

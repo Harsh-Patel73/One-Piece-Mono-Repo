@@ -1754,7 +1754,9 @@ class GameState:
             'name': card.name,
             'card_type': card.card_type,
             'cost': max(0, (card.cost or 0) + getattr(card, 'cost_modifier', 0)),
+            'base_cost': card.cost or 0,
             'power': (card.power or 0) + getattr(card, 'power_modifier', 0),
+            'base_power': card.power or 0,
             'counter': card.counter,
             'effect': card.effect,
             'trigger': card.trigger,
@@ -1788,6 +1790,7 @@ class GameState:
             'trash': [self._card_to_dict(c) for c in player.trash],
             'don_active': player.don_pool.count('active'),
             'don_total': len(player.don_pool),
+            'don_pool': list(player.don_pool),
             'has_mulliganed': player.has_mulliganed,
         }
 
@@ -2785,6 +2788,18 @@ class GameState:
                             self._log(f"{c.name} was set active and gained +{power} power")
                             break
 
+            elif action == "protect_from_ko_in_battle":
+                # Set cannot_be_ko_in_battle on selected own character (Yasakani Sacred Jewel)
+                target_idx = int(selected[0]) if selected else -1
+                target_cards = data.get("target_cards", [])
+                if 0 <= target_idx < len(target_cards):
+                    target_info = target_cards[target_idx]
+                    for c in player.cards_in_play:
+                        if c.id == target_info["id"]:
+                            c.cannot_be_ko_in_battle = True
+                            self._log(f"{c.name} cannot be K.O.'d in battle this turn")
+                            break
+
             elif action == "slave_arrow_return":
                 # Return own character to hand, then give leader +4000 power
                 target_idx = int(selected[0]) if selected else -1
@@ -3394,7 +3409,7 @@ class GameState:
                     targets = ([player.leader] if player.leader else []) + player.cards_in_play
                     if targets:
                         create_power_effect_choice(
-                            self, player, targets, power_change=2000,
+                            self, player, targets, 2000,
                             source_card=None,
                             prompt="Choose Leader or Character to give +2000 power",
                         )

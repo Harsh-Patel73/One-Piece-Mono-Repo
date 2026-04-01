@@ -1,3 +1,4 @@
-{"card_id": "OP01-098", "note": "There needs to be an [Artificial Devil Fruit SMILE] type card in the deck so we can test the card effect. ", "submitted_at": "2026-03-31T02:24:39.404961", "fixed_at": null}
-{"card_id": "OP01-116", "note": "This card should still show the top 5 cards to the player even if there is no SMILE type. ", "submitted_at": "2026-03-31T02:26:19.509990", "fixed_at": null}
-{"card_id": "OP01-118", "note": "When I use this counter the game gets stuck in the counter stage. ", "submitted_at": "2026-03-31T02:27:34.452851", "fixed_at": null}
+{"card_id": "OP01-067", "card_name": "Donquixote Doflamingo", "set": "OP01", "status": "FAIL", "reason": "Playing a 0-cost character rests all DON instead of none", "reported_at": "2026-03-30T00:00:00Z"}
+{"card_id": "OP01-098", "card_name": "Kurozumi Orochi", "set": "OP01", "status": "FAIL", "reason": "On Play effect searches by card name instead of card_origin (Type) for SMILE", "reported_at": "2026-03-30T00:00:00Z"}
+{"card_id": "OP01-116", "card_name": "Artificial Devil Fruit SMILE", "set": "OP01", "status": "FAIL", "reason": "Top 5 cards not shown to player when no SMILE match found", "reported_at": "2026-03-30T00:00:00Z"}
+{"card_id": "OP01-118", "card_name": "Ulti-Mortar", "set": "OP01", "status": "FAIL", "reason": "Game gets stuck in counter step - callback uses wrong keyword power_change instead of power_amount", "reported_at": "2026-03-30T00:00:00Z"}
