@@ -10,7 +10,7 @@ from ..hardcoded import (
     create_play_from_hand_choice, create_power_effect_choice, create_rest_choice,
     create_return_to_hand_choice, create_set_active_choice,
     create_target_choice, draw_cards, get_opponent, register_effect,
-    return_don_to_deck, search_top_cards, trash_from_hand,
+    reorder_top_cards, return_don_to_deck, search_top_cards, trash_from_hand,
 )
 
 
@@ -121,13 +121,19 @@ def impel_down_all_stars_effect(game_state, player, card):
 
 
 # --- OP02-023: You May Be a Fool...but I Still Love You ---
-@register_effect("OP02-023", "MAIN", "If 3 or less Life, can't add Life to hand this turn")
+@register_effect("OP02-023", "on_play", "[Main] If Whitebeard Pirates Leader and 3 or less Life, add 1 Life to hand; opponent can't add Life this turn")
 def you_may_be_a_fool_effect(game_state, player, card):
-    """If you have 3 or less Life, you cannot add Life to hand using your effects."""
-    if len(player.life_cards) <= 3:
-        player.cannot_add_life_to_hand_this_turn = True
+    """Main Event: If Leader is Whitebeard Pirates and you have 3 or fewer Life cards,
+    add 1 Life to hand. Then, opponent cannot add Life cards to their hand this turn."""
+    if player.leader and 'Whitebeard Pirates' in (player.leader.card_origin or ''):
+        if len(player.life_cards) <= 3 and player.life_cards:
+            life_card = player.life_cards.pop()
+            player.hand.append(life_card)
+            game_state._log(f"{player.name} adds 1 Life to hand via You May Be a Fool")
+        opponent = get_opponent(game_state, player)
+        opponent.cannot_add_life_to_hand_this_turn = True
         return True
-    return False
+    return True
 
 
 # --- OP02-085: Kaido ---
@@ -139,24 +145,7 @@ def op02_085_kaido(game_state, player, card):
     return True
 
 
-# --- OP02-018: Marco (Whitebeard Pirates) ---
-@register_effect("OP02-018", "ON_KO", "If 2 or less life, trash WB card to return this to play rested")
-def op02_018_marco(game_state, player, card):
-    """On KO: If 2 or less life, trash WB card from hand to return this to play rested."""
-    if check_life_count(player, 2):
-        wb_cards = [c for c in player.hand
-                    if 'whitebeard pirates' in (c.card_origin or '').lower()]
-        if wb_cards:
-            trash_card = wb_cards[0]
-            player.hand.remove(trash_card)
-            player.trash.append(trash_card)
-            # Return Marco to play rested
-            if card in player.trash:
-                player.trash.remove(card)
-            card.is_resting = True
-            player.cards_in_play.append(card)
-            return True
-    return False
+# OP02-018 on_ko handler is defined later in this file (lowercase timing)
 
 
 # --- OP02-024: Moby Dick ---
@@ -807,8 +796,8 @@ def op02_052_cabaji(game_state, player, card):
 # --- OP02-056: Donquixote Doflamingo ---
 @register_effect("OP02-056", "on_play", "[On Play] Look at top 3, arrange at top or bottom")
 def op02_056_doffy_play(game_state, player, card):
-    """On Play: Look at top 3 cards and place at top or bottom."""
-    return True
+    """On Play: Look at top 3 cards; place them at top or bottom of deck in any order."""
+    return reorder_top_cards(game_state, player, 3, source_card=card, allow_top=True)
 
 
 @register_effect("OP02-056", "on_attack", "[DON!! x1] Trash 1: Place opponent's cost 1 or less at bottom of deck")

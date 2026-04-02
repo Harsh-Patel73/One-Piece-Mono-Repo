@@ -86,6 +86,15 @@ def _leader(life=4) -> Card:
     return c
 
 
+def _wb_leader(life=4) -> Card:
+    """Whitebeard Pirates leader (Edward Newgate) for cards requiring that type."""
+    c = _card("OP02-001", "Edward.Newgate", "LEADER",
+              None, 5000, ["Red"], "Whitebeard Pirates")
+    c.life = life
+    c.counter = None
+    return c
+
+
 def _make_test_card(card_data: dict) -> Card:
     id_ = card_data.get("id") or card_data.get("id_normal", "UNKNOWN")
     id_norm = card_data.get("id_normal") or id_
@@ -226,6 +235,16 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
         kuro2 = _card("KURO-002", "Kurozumi Kanjuro", "CHARACTER",
                        3, 4000, ["Purple"], "Land of Wano/Kurozumi Clan")
         p1.cards_in_play.extend([kuro1, kuro2])
+
+    # Cards requiring Whitebeard Pirates leader to activate their conditions
+    WB_LEADER_CARDS = {
+        "OP02-001", "OP02-002", "OP02-003", "OP02-004", "OP02-005",
+        "OP02-008", "OP02-009", "OP02-013", "OP02-018", "OP02-021",
+        "OP02-023", "OP02-047",
+    }
+    if card_id in WB_LEADER_CARDS and tc.card_type != "LEADER":
+        p1.leader = _wb_leader(4)
+        p2.leader = _wb_leader(4)
 
     return gs, p1, tc
 

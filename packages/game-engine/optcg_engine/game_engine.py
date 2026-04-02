@@ -3404,7 +3404,7 @@ class GameState:
                     if targets:
                         from .effects.hardcoded import create_power_effect_choice
                         create_power_effect_choice(
-                            self, player, targets, power_change=-2000,
+                            self, player, targets, -2000,
                             source_card=src, prompt="Choose opponent's Character to give -2000 power"
                         )
                 elif after == "op01_108_kamazo_ko":
