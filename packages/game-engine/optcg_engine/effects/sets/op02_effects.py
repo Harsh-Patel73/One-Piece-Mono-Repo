@@ -296,12 +296,31 @@ def op02_093_smoker_leader(game_state, player, card):
 # =============================================================================
 
 # --- OP02-004: Edward.Newgate ---
-@register_effect("OP02-004", "on_play", "[On Play] Leader +2000 power until next turn, cannot add Life this turn")
+@register_effect("OP02-004", "on_play", "[On Play] Optionally give Leader +2000 power until end of next turn, cannot add Life this turn")
 def op02_004_newgate_play(game_state, player, card):
-    """On Play: Leader gains +2000 power until next turn. Cannot add Life cards this turn."""
-    if player.leader:
-        player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 2000
+    """On Play: Optionally give Leader +2000 power until end of next turn. Cannot add Life cards this turn."""
+    from ..hardcoded import PendingChoiceFactory
     player.cannot_add_life = True
+    if player.leader:
+        from ...game_engine import PendingChoice
+        import uuid as _uuid
+        game_state.pending_choice = PendingChoice(
+            choice_id=f"newgate_play_{_uuid.uuid4().hex[:8]}",
+            choice_type="select_target",
+            prompt="Give your Leader +2000 power until end of your next turn? (Select to apply, skip to decline)",
+            options=[{"id": "0", "label": f"{player.leader.name} (Leader)", "card_id": player.leader.id, "card_name": player.leader.name}],
+            min_selections=0,
+            max_selections=1,
+            source_card_id=card.id,
+            source_card_name=card.name,
+            callback_action="apply_power_until_next_turn",
+            callback_data={
+                "player_id": player.player_id,
+                "power_amount": 2000,
+                "target_cards": [{"id": player.leader.id, "name": player.leader.name}],
+            }
+        )
+        return True
     return True
 
 
@@ -412,11 +431,12 @@ def op02_013_ace(game_state, player, card):
     opponent = get_opponent(game_state, player)
     targets = [c for c in opponent.cards_in_play if c]
     if targets:
-        return create_multi_target_choice(
-            game_state, player, targets, count=min(2, len(targets)),
-            callback_action="give_minus_3000_power",
+        return create_power_effect_choice(
+            game_state, player, targets, power_amount=-3000,
             source_card=card,
-            prompt="Choose up to 2 opponent Characters to give -3000 power"
+            prompt="Choose up to 2 opponent Characters to give -3000 power",
+            min_selections=0,
+            max_selections=min(2, len(targets))
         )
     return True
 

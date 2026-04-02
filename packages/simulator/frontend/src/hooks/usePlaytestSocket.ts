@@ -18,7 +18,9 @@ interface BackendCard {
   name: string
   card_type: string
   cost: number | null
+  base_cost: number | null
   power: number | null
+  base_power: number | null
   counter: number | null
   effect: string | null
   trigger: string | null
@@ -44,6 +46,7 @@ interface BackendPlayer {
   trash: BackendCard[]
   don_active: number
   don_total: number
+  don_pool: string[]
   has_mulliganed: boolean
 }
 

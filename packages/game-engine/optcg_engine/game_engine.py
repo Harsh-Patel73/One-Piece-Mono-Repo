@@ -193,7 +193,7 @@ class Player:
         Returns:
             Tuple of (total counter value, list of (card, counter_value, is_event) used)
         """
-        base = target.power or 0
+        base = (target.power or 0) + getattr(target, 'power_modifier', 0)
         used: List[Tuple[Card, int, bool]] = []
         total = 0
 
@@ -539,6 +539,14 @@ class GameState:
         """Handle end of turn cleanup."""
         self.phase = GamePhase.END
 
+        # Fire end_of_turn hardcoded effects for current player's leader and cards
+        from .effects.hardcoded import has_hardcoded_effect, execute_hardcoded_effect
+        if self.current_player.leader and has_hardcoded_effect(self.current_player.leader.id, "end_of_turn"):
+            execute_hardcoded_effect(self, self.current_player, self.current_player.leader, "end_of_turn")
+        for card in list(self.current_player.cards_in_play):
+            if has_hardcoded_effect(card.id, "end_of_turn"):
+                execute_hardcoded_effect(self, self.current_player, card, "end_of_turn")
+
         # Clear any stale pending choices before phase transition
         # Effects should be resolved during main phase - any leftover choice is stale
         if self.pending_choice:
@@ -606,7 +614,11 @@ class GameState:
         # Clear leader temporary effects
         if player.leader:
             if hasattr(player.leader, 'power_modifier'):
-                player.leader.power_modifier = 0
+                expire_turn = getattr(player.leader, 'power_modifier_expires_on_turn', -1)
+                if expire_turn < 0 or self.turn_count >= expire_turn:
+                    player.leader.power_modifier = 0
+                    if hasattr(player.leader, 'power_modifier_expires_on_turn'):
+                        del player.leader.power_modifier_expires_on_turn
             if hasattr(player.leader, 'cannot_attack') and player.leader.cannot_attack:
                 expire = getattr(player.leader, 'cannot_attack_until_turn', -1)
                 if expire < 0 or self.turn_count >= expire:
@@ -665,9 +677,9 @@ class GameState:
         # Leader is always a valid target
         targets.append((-1, self.opponent_player.leader))
 
-        # Rested characters are valid targets
+        # Rested characters are valid targets (Stage cards cannot be targeted)
         for i, card in enumerate(self.opponent_player.cards_in_play):
-            if card.is_resting:
+            if card.is_resting and getattr(card, 'card_type', '') != 'STAGE':
                 targets.append((i, card))
 
         return targets
@@ -1099,6 +1111,10 @@ class GameState:
             self._log(f"{self.current_player.name} attaches {attached} DON to {target.name}.")
             # DON count changed — recheck continuous effects (e.g. Zoro: DON!!x1 grants +1000)
             self._recalc_continuous_effects()
+            # Fire on_don_attached effects for leader (e.g. Garp OP02-002)
+            from .effects.hardcoded import has_hardcoded_effect, execute_hardcoded_effect
+            if self.current_player.leader and has_hardcoded_effect(self.current_player.leader.id, "on_don_attached"):
+                execute_hardcoded_effect(self, self.current_player, self.current_player.leader, "on_don_attached")
             return True
         return False
 
@@ -1198,6 +1214,11 @@ class GameState:
         """
         p, o = self.current_player, self.opponent_player
 
+        # Stage cards cannot attack
+        if getattr(attacker, 'card_type', '') == 'STAGE':
+            self._log(f"Stage cards cannot attack.")
+            return
+
         # Validate attacker can attack
         if attacker.card_type == 'CHARACTER':
             if not getattr(attacker, 'has_rush', False):
@@ -1294,7 +1315,7 @@ class GameState:
             'defender_player': o,
             'attacker_player': p,
             'available_blockers': [
-                {'index': i, 'name': b.name, 'power': b.power or 0}
+                {'index': i, 'name': b.name, 'power': (b.power or 0) + getattr(b, 'power_modifier', 0)}
                 for i, b in available_blockers
             ],
             'available_counters': available_counters,
@@ -1685,18 +1706,18 @@ class GameState:
                            if card.effect and '[Blocker]' in card.effect]
                 if blockers:
                     # Attack the blocker we can most likely KO
-                    for idx, card in sorted(blockers, key=lambda x: x[1].power or 0):
-                        if attacker_power >= (card.power or 0):
+                    for idx, card in sorted(blockers, key=lambda x: (x[1].power or 0) + getattr(x[1], 'power_modifier', 0)):
+                        if attacker_power >= (card.power or 0) + getattr(card, 'power_modifier', 0):
                             return (idx, card)
                     # If we can't KO any blocker, still attack one to remove threat
                     return blockers[0]
 
                 # Priority 2: Attack characters we can KO (clean removal)
                 ko_targets = [(idx, card) for idx, card in rested_chars
-                             if attacker_power >= (card.power or 0)]
+                             if attacker_power >= (card.power or 0) + getattr(card, 'power_modifier', 0)]
                 if ko_targets:
                     # Attack the highest power character we can KO
-                    return max(ko_targets, key=lambda x: x[1].power or 0)
+                    return max(ko_targets, key=lambda x: (x[1].power or 0) + getattr(x[1], 'power_modifier', 0))
 
             # Default: attack the leader
             return (-1, opponent.leader)
@@ -2015,6 +2036,28 @@ class GameState:
                             target.power_modifier = getattr(target, 'power_modifier', 0) + power_amount
                             sign = "+" if power_amount >= 0 else ""
                             self._log(f"{target.name} gets {sign}{power_amount} power")
+
+            elif action == "apply_power_until_next_turn":
+                # Apply power modifier that persists until end of NEXT turn
+                target_cards = data.get("target_cards", [])
+                power_amount = data.get("power_amount", 0)
+                opponent = self.player2 if player == self.player1 else self.player1
+                all_cards = player.cards_in_play + opponent.cards_in_play + [player.leader, opponent.leader]
+
+                for sel in selected:
+                    target_idx = int(sel) if sel is not None else -1
+                    if 0 <= target_idx < len(target_cards):
+                        target_info = target_cards[target_idx]
+                        target = None
+                        for c in all_cards:
+                            if c and c.id == target_info["id"]:
+                                target = c
+                                break
+                        if target:
+                            target.power_modifier = getattr(target, 'power_modifier', 0) + power_amount
+                            target.power_modifier_expires_on_turn = self.turn_count + 1
+                            sign = "+" if power_amount >= 0 else ""
+                            self._log(f"{target.name} gets {sign}{power_amount} power until end of next turn")
 
             elif action == "ko_target":
                 # KO selected character

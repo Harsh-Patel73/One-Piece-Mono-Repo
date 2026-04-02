@@ -489,7 +489,8 @@ export function EffectTesterPage() {
                       Attach DON → Leader
                     </button>
                   )}
-                  {selectedFieldIndex !== null && selectedFieldIndex >= 0 && !attackMode && !awaitingResponse && (
+                  {selectedFieldIndex !== null && selectedFieldIndex >= 0 && !attackMode && !awaitingResponse
+                    && currentPlayer.field[selectedFieldIndex]?.cardType !== 'STAGE' && (
                     <button onClick={() => setAttackMode(true)}
                       className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded text-sm font-medium flex items-center gap-1">
                       <Swords className="w-3 h-3" /> Attack
@@ -505,6 +506,7 @@ export function EffectTesterPage() {
                       <button onClick={() => handleDeclareAttack(selectedFieldIndex!, -1)}
                         className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded text-xs">Leader</button>
                       {(activePlayer === 0 ? player2 : player1).field.map((card, idx) => {
+                        if (card.cardType === 'STAGE') return null
                         const isTargetable = card.isResting || attackerCanAttackActive
                         return (
                         <button key={idx}
@@ -807,28 +809,42 @@ function PlayerBoard({
         </div>
       </div>
 
-      {/* DON!! Pool — visual cards */}
-      {player.donPool.length > 0 && (
-        <div className="flex items-center gap-0.5 px-1">
-          <span className="text-[8px] text-yellow-400/50 mr-1">DON!!</span>
-          {player.donPool.map((state, i) => (
-            <div
-              key={i}
-              className={`transition-all duration-300 ${state === 'rested' ? 'rotate-90 mx-1' : ''}`}
-              title={`DON #${i + 1} (${state})`}
-            >
-              <div className={`w-5 h-7 rounded-sm border flex items-center justify-center text-[7px] font-black
-                ${state === 'active'
-                  ? 'border-yellow-400 bg-gradient-to-b from-yellow-500 to-amber-700 text-yellow-100 shadow-sm shadow-yellow-500/30'
-                  : 'border-stone-500 bg-gradient-to-b from-stone-500 to-stone-700 text-stone-300 opacity-60'
-                }`}
+      {/* DON!! Pool — visual cards (excludes DON attached to characters) */}
+      {player.donPool.length > 0 && (() => {
+        // How many DON are attached to cards — those show under their card, not here
+        const totalAttached = (player.leader ? player.leader.attachedDon : 0)
+          + player.field.reduce((sum, c) => sum + c.attachedDon, 0)
+        // Build pool: keep all active + only the "free rested" (not attached) entries
+        const poolDisplay: ('active' | 'rested')[] = []
+        let restedToSkip = totalAttached
+        for (const state of [...player.donPool].reverse()) {
+          // Attached DON are the most-recently-rested entries; skip them
+          if (state === 'rested' && restedToSkip > 0) { restedToSkip--; continue }
+          poolDisplay.unshift(state as 'active' | 'rested')
+        }
+        if (poolDisplay.length === 0) return null
+        return (
+          <div className="flex items-center gap-0.5 px-1 flex-wrap">
+            <span className="text-[8px] text-yellow-400/50 mr-1 shrink-0">DON!!</span>
+            {poolDisplay.map((state, i) => (
+              <div
+                key={i}
+                className={`transition-all duration-300 ${state === 'rested' ? 'rotate-90 mx-1' : ''}`}
+                title={`DON (${state})`}
               >
-                D
+                <div className={`w-5 h-7 rounded-sm border flex items-center justify-center text-[7px] font-black select-none
+                  ${state === 'active'
+                    ? 'border-yellow-400 bg-gradient-to-b from-yellow-500 to-amber-700 text-yellow-100 shadow-sm shadow-yellow-500/30'
+                    : 'border-stone-500 bg-gradient-to-b from-stone-500 to-stone-700 text-stone-300 opacity-60'
+                  }`}
+                >
+                  D
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )
+      })()}
 
       {/* Trash viewer */}
       {trashOpen && (
@@ -855,36 +871,61 @@ function PlayerBoard({
       )}
 
       {/* Leader + Field */}
-      <div className="flex gap-3 flex-1 min-h-0">
-        <div className="flex flex-col items-center">
-          {player.leader && (
-            <CardDisplay card={player.leader} size="large"
-              isSelected={selectedZone === 'leader' && selectedIndex === 0}
-              onClick={() => !isOpponent && onSelectCard('leader', 0)}
-              isOwnerTurn={isOwnerTurn} />
-          )}
-          <div className="text-[9px] text-amber-200/50 mt-0.5">LEADER</div>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[9px] text-amber-200/30 mb-0.5">FIELD ({player.field.length}/5)</div>
-          <div className="flex gap-1.5 flex-wrap">
-            <AnimatePresence>
-              {player.field.map((card, idx) => (
-                <motion.div key={card.instanceId}
-                  initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>
-                  <CardDisplay card={card} size="medium"
-                    isSelected={selectedZone === 'field' && selectedIndex === idx}
-                    onClick={() => !isOpponent && onSelectCard('field', idx)}
-                    isOwnerTurn={isOwnerTurn} />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-            {player.field.length === 0 && (
-              <span className="text-amber-200/20 text-xs italic">Empty</span>
-            )}
+      {(() => {
+        const stageCards = player.field.map((c, i) => ({ card: c, idx: i })).filter(({ card }) => card.cardType === 'STAGE')
+        const charCards  = player.field.map((c, i) => ({ card: c, idx: i })).filter(({ card }) => card.cardType !== 'STAGE')
+        return (
+          <div className="flex gap-3 flex-1 min-h-0">
+            {/* Leader column (+ stages below) */}
+            <div className="flex flex-col items-center gap-1">
+              {player.leader && (
+                <CardDisplay card={player.leader} size="large"
+                  isSelected={selectedZone === 'leader' && selectedIndex === 0}
+                  onClick={() => !isOpponent && onSelectCard('leader', 0)}
+                  isOwnerTurn={isOwnerTurn} />
+              )}
+              <div className="text-[9px] text-amber-200/50">LEADER</div>
+              {/* Stage cards section — below leader */}
+              {stageCards.length > 0 && (
+                <>
+                  <div className="text-[8px] text-purple-400/70 mt-1">STAGES</div>
+                  <AnimatePresence>
+                    {stageCards.map(({ card, idx }) => (
+                      <motion.div key={card.instanceId}
+                        initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>
+                        <CardDisplay card={card} size="medium"
+                          isSelected={selectedZone === 'field' && selectedIndex === idx}
+                          onClick={() => !isOpponent && onSelectCard('field', idx)}
+                          isOwnerTurn={isOwnerTurn} />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </>
+              )}
+            </div>
+            {/* Character field */}
+            <div className="flex-1 min-w-0">
+              <div className="text-[9px] text-amber-200/30 mb-0.5">FIELD ({charCards.length}/5)</div>
+              <div className="flex gap-1.5 flex-wrap">
+                <AnimatePresence>
+                  {charCards.map(({ card, idx }) => (
+                    <motion.div key={card.instanceId}
+                      initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>
+                      <CardDisplay card={card} size="medium"
+                        isSelected={selectedZone === 'field' && selectedIndex === idx}
+                        onClick={() => !isOpponent && onSelectCard('field', idx)}
+                        isOwnerTurn={isOwnerTurn} />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+                {charCards.length === 0 && (
+                  <span className="text-amber-200/20 text-xs italic">Empty</span>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        )
+      })()}
 
       {/* Hand (own player only) */}
       {!isOpponent && (
@@ -977,11 +1018,13 @@ function CardDisplay({ card, size, isSelected, onClick, showCost, canAfford, isO
   // Detect modified power/cost (effect-based changes, not DON bonus)
   const basePower = card.basePower ?? card.power
   const baseCost = card.baseCost ?? card.cost
-  const powerModified = basePower !== null && card.power !== null && card.power !== basePower
-  const costModified = baseCost !== null && card.cost !== null && card.cost !== baseCost
-  const powerUp = powerModified && (card.power ?? 0) > (basePower ?? 0)
-  const powerDown = powerModified && (card.power ?? 0) < (basePower ?? 0)
-  const costDown = costModified && (card.cost ?? 0) < (baseCost ?? 0)
+  const powerDelta = (basePower !== null && card.power !== null) ? (card.power - basePower) : 0
+  const costDelta  = (baseCost  !== null && card.cost  !== null) ? (card.cost  - baseCost)  : 0
+  const powerModified = powerDelta !== 0
+  const costModified  = costDelta  !== 0
+  const powerUp   = powerDelta > 0
+  const powerDown = powerDelta < 0
+  const costDown  = costDelta  < 0
 
   const [hovered, setHovered] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -1014,34 +1057,48 @@ function CardDisplay({ card, size, isSelected, onClick, showCost, canAfford, isO
             {card.name}
           </div>
         )}
-        {/* Cost reduction indicator — top-left badge */}
-        {costDown && (
-          <div className="absolute top-0 left-0 bg-blue-600/90 text-white text-[7px] font-bold px-0.5 rounded-br leading-tight"
-            title={`Cost reduced: ${baseCost} → ${card.cost}`}>
-            {card.cost}
+        {/* Cost modification badge — top-left corner */}
+        {costModified && (
+          <div
+            className={`absolute top-0 left-0 text-white text-[7px] font-bold px-0.5 rounded-br leading-tight select-none
+              ${costDown ? 'bg-blue-600/90' : 'bg-orange-500/90'}`}
+            title={`Cost: ${baseCost} → ${card.cost}`}
+          >
+            {costDown ? costDelta : `+${costDelta}`} cost
           </div>
         )}
-        {/* Power modification indicator — bottom overlay */}
+        {/* Power modification badge — bottom strip */}
         {powerModified && (
-          <div className={`absolute bottom-0 inset-x-0 text-[7px] font-bold text-center leading-tight py-px
-            ${powerUp ? 'bg-green-600/80 text-green-100' : 'bg-red-600/80 text-red-100'}`}
-            title={`Power: ${basePower} → ${card.power}`}>
-            {powerUp ? '\u25B2' : '\u25BC'}{card.power}
+          <div
+            className={`absolute bottom-0 inset-x-0 text-[8px] font-bold text-center leading-tight py-px select-none
+              ${powerDown ? 'bg-red-600/90 text-red-100' : 'bg-green-600/90 text-green-100'}`}
+            title={`Power: ${basePower?.toLocaleString()} → ${card.power?.toLocaleString()}`}
+          >
+            {powerDown ? powerDelta.toLocaleString() : `+${powerDelta.toLocaleString()}`}
           </div>
         )}
       </div>
+      {/* Attached DON — mini cards beneath the card */}
       {card.attachedDon > 0 && (
-        <div className="text-[9px] text-yellow-400 text-center">+{card.attachedDon}</div>
+        <div className="flex justify-center gap-0.5 mt-0.5" title={`${card.attachedDon} DON attached`}>
+          {Array.from({ length: card.attachedDon }).map((_, i) => (
+            <div key={i}
+              className="w-3 h-4 rounded-sm border border-yellow-500 bg-gradient-to-b from-yellow-400 to-amber-600 flex items-center justify-center text-[6px] font-black text-yellow-100 shadow-sm shadow-yellow-500/40 select-none"
+            >
+              D
+            </div>
+          ))}
+        </div>
       )}
       {power !== null && power > 0 && (
         <div className={`text-[9px] font-bold text-center ${
-          powerUp ? 'text-green-400' : powerDown ? 'text-red-400' : 'text-amber-300'
+          powerDown ? 'text-red-400' : powerUp ? 'text-green-400' : 'text-amber-300'
         }`}>{power.toLocaleString()}</div>
       )}
       {showCost && card.cost !== null && (
         <div className={`text-[9px] text-center ${
           costDown ? 'text-blue-400 font-bold' : canAfford ? 'text-green-400' : 'text-red-400'
-        }`}>{card.cost}{costDown ? ` (was ${baseCost})` : ''}</div>
+        }`}>{card.cost}</div>
       )}
       {hovered && rect && <CardHoverPreview card={card} anchorRect={rect} />}
     </div>
