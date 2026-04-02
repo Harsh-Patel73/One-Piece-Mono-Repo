@@ -547,11 +547,9 @@ class GameState:
             if has_hardcoded_effect(card.id, "end_of_turn"):
                 execute_hardcoded_effect(self, self.current_player, card, "end_of_turn")
 
-        # Clear any stale pending choices before phase transition
-        # Effects should be resolved during main phase - any leftover choice is stale
-        if self.pending_choice:
-            print(f"Warning: Clearing unresolved pending_choice at end of turn")
-            self.pending_choice = None
+        # If an end-of-turn effect created a pending_choice, keep it for the player to resolve.
+        # Only clear truly stale leftover choices from before end_of_turn effects.
+        # (Stale choices are already cleared before end_of_turn fires above.)
 
         # Clear "until end of turn" effects for both players
         self._clear_temporary_effects(self.current_player)
@@ -579,13 +577,17 @@ class GameState:
 
         Called after any state change that may change a continuous effect's condition
         (e.g. attaching DON to a leader that has a DON!!-gated continuous effect).
+
+        Preserves one-time (sticky) power modifiers applied by effects like
+        -3000 from OP02-013 or +2000-until-next-turn from OP02-004.
         """
         for player in [self.current_player, self.opponent_player]:
             if player.leader and hasattr(player.leader, 'power_modifier'):
-                player.leader.power_modifier = 0
+                # Preserve sticky (one-time) portion; reset only continuous
+                player.leader.power_modifier = getattr(player.leader, '_sticky_power_modifier', 0)
             for card in player.cards_in_play:
                 if hasattr(card, 'power_modifier'):
-                    card.power_modifier = 0
+                    card.power_modifier = getattr(card, '_sticky_power_modifier', 0)
                 # Reset DON-gated continuous flags so they're re-evaluated
                 if hasattr(card, 'can_attack_active'):
                     card.can_attack_active = False
@@ -595,6 +597,13 @@ class GameState:
                     card.cannot_be_ko_by_strike = False
                 if hasattr(card, 'cannot_be_ko_in_battle'):
                     card.cannot_be_ko_in_battle = False
+                # Reset conditional Rush (continuous effects re-set if conditions met)
+                if hasattr(card, 'has_rush') and not getattr(card, '_innate_rush', False):
+                    card.has_rush = False
+                # Reset conditional Blocker from continuous effects
+                if hasattr(card, '_continuous_blocker'):
+                    card.has_blocker = False
+                    card._continuous_blocker = False
                 if hasattr(card, 'has_doubleattack'):
                     # Reset to False; continuous effects will re-set if conditions met.
                     # Cards with innate Double Attack get it re-applied via _apply_keywords-style check below.
@@ -617,8 +626,11 @@ class GameState:
                 expire_turn = getattr(player.leader, 'power_modifier_expires_on_turn', -1)
                 if expire_turn < 0 or self.turn_count >= expire_turn:
                     player.leader.power_modifier = 0
+                    player.leader._sticky_power_modifier = 0
                     if hasattr(player.leader, 'power_modifier_expires_on_turn'):
                         del player.leader.power_modifier_expires_on_turn
+                    if hasattr(player.leader, '_sticky_power_modifier_expires_on_turn'):
+                        del player.leader._sticky_power_modifier_expires_on_turn
             if hasattr(player.leader, 'cannot_attack') and player.leader.cannot_attack:
                 expire = getattr(player.leader, 'cannot_attack_until_turn', -1)
                 if expire < 0 or self.turn_count >= expire:
@@ -630,6 +642,7 @@ class GameState:
         for card in player.cards_in_play:
             if hasattr(card, 'power_modifier'):
                 card.power_modifier = 0
+            card._sticky_power_modifier = 0
             if hasattr(card, 'cannot_attack') and card.cannot_attack:
                 expire = getattr(card, 'cannot_attack_until_turn', -1)
                 if expire < 0 or self.turn_count >= expire:
@@ -952,6 +965,11 @@ class GameState:
             bpm = getattr(self, 'blocker_power_minimum', 0)
             if bpm and (blocker.power or 0) + getattr(blocker, 'power_modifier', 0) < bpm:
                 self._log(f"{blocker.name} cannot block (power too low).")
+                return False
+            # Check blocker_cost_limit (e.g. OP02-061 Morley: cost 5 or less can't block)
+            bcl = getattr(self, 'blocker_cost_limit', None)
+            if bcl is not None and (getattr(blocker, 'cost', 0) or 0) <= bcl:
+                self._log(f"{blocker.name} cannot block (cost {blocker.cost} ≤ {bcl}).")
                 return False
 
             # Redirect attack to blocker
@@ -1292,6 +1310,11 @@ class GameState:
         if bpm:
             available_blockers = [(i, b) for i, b in available_blockers
                                   if (b.power or 0) + getattr(b, 'power_modifier', 0) > bpm - 1]
+        # Filter by blocker_cost_limit (e.g. OP02-061 Morley: cost 5 or less can't block)
+        bcl = getattr(self, 'blocker_cost_limit', None)
+        if bcl is not None:
+            available_blockers = [(i, b) for i, b in available_blockers
+                                  if (getattr(b, 'cost', 0) or 0) > bcl]
         print(f"[DEBUG BLOCKER] Defender={o.name}, cards_in_play={len(o.cards_in_play)}")
         for ci, cc in enumerate(o.cards_in_play):
             can_blk = o._can_block(cc)
@@ -1621,8 +1644,16 @@ class GameState:
         """Clean up after attack resolution."""
         if self.pending_attack:
             attacker = self.pending_attack['attacker']
+            attacker_player = self.pending_attack['attacker_player']
             # attacker.is_resting already set at attack declaration
             attacker.has_attacked = True
+            # Handle return_to_bottom_after_battle (e.g. OP02-064 Mr.2)
+            if getattr(attacker, 'return_to_bottom_after_battle', False):
+                if attacker in attacker_player.cards_in_play:
+                    attacker_player.cards_in_play.remove(attacker)
+                    attacker_player.deck.append(attacker)
+                    self._log(f"{attacker.name} returns to bottom of deck after battle")
+                attacker.return_to_bottom_after_battle = False
 
         self.pending_attack = None
         self.awaiting_response = None
@@ -2034,6 +2065,7 @@ class GameState:
                                 break
                         if target:
                             target.power_modifier = getattr(target, 'power_modifier', 0) + power_amount
+                            target._sticky_power_modifier = getattr(target, '_sticky_power_modifier', 0) + power_amount
                             sign = "+" if power_amount >= 0 else ""
                             self._log(f"{target.name} gets {sign}{power_amount} power")
 
@@ -2055,7 +2087,9 @@ class GameState:
                                 break
                         if target:
                             target.power_modifier = getattr(target, 'power_modifier', 0) + power_amount
+                            target._sticky_power_modifier = getattr(target, '_sticky_power_modifier', 0) + power_amount
                             target.power_modifier_expires_on_turn = self.turn_count + 1
+                            target._sticky_power_modifier_expires_on_turn = self.turn_count + 1
                             sign = "+" if power_amount >= 0 else ""
                             self._log(f"{target.name} gets {sign}{power_amount} power until end of next turn")
 
@@ -3667,6 +3701,198 @@ class GameState:
                     if 0 <= idx < len(opponent.hand):
                         c = opponent.hand[idx]
                         self._log(f"Bao Huang reveals: {c.name} (Cost: {c.cost or 0}, Type: {c.card_type})")
+
+            elif action == "marco_trash_wb_then_revive":
+                # OP02-018: Player selected a WB card to trash; now revive Marco from trash
+                wb_targets = data.get("target_cards", [])
+                marco_card_id = data.get("marco_card_id")
+                if selected:
+                    idx = int(selected[0])
+                    if 0 <= idx < len(wb_targets):
+                        wb_info = wb_targets[idx]
+                        # Find and trash the WB card from hand
+                        for hc in player.hand[:]:
+                            if hc.id == wb_info["id"]:
+                                player.hand.remove(hc)
+                                player.trash.append(hc)
+                                self._log(f"{player.name} trashed {hc.name} from hand")
+                                break
+                        # Revive Marco from trash
+                        for tc in player.trash[:]:
+                            if tc.id == marco_card_id:
+                                player.trash.remove(tc)
+                                player.cards_in_play.append(tc)
+                                tc.is_resting = True
+                                self._log(f"{tc.name} returns to play rested from trash")
+                                break
+
+            elif action == "op02_062_trash_then_return":
+                # OP02-062: Player selected 2 cards to trash; now pick cost 4 or less to return
+                indices = sorted([int(s) for s in selected], reverse=True) if selected else []
+                for idx in indices:
+                    if 0 <= idx < len(player.hand):
+                        card = player.hand.pop(idx)
+                        player.trash.append(card)
+                        self._log(f"{player.name} trashed {card.name}")
+                if indices:
+                    # Now prompt for return to hand
+                    opponent = self.player2 if player == self.player1 else self.player1
+                    targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 4]
+                    if targets:
+                        from .effects.hardcoded import create_return_to_hand_choice
+                        source_id = data.get("source_card_id")
+                        source_name = data.get("source_card_name")
+                        # Also grant Double Attack
+                        for c in player.cards_in_play:
+                            if c.id == source_id:
+                                c.has_double_attack = True
+                                break
+                        create_return_to_hand_choice(self, player, targets,
+                                                      prompt="Choose opponent's cost 4 or less to return to hand")
+
+            elif action == "op02_065_optional_trash_set_active":
+                # OP02-065: Player optionally trashes 1 card to set Mr.3 active
+                card_id = data.get("mr3_card_id")
+                if selected:
+                    idx = int(selected[0])
+                    if 0 <= idx < len(player.hand):
+                        card = player.hand.pop(idx)
+                        player.trash.append(card)
+                        self._log(f"{player.name} trashed {card.name}")
+                        # Set Mr.3 active
+                        for c in player.cards_in_play:
+                            if c.id == card_id:
+                                c.is_resting = False
+                                self._log(f"{c.name} set active")
+                                break
+
+            elif action == "op02_066_trash_then_draw":
+                # OP02-066: Player selected 2 cards to trash; if Impel Down leader, draw 2
+                indices = sorted([int(s) for s in selected], reverse=True) if selected else []
+                for idx in indices:
+                    if 0 <= idx < len(player.hand):
+                        card = player.hand.pop(idx)
+                        player.trash.append(card)
+                        self._log(f"{player.name} trashed {card.name}")
+                if len(indices) >= 2:
+                    if player.leader and 'impel down' in (player.leader.card_origin or '').lower():
+                        from .effects.hardcoded import draw_cards
+                        draw_cards(player, 2)
+                        self._log("Impel Down All Stars: drew 2 cards")
+
+            elif action == "op02_068_trash_then_power":
+                # OP02-068: Player selected 1 card to trash; now give +3000 power
+                if selected:
+                    idx = int(selected[0])
+                    if 0 <= idx < len(player.hand):
+                        card = player.hand.pop(idx)
+                        player.trash.append(card)
+                        self._log(f"{player.name} trashed {card.name}")
+                    # Now prompt for power target
+                    targets = ([player.leader] if player.leader else []) + player.cards_in_play
+                    if targets:
+                        from .effects.hardcoded import create_power_effect_choice
+                        create_power_effect_choice(
+                            self, player, targets, 3000,
+                            prompt="Gum-Gum Rain: Choose Leader or Character to give +3000 power"
+                        )
+
+            elif action == "op02_064_trash_then_bottom":
+                # OP02-064: Player selected 1 card to trash; now place cost 2 or less at bottom
+                if selected:
+                    idx = int(selected[0])
+                    if 0 <= idx < len(player.hand):
+                        card = player.hand.pop(idx)
+                        player.trash.append(card)
+                        self._log(f"{player.name} trashed {card.name}")
+                # Set return_to_bottom_after_battle on attacker
+                attacker_id = data.get("attacker_card_id")
+                for c in player.cards_in_play:
+                    if c.id == attacker_id:
+                        c.return_to_bottom_after_battle = True
+                        break
+                # Prompt for opponent's cost 2 or less
+                opponent = self.player2 if player == self.player1 else self.player1
+                targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 2]
+                if targets:
+                    from .effects.hardcoded import create_bottom_deck_choice
+                    create_bottom_deck_choice(self, player, targets,
+                                              prompt="Choose opponent's cost 2 or less to place at deck bottom")
+
+            elif action == "op02_059_optional_trash":
+                # OP02-059: Player selected 0-3 cards to trash
+                indices = sorted([int(s) for s in selected], reverse=True) if selected else []
+                for idx in indices:
+                    if 0 <= idx < len(player.hand):
+                        card = player.hand.pop(idx)
+                        player.trash.append(card)
+                        self._log(f"{player.name} trashed {card.name}")
+
+            elif action == "op02_032_pay_don_set_active":
+                # OP02-032: Player selected a Minks target; rest 2 DON and set it active
+                target_cards = data.get("target_cards", [])
+                if selected:
+                    idx = int(selected[0])
+                    if 0 <= idx < len(target_cards):
+                        # Rest 2 active DON
+                        rested_count = 0
+                        for i in range(len(player.don_pool)):
+                            if rested_count >= 2:
+                                break
+                            if player.don_pool[i] == "active":
+                                player.don_pool[i] = "rested"
+                                rested_count += 1
+                        # Set target as active
+                        target_info = target_cards[idx]
+                        for c in player.cards_in_play:
+                            if c.id == target_info["id"]:
+                                c.is_resting = False
+                                self._log(f"Shishilian: set {c.name} active")
+                                break
+
+            elif action == "op02_048_trash_wano":
+                # OP02-048: Player selected a Land of Wano card to trash; rest stage, set 1 DON active
+                stage_card_id = data.get("stage_card_id")
+                wano_targets = data.get("target_cards", [])
+                if selected:
+                    idx = int(selected[0])
+                    if 0 <= idx < len(wano_targets):
+                        wano_info = wano_targets[idx]
+                        for hc in player.hand[:]:
+                            if hc.id == wano_info["id"]:
+                                player.hand.remove(hc)
+                                player.trash.append(hc)
+                                self._log(f"Land of Wano Stage: trashed {hc.name}")
+                                break
+                        # Rest the stage
+                        for c in player.cards_in_play:
+                            if c.id == stage_card_id:
+                                c.is_resting = True
+                                c.main_activated_this_turn = True
+                                break
+                        # Set 1 rested DON active
+                        for i, d in enumerate(player.don_pool):
+                            if d == "rested":
+                                player.don_pool[i] = "active"
+                                self._log("Land of Wano Stage: set 1 DON active")
+                                break
+
+            elif action == "nami_don_search":
+                # OP02-036 Nami: player chose yes/no to rest 1 DON and search top 3 for FILM card
+                chosen = selected[0] if selected else "no"
+                if chosen == "yes":
+                    # Rest 1 active DON
+                    for i in range(len(player.don_pool)):
+                        if player.don_pool[i] == "active":
+                            player.don_pool[i] = "rested"
+                            break
+                    # Search top 3 for FILM card (not Nami)
+                    from .effects.hardcoded import search_top_cards
+                    def _nami_filter(c):
+                        return ('FILM' in (c.card_origin or '')
+                                and getattr(c, 'name', '') != 'Nami')
+                    search_top_cards(self, player, 3, add_count=1, filter_fn=_nami_filter,
+                                     prompt="Look at top 3. Choose a FILM card (not Nami) to add to hand.")
 
             # If a new pending choice was set during action processing (chained effects,
             # e.g. Law returns a character then immediately prompts to play one),

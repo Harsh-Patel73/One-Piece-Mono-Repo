@@ -240,11 +240,60 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
     WB_LEADER_CARDS = {
         "OP02-001", "OP02-002", "OP02-003", "OP02-004", "OP02-005",
         "OP02-008", "OP02-009", "OP02-013", "OP02-018", "OP02-021",
-        "OP02-023", "OP02-047",
+        "OP02-023", "OP02-024", "OP02-047",
     }
     if card_id in WB_LEADER_CARDS and tc.card_type != "LEADER":
         p1.leader = _wb_leader(4)
         p2.leader = _wb_leader(4)
+
+    # OP02-031: Needs a Kouzuki Oden character on the field for conditional Blocker
+    if card_id == "OP02-031":
+        oden = _card("ODEN-001", "Kouzuki Oden", "CHARACTER",
+                      5, 6000, ["Green"], "Land of Wano")
+        p1.cards_in_play.append(oden)
+
+    # OP02-030: Seed green Land of Wano cost 3 or less characters in deck for on_ko effect
+    if card_id == "OP02-030":
+        wano1 = _card("WANO-KO-001", "Kiku", "CHARACTER", 2, 3000, ["Green"], "Land of Wano")
+        wano2 = _card("WANO-KO-002", "Okiku", "CHARACTER", 3, 4000, ["Green"], "Land of Wano")
+        p1.deck.insert(0, wano1)
+        p1.deck.insert(1, wano2)
+
+    # OP02-035: Seed a cost 3 or less character in hand for Law's activate effect
+    if card_id == "OP02-035":
+        low_cost = _card("LC-001", "Cost-2 Character", "CHARACTER", 2, 3000, ["Green"], "Land of Wano")
+        p1.hand.insert(0, low_cost)
+
+    # OP02-032: Seed a resting Minks character for Shishilian's optional DON effect
+    if card_id == "OP02-032":
+        minks1 = _card("MINKS-001", "Pedro (Minks)", "CHARACTER",
+                        4, 5000, ["Green"], "Minks", rested=True)
+        minks2 = _card("MINKS-002", "Wanda (Minks)", "CHARACTER",
+                        3, 4000, ["Green"], "Minks", rested=True)
+        p1.cards_in_play.extend([minks1, minks2])
+
+    # OP02-044: Seed a resting Minks character in hand for Wanda's on_play effect
+    if card_id == "OP02-044":
+        minks_hand = _card("MINKS-003", "Carrot (Minks)", "CHARACTER",
+                            2, 3000, ["Green"], "Minks")
+        p1.hand.insert(0, minks_hand)
+
+    # OP02-058: Seed Impel Down characters in deck for search testing
+    if card_id == "OP02-058":
+        id_char1 = _card("ID-001", "Impel Down Guard", "CHARACTER",
+                          3, 4000, ["Blue"], "Impel Down")
+        id_char2 = _card("ID-002", "Impel Down Jailer", "CHARACTER",
+                          2, 3000, ["Blue"], "Impel Down")
+        id_char3 = _card("ID-003", "Impel Down Warden", "CHARACTER",
+                          4, 5000, ["Blue"], "Impel Down")
+        for i, c in enumerate([id_char1, id_char2, id_char3]):
+            p1.deck.insert(i, c)
+
+    # OP02-063: Seed a blue Event cost 1 in trash for testing
+    if card_id == "OP02-063":
+        blue_event = _card("BE-001", "Blue Counter Event", "EVENT",
+                            1, None, ["Blue"], "Impel Down")
+        p1.trash.append(blue_event)
 
     return gs, p1, tc
 
