@@ -159,7 +159,6 @@ def op02_093_smoker_leader(game_state, player, card):
 @register_effect("OP02-004", "on_play", "[On Play] Optionally give Leader +2000 power until end of next turn, cannot add Life this turn")
 def op02_004_newgate_play(game_state, player, card):
     """On Play: Optionally give Leader +2000 power until end of next turn. Cannot add Life cards this turn."""
-    from ..hardcoded import PendingChoiceFactory
     player.cannot_add_life = True
     if player.leader:
         from ...game_engine import PendingChoice
