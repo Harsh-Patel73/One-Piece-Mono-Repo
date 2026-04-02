@@ -31,7 +31,17 @@
       "Bash(xargs grep:*)",
       "Bash(ls -la \"C:\\\\Users\\\\harsh\\\\OPTCG-Monorepo\\\\repo\\\\packages\\\\simulator\\\\frontend\\\\public\\\\images\"\" 2>/dev/null || echo \"Directory not found or empty \")",
       "Bash(npx tsc:*)",
-      "Bash(ls /c/Users/harsh/OPTCG-Monorepo/repo/packages/simulator/frontend/tsconfig*)"
+      "Bash(ls /c/Users/harsh/OPTCG-Monorepo/repo/packages/simulator/frontend/tsconfig*)",
+      "Bash(curl -s \"http://localhost:8080/api/effect-test/queue?set_code=OP02\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(f''''Total: {d[\"\"total\"\"]}''''\\); [print\\(c[''''id''''], c[''''status'''']\\) for c in d[''''cards''''][:5]]\")",
+      "Bash(taskkill /PID 8272 /F)",
+      "Bash(cmd /c \"taskkill /PID 8272 /F\")",
+      "Bash(powershell -Command \"Stop-Process -Id 8272,17864,36972 -Force\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(''''OK''''\\)\")",
+      "Bash(grep -r \"valid_targets\\\\|valid_attackers\" /c/Users/harsh/OPTCG-Monorepo/repo --include=*.py)",
+      "Bash(grep -n \"currentBattle\\\\|battle.*power\\\\|attacker.*power\\\\|defender.*power\" /c/Users/harsh/OPTCG-Monorepo/repo/packages/simulator/frontend/src/pages/*.tsx)",
+      "Bash(grep -rn \"attacherPower\\\\|base_power\\\\|basePower\" /c/Users/harsh/OPTCG-Monorepo/repo/packages/simulator --include=*.ts --include=*.tsx)",
+      "Bash(grep -rn \"attacker_power\\\\|target_power\\\\|basePower\\\\|base_power\" /c/Users/harsh/OPTCG-Monorepo/repo/packages/simulator/backend --include=*.py)"
     ]
   }
 }
