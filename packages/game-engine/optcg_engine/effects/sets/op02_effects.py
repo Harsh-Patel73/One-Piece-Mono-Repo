@@ -41,6 +41,9 @@ def you_may_be_a_fool_effect(game_state, player, card):
 @register_effect("OP02-001", "end_of_turn", "[End of Your Turn] Add 1 Life to hand")
 def op02_001_whitebeard_leader(game_state, player, card):
     """End of Your Turn: Add 1 card from the top of your Life cards to your hand."""
+    if getattr(player, 'cannot_add_life', False) or getattr(player, 'cannot_add_life_to_hand_this_turn', False):
+        game_state._log(f"{card.name}'s effect could not add a Life card to hand this turn")
+        return False
     if player.life_cards:
         life = player.life_cards.pop()
         player.hand.append(life)
@@ -60,13 +63,28 @@ def op02_002_garp_leader(game_state, player, card):
     return False
 
 
+# --- OP02-024: Moby Dick ---
+@register_effect("OP02-024", "continuous", "[Your Turn] If you have 1 or less Life, your Edward.Newgate and all Whitebeard Pirates gain +2000")
+def op02_024_moby_dick(game_state, player, card):
+    """Your Turn: If you have 1 or less Life, Edward.Newgate and all Whitebeard Pirates gain +2000 power."""
+    if game_state.current_player is not player or len(player.life_cards) > 1:
+        return True
+    if player.leader and getattr(player.leader, 'name', '') == 'Edward.Newgate':
+        player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 2000
+    for char in player.cards_in_play:
+        if 'Whitebeard Pirates' in (getattr(char, 'card_origin', '') or ''):
+            char.power_modifier = getattr(char, 'power_modifier', 0) + 2000
+    return True
+
+
 # --- OP02-025: Kin'emon (Leader) ---
 @register_effect("OP02-025", "activate", "[Activate: Main] If 1- chars, next Land of Wano cost 3+ costs -1")
 def op02_025_kinemon_leader(game_state, player, card):
     """Once Per Turn: If 1 or less Characters, next Land of Wano cost 3+ from hand costs -1."""
     if hasattr(card, 'op02_025_used') and card.op02_025_used:
         return False
-    if len(player.cards_in_play) <= 1:
+    char_count = sum(1 for c in player.cards_in_play if getattr(c, 'card_type', '') == 'CHARACTER')
+    if char_count <= 1:
         player.next_wano_discount = True
         card.op02_025_used = True
         return True
@@ -77,15 +95,52 @@ def op02_025_kinemon_leader(game_state, player, card):
 @register_effect("OP02-026", "on_play_character", "[Once Per Turn] When play no-effect char, if 3- chars, set 2 DON active")
 def op02_026_sanji_leader(game_state, player, card):
     """Once Per Turn: When you play a Character with no base effect, if 3 or less Characters, set 2 DON active."""
+    from ...game_engine import PendingChoice
+    import uuid as _uuid
+
     if hasattr(card, 'op02_026_used') and card.op02_026_used:
         return False
-    if len(player.cards_in_play) <= 3:
-        rested_don = player.don_pool.count("rested")
-        for don in rested_don[:2]:
-            don.is_resting = False
+    played_card = getattr(game_state, 'last_played_character', None)
+    if not played_card or getattr(played_card, 'effect', ''):
+        return False
+
+    char_count = sum(1 for c in player.cards_in_play if getattr(c, 'card_type', '') == 'CHARACTER')
+    if char_count > 3:
+        return False
+
+    rested_don = [i for i, d in enumerate(player.don_pool) if d == "rested"]
+    if not rested_don:
         card.op02_026_used = True
         return True
-    return False
+
+    options = [
+        {
+            "id": str(i),
+            "label": f"Rested DON!! #{idx + 1}",
+            "card_id": f"don_{idx}",
+            "card_name": "DON!!",
+        }
+        for i, idx in enumerate(rested_don)
+    ]
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"sanji_don_{_uuid.uuid4().hex[:8]}",
+        choice_type="select_cards",
+        prompt="Sanji: Set up to 2 of your DON!! cards as active (or skip)",
+        options=options,
+        min_selections=0,
+        max_selections=min(2, len(rested_don)),
+        source_card_id=card.id,
+        source_card_name=card.name,
+        callback_action="op02_026_set_don_active",
+        callback_data={
+            "player_id": player.player_id,
+            "player_index": 0 if player is game_state.player1 else 1,
+            "rested_indices": rested_don,
+            "leader_id": card.id,
+        }
+    )
+    card.op02_026_used = True
+    return True
 
 
 # --- OP02-049: Emporio.Ivankov (Leader) ---
@@ -279,6 +334,7 @@ def op02_013_ace(game_state, player, card):
     """On Play: Give -3000 power to up to 2 opponent Characters. Rush if Leader is Whitebeard Pirates."""
     if player.leader and 'Whitebeard Pirates' in (player.leader.card_origin or ''):
         card.has_rush = True
+        card._temporary_rush_until_turn = game_state.turn_count
     opponent = get_opponent(game_state, player)
     targets = [c for c in opponent.cards_in_play if c]
     if targets:
@@ -414,11 +470,38 @@ def op02_027_inuarashi(game_state, player, card):
 @register_effect("OP02-029", "end_of_turn", "[End of Your Turn] Set 1 DON as active")
 def op02_029_carrot(game_state, player, card):
     """End of Turn: Set up to 1 DON as active."""
-    for i, d in enumerate(player.don_pool):
-        if d == "rested":
-            player.don_pool[i] = "active"
-            game_state._log(f"Carrot: set 1 DON!! active")
-            break
+    from ...game_engine import PendingChoice
+    import uuid as _uuid
+
+    rested_don = [i for i, d in enumerate(player.don_pool) if d == "rested"]
+    if not rested_don:
+        return True
+
+    options = [
+        {
+            "id": str(i),
+            "label": f"Rested DON!! #{idx + 1}",
+            "card_id": f"don_{idx}",
+            "card_name": "DON!!",
+        }
+        for i, idx in enumerate(rested_don)
+    ]
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"carrot_don_{_uuid.uuid4().hex[:8]}",
+        choice_type="select_cards",
+        prompt="Carrot: Set up to 1 of your DON!! cards as active (or skip)",
+        options=options,
+        min_selections=0,
+        max_selections=1,
+        source_card_id=card.id,
+        source_card_name=card.name,
+        callback_action="op02_029_set_don_active",
+        callback_data={
+            "player_id": player.player_id,
+            "player_index": 0 if player is game_state.player1 else 1,
+            "rested_indices": rested_don,
+        }
+    )
     return True
 
 
@@ -453,7 +536,7 @@ def op02_030_oden_ko(game_state, player, card):
                if (getattr(c, 'card_type', '') == 'CHARACTER'
                    and 'Green' in (getattr(c, 'colors', None) or [])
                    and 'Land of Wano' in (c.card_origin or '')
-                   and (getattr(c, 'cost', 0) or 0) <= 3)]
+                   and (getattr(c, 'cost', 0) or 0) == 3)]
     if not targets:
         return True
     options = [{"id": str(i), "label": f"{c.name} (Cost: {c.cost or 0})",
@@ -484,7 +567,9 @@ def op02_030_oden_ko(game_state, player, card):
 def op02_031_toki(game_state, player, card):
     """If you have a Kouzuki Oden Character, gain Blocker."""
     has_oden = any(
-        getattr(c, 'name', '') in ('Kouzuki Oden', 'Kozuki Oden') or getattr(c, 'alt_name', '') == 'Kouzuki Oden'
+        getattr(c, 'name', '') in ('Kouzuki Oden', 'Kozuki Oden')
+        or getattr(c, 'alt_name', '') in ('Kouzuki Oden', 'Kozuki Oden')
+        or c.id_normal == 'OP02-042'
         for c in player.cards_in_play if c is not card
     )
     if has_oden:
@@ -581,6 +666,7 @@ def op02_035_law(game_state, player, card):
 
 # --- OP02-036: Nami ---
 @register_effect("OP02-036", "on_play", "[On Play] You may rest 1 DON: Look at 3, reveal FILM card (not Nami) to hand")
+@register_effect("OP02-036", "on_attack", "[When Attacking] You may rest 1 DON: Look at 3, reveal FILM card (not Nami) to hand")
 def op02_036_nami(game_state, player, card):
     """On Play: You may rest 1 DON to look at top 3 cards, reveal a FILM card (not Nami) to hand."""
     from ...game_engine import PendingChoice
@@ -809,33 +895,64 @@ def op02_059_hancock(game_state, player, card):
     from ...game_engine import PendingChoice
     import uuid as _uuid
     draw_cards(player, 1)
-    trash_from_hand(player, 1, game_state, card)
-    # If pending_choice was set by trash_from_hand, we can't chain another.
-    # If hand had exactly 1 card, it was auto-trashed. Now prompt for up to 3.
-    if not game_state.pending_choice and player.hand:
-        options = []
-        for i, hc in enumerate(player.hand):
-            options.append({
-                "id": str(i),
-                "label": f"{hc.name} (Cost: {hc.cost or 0})",
-                "card_id": hc.id,
-                "card_name": hc.name,
-            })
-        game_state.pending_choice = PendingChoice(
-            choice_id=f"hancock_trash_{_uuid.uuid4().hex[:8]}",
-            choice_type="select_cards",
-            prompt="You may trash up to 3 more cards from hand (select 0 to skip)",
-            options=options,
-            min_selections=0,
-            max_selections=min(3, len(player.hand)),
-            source_card_id=card.id,
-            source_card_name=card.name,
-            callback_action="op02_059_optional_trash",
-            callback_data={
-                "player_id": player.player_id,
-                "player_index": 0 if player is game_state.player1 else 1,
-            }
-        )
+    if not player.hand:
+        return True
+
+    if len(player.hand) == 1:
+        trashed = player.hand.pop()
+        player.trash.append(trashed)
+        game_state._log(f"{player.name} trashed {trashed.name}")
+        if player.hand:
+            options = []
+            for i, hc in enumerate(player.hand):
+                options.append({
+                    "id": str(i),
+                    "label": f"{hc.name} (Cost: {hc.cost or 0})",
+                    "card_id": hc.id,
+                    "card_name": hc.name,
+                })
+            game_state.pending_choice = PendingChoice(
+                choice_id=f"hancock_trash_{_uuid.uuid4().hex[:8]}",
+                choice_type="select_cards",
+                prompt="You may trash up to 3 more cards from hand (select 0 to skip)",
+                options=options,
+                min_selections=0,
+                max_selections=min(3, len(player.hand)),
+                source_card_id=card.id,
+                source_card_name=card.name,
+                callback_action="op02_059_optional_trash",
+                callback_data={
+                    "player_id": player.player_id,
+                    "player_index": 0 if player is game_state.player1 else 1,
+                }
+            )
+        return True
+
+    options = []
+    for i, hc in enumerate(player.hand):
+        options.append({
+            "id": str(i),
+            "label": f"{hc.name} (Cost: {hc.cost or 0})",
+            "card_id": hc.id,
+            "card_name": hc.name,
+        })
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"hancock_req_{_uuid.uuid4().hex[:8]}",
+        choice_type="select_cards",
+        prompt="Choose 1 card from hand to trash, then you may trash up to 3 more",
+        options=options,
+        min_selections=1,
+        max_selections=1,
+        source_card_id=card.id,
+        source_card_name=card.name,
+        callback_action="op02_059_required_then_optional",
+        callback_data={
+            "player_id": player.player_id,
+            "player_index": 0 if player is game_state.player1 else 1,
+            "source_card_id": card.id,
+            "source_card_name": card.name,
+        }
+    )
     return True
 
 
@@ -851,6 +968,7 @@ def op02_061_morley(game_state, player, card):
 
 # --- OP02-062: Monkey.D.Luffy ---
 @register_effect("OP02-062", "on_play", "[On Play] Trash 2: Return cost 4 or less, gain Double Attack")
+@register_effect("OP02-062", "on_attack", "[When Attacking] Trash 2: Return cost 4 or less, gain Double Attack")
 def op02_062_luffy(game_state, player, card):
     """On Play: Trash 2 cards to return cost 4 or less Character and gain Double Attack."""
     from ...game_engine import PendingChoice
@@ -1030,9 +1148,11 @@ def op02_073_sadi(game_state, player, card):
 @register_effect("OP02-074", "continuous", "Your Blugori gains Blocker")
 def op02_074_saldeath(game_state, player, card):
     """Your Blugori gains Blocker."""
+    card.has_blocker = False
     for c in player.cards_in_play:
         if getattr(c, 'name', '') == 'Blugori':
             c.has_blocker = True
+            c._continuous_blocker = True
     return True
 
 
@@ -1695,9 +1815,43 @@ def op02_070_new_kama_land(game_state, player, card):
     card.main_activated_this_turn = True
     # Draw 1, then trash 1 (required), then trash up to 3 more (optional)
     draw_cards(player, 1)
-    trash_from_hand(player, 1, game_state, card)
-    trash_from_hand(player, min(3, len(player.hand)))
-    game_state._log("New Kama Land: drew 1, trashed up to 4 cards")
+    from ...game_engine import PendingChoice
+    import uuid as _uuid
+    if not player.hand:
+        game_state._log("New Kama Land: drew 1 card")
+        return True
+
+    if len(player.hand) == 1:
+        trashed = player.hand.pop()
+        player.trash.append(trashed)
+        game_state._log(f"{player.name} trashed {trashed.name}")
+        return True
+
+    options = []
+    for i, hc in enumerate(player.hand):
+        options.append({
+            "id": str(i),
+            "label": f"{hc.name} (Cost: {hc.cost or 0})",
+            "card_id": hc.id,
+            "card_name": hc.name,
+        })
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"new_kama_{_uuid.uuid4().hex[:8]}",
+        choice_type="select_cards",
+        prompt="Choose 1 card from hand to trash, then you may trash up to 3 more",
+        options=options,
+        min_selections=1,
+        max_selections=1,
+        source_card_id=card.id,
+        source_card_name=card.name,
+        callback_action="op02_070_required_then_optional",
+        callback_data={
+            "player_id": player.player_id,
+            "player_index": 0 if player is game_state.player1 else 1,
+            "source_card_id": card.id,
+            "source_card_name": card.name,
+        }
+    )
     return True
 
 

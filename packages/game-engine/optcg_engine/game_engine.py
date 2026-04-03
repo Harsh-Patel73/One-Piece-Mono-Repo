@@ -285,6 +285,9 @@ class Player:
             self.leader.cannot_unrest = False
             print(f"{self.leader.name} cannot be set to Active this turn")
         self.leader.has_attacked = False
+        for attr in list(vars(self.leader).keys()):
+            if attr.endswith('_used'):
+                setattr(self.leader, attr, False)
 
         # Unrest all characters and return attached DON
         for c in self.cards_in_play:
@@ -300,6 +303,9 @@ class Player:
             attached = getattr(c, 'attached_don', 0)
             c.attached_don = 0
             c.don_condition_met = False
+            for attr in list(vars(c).keys()):
+                if attr.endswith('_used'):
+                    setattr(c, attr, False)
 
         # Return leader's attached DON
         leader_don = getattr(self.leader, 'attached_don', 0)
@@ -554,6 +560,10 @@ class GameState:
         # Clear "until end of turn" effects for both players
         self._clear_temporary_effects(self.current_player)
         self._clear_temporary_effects(self.opponent_player)
+        self.current_player.cannot_add_life = False
+        self.current_player.cannot_add_life_to_hand_this_turn = False
+        self.opponent_player.cannot_add_life = False
+        self.opponent_player.cannot_add_life_to_hand_this_turn = False
 
         # Hand limit removed - players can have unlimited cards in hand
 
@@ -599,7 +609,7 @@ class GameState:
                     card.cannot_be_ko_in_battle = False
                 # Reset conditional Rush (continuous effects re-set if conditions met)
                 if hasattr(card, 'has_rush') and not getattr(card, '_innate_rush', False):
-                    card.has_rush = False
+                    card.has_rush = getattr(card, '_temporary_rush_until_turn', -1) >= self.turn_count
                 # Reset conditional Blocker from continuous effects
                 if hasattr(card, '_continuous_blocker'):
                     card.has_blocker = False
@@ -657,6 +667,8 @@ class GameState:
                 card.can_attack_active = False
             if hasattr(card, 'has_taunt'):
                 card.has_taunt = False
+            if hasattr(card, '_temporary_rush_until_turn') and card._temporary_rush_until_turn < self.turn_count:
+                card.has_rush = False
         # Clear cost_modifier on hand cards (e.g. Crocodile -1 cost for blue events)
         for card in player.hand:
             if hasattr(card, 'cost_modifier'):
@@ -837,6 +849,8 @@ class GameState:
                 # CHARACTER and STAGE cards go to field
                 self.current_player.cards_in_play.append(card)
                 setattr(card, 'played_turn', self.turn_count)
+                if card.card_type == "CHARACTER":
+                    self.last_played_character = card
 
                 # Apply keyword effects (Rush, Blocker, etc.)
                 self._apply_keywords(card)
@@ -846,6 +860,9 @@ class GameState:
                 # Trigger On Play effects
                 if card.effect and '[On Play]' in card.effect:
                     self._trigger_on_play_effects(card)
+                from .effects.hardcoded import has_hardcoded_effect, execute_hardcoded_effect
+                if card.card_type == "CHARACTER" and self.current_player.leader and has_hardcoded_effect(self.current_player.leader.id, 'on_play_character'):
+                    execute_hardcoded_effect(self, self.current_player, self.current_player.leader, 'on_play_character')
         else:
             self._log(f"Cannot play {card.name}: needs {cost} DON, has {self.available_don()}.")
             return False
@@ -1975,6 +1992,7 @@ class GameState:
             src = next((c for c in player.cards_in_play if c.id == src_id), None)
             if src:
                 src.power_modifier = getattr(src, 'power_modifier', 0) + 792000
+                src._sticky_power_modifier = getattr(src, '_sticky_power_modifier', 0) + 792000
                 self._log(f"  {src.name} gained +792000 power")
 
         elif after == "op02_085_magellan_effect":
@@ -3015,7 +3033,7 @@ class GameState:
                             self._log(f"{c.name} was rested")
                             break
 
-            elif action == "add_to_hand_from_trash":
+            elif action == "add_to_hand_from_trash" or action == "add_from_trash_to_hand":
                 # Add selected card from trash to hand
                 target_idx = int(selected[0]) if selected else -1
                 target_cards = data.get("target_cards", [])
@@ -3872,10 +3890,11 @@ class GameState:
                         # Also grant Double Attack
                         for c in player.cards_in_play:
                             if c.id == source_id:
+                                c.has_doubleattack = True
                                 c.has_double_attack = True
                                 break
                         create_return_to_hand_choice(self, player, targets,
-                                                      prompt="Choose opponent's cost 4 or less to return to hand")
+                                                     prompt="Choose opponent's cost 4 or less to return to hand")
 
             elif action == "op02_065_optional_trash_set_active":
                 # OP02-065: Player optionally trashes 1 card to set Mr.3 active
@@ -3955,6 +3974,39 @@ class GameState:
                         player.trash.append(card)
                         self._log(f"{player.name} trashed {card.name}")
 
+            elif action == "op02_059_required_then_optional":
+                # OP02-059: Trash 1 required, then optionally trash up to 3 more
+                indices = sorted([int(s) for s in selected], reverse=True) if selected else []
+                for idx in indices:
+                    if 0 <= idx < len(player.hand):
+                        card = player.hand.pop(idx)
+                        player.trash.append(card)
+                        self._log(f"{player.name} trashed {card.name}")
+                if player.hand:
+                    options = []
+                    for i, hc in enumerate(player.hand):
+                        options.append({
+                            "id": str(i),
+                            "label": f"{hc.name} (Cost: {hc.cost or 0})",
+                            "card_id": hc.id,
+                            "card_name": hc.name,
+                        })
+                    self.pending_choice = PendingChoice(
+                        choice_id=f"hancock_trash_{uuid.uuid4().hex[:8]}",
+                        choice_type="select_cards",
+                        prompt="You may trash up to 3 more cards from hand (select 0 to skip)",
+                        options=options,
+                        min_selections=0,
+                        max_selections=min(3, len(player.hand)),
+                        source_card_id=data.get("source_card_id"),
+                        source_card_name=data.get("source_card_name"),
+                        callback_action="op02_059_optional_trash",
+                        callback_data={
+                            "player_id": player.player_id,
+                            "player_index": 0 if player is self.player1 else 1,
+                        }
+                    )
+
             elif action == "op02_032_pay_don_set_active":
                 # OP02-032: Player selected a Minks target; rest 2 DON and set it active
                 target_cards = data.get("target_cards", [])
@@ -3976,6 +4028,29 @@ class GameState:
                                 c.is_resting = False
                                 self._log(f"Shishilian: set {c.name} active")
                                 break
+
+            elif action == "op02_026_set_don_active":
+                # OP02-026: Set up to 2 rested DON active
+                rested_indices = data.get("rested_indices", [])
+                chosen_positions = sorted({int(s) for s in selected}, reverse=True) if selected else []
+                for pos in chosen_positions:
+                    if 0 <= pos < len(rested_indices):
+                        pool_idx = rested_indices[pos]
+                        if 0 <= pool_idx < len(player.don_pool) and player.don_pool[pool_idx] == "rested":
+                            player.don_pool[pool_idx] = "active"
+                if chosen_positions:
+                    self._log(f"Sanji: set {len(chosen_positions)} DON!! card(s) as active")
+
+            elif action == "op02_029_set_don_active":
+                # OP02-029: Set up to 1 rested DON active
+                rested_indices = data.get("rested_indices", [])
+                if selected:
+                    pos = int(selected[0])
+                    if 0 <= pos < len(rested_indices):
+                        pool_idx = rested_indices[pos]
+                        if 0 <= pool_idx < len(player.don_pool) and player.don_pool[pool_idx] == "rested":
+                            player.don_pool[pool_idx] = "active"
+                            self._log("Carrot: set 1 DON!! active")
 
             elif action == "op02_048_trash_wano":
                 # OP02-048: Player selected a Land of Wano card to trash; rest stage, set 1 DON active
@@ -4003,6 +4078,41 @@ class GameState:
                                 player.don_pool[i] = "active"
                                 self._log("Land of Wano Stage: set 1 DON active")
                                 break
+
+            elif action == "op02_070_required_then_optional":
+                # OP02-070: Trash 1 required, then optionally trash up to 3 more
+                indices = sorted([int(s) for s in selected], reverse=True) if selected else []
+                for idx in indices:
+                    if 0 <= idx < len(player.hand):
+                        card = player.hand.pop(idx)
+                        player.trash.append(card)
+                        self._log(f"{player.name} trashed {card.name}")
+                if player.hand:
+                    options = []
+                    for i, hc in enumerate(player.hand):
+                        options.append({
+                            "id": str(i),
+                            "label": f"{hc.name} (Cost: {hc.cost or 0})",
+                            "card_id": hc.id,
+                            "card_name": hc.name,
+                        })
+                    self.pending_choice = PendingChoice(
+                        choice_id=f"new_kama_opt_{uuid.uuid4().hex[:8]}",
+                        choice_type="select_cards",
+                        prompt="You may trash up to 3 more cards from hand (select 0 to skip)",
+                        options=options,
+                        min_selections=0,
+                        max_selections=min(3, len(player.hand)),
+                        source_card_id=data.get("source_card_id"),
+                        source_card_name=data.get("source_card_name"),
+                        callback_action="op02_059_optional_trash",
+                        callback_data={
+                            "player_id": player.player_id,
+                            "player_index": 0 if player is self.player1 else 1,
+                        }
+                    )
+                else:
+                    self._log("New Kama Land: finished draw 1, trash 1")
 
             elif action == "nami_don_search":
                 # OP02-036 Nami: player chose yes/no to rest 1 DON and search top 3 for FILM card
