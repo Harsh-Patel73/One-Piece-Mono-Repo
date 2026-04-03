@@ -168,10 +168,10 @@
 | OP02-020 | ✅ Verified | CHARACTER |  |
 | OP02-021 | ✅ Verified | EVENT | Make the leader edward newgate |
 | OP02-022 | ✅ Verified | EVENT | on_play: look 5, reveal WB char; trigger |
-| OP02-023 | ⚠ Needs Fix | EVENT | Currently, this card is taking a life and adding it to hand. It should simply prevent the user from taking cards from life to hand by EFFECTS on their turn. So Newgate's leader effect would not let him take the life since you can no longer take life by effects when you have 3 life or less.  |
+| OP02-023 | ✅ Verified | EVENT | Currently, this card is taking a life and adding it to hand. It should simply prevent the user from taking cards from life to hand by EFFECTS on their turn. So Newgate's leader effect would not let him take the life since you can no longer take life by effects when you have 3 life or less. |
 | OP02-024 | ✅ Verified | STAGE | This stage should give "Edward Newgate" and ALL Whitebeard Pirates type cards +2000 power if they have 1 life or less. |
-| OP02-025 | ⚠ Needs Fix | LEADER | Game Log is saying "Error: Cannot activate effect", so I am unable to use the effect. This should not be the case, since I already have 1 or less characters on the field. The issue might be that the code is checking the hand for characters? |
-| OP02-026 | ⚠ Needs Fix | LEADER | When I play a character with no base effect from hand it does not let me set up to 2 DON!! cards as active.  |
+| OP02-025 | ⚠ Needs Fix | LEADER | Still getting "Error: Cannot activate effect" error.  |
+| OP02-026 | ⚠ Needs Fix | LEADER | When a character with no base effect so no on play, no activate main, no when attacking, there should be NO description on the card.  When that card is played, I should be prompted to set UP TO 2 DON!! cards as active.  |
 | OP02-027 | 🔲 To Do | CHARACTER | continuous: if all DON rested, immune to opp removal |
 | OP02-028 | ✅ Verified | CHARACTER |  |
 | OP02-029 | ✅ Verified | CHARACTER | Carrot is automatically setting 1 DON as active, I should be prompted since it says up to 1, if I want to set 0 DON! as active or 1. |
@@ -207,7 +207,7 @@
 | OP02-059 | ✅ Verified | CHARACTER | It should prompt me if I want to trash up to 3 cards from hand after I do the draw 1 trash 1 effect. |
 | OP02-060 | ✅ Verified | CHARACTER |  |
 | OP02-061 | ✅ Verified | CHARACTER | Blockers with a cost of 5 or less should not be able to block when this card and ONLY this card attacks and the player has less than 1 card in hand. Currently they can still block with characters cost 5 or less. |
-| OP02-062 | ⚠ Needs Fix | CHARACTER | I should also have the option to NOT trash 2 cards and not use his effect. Right now it makes me select 2 cards to trash there is no skip option.  |
+| OP02-062 | ✅ Verified | CHARACTER | I should also have the option to NOT trash 2 cards and not use his effect. Right now it makes me select 2 cards to trash there is no skip option. |
 | OP02-063 | ✅ Verified | CHARACTER | The effect is not working, it does correctly show me the blue 1 cost events in the trash, but when I go to add one to hand it is not being added to the hand |
 | OP02-064 | ✅ Verified | CHARACTER | It does do what the effect says, but it should prompt me to choose a card to trash from hand. Also, this card should get sent to the bottom of the deck at the end of the battle. |
 | OP02-065 | ✅ Verified | CHARACTER | When I end turn it should prompt and ask me if I want to trash a card from hand and set this character back as active. |
@@ -216,11 +216,11 @@
 | OP02-068 | ✅ Verified | EVENT | It should prompt me to select a card to trash to use the effect of this card. |
 | OP02-069 | ✅ Verified | EVENT | counter: +6000 to leader; draw to 2 |
 | OP02-070 | ✅ Verified | STAGE | After I do the draw 1 and trash 1. It should prompt me to trash up to 3 cards from hand, so I can choose to trash 0, 1, 2, or 3 cards. |
-| OP02-071 | 🔲 To Do | LEADER | on_don_return: +1000 power this turn |
+| OP02-071 | ⚠ Needs Fix | LEADER | On the players turn, ONCE per turn if a DON card is returned to the DON!! deck, the Magellan leader should gain +1000 power for the turn. Currently nothing is happening when a don is returned.  |
 | OP02-072 | ✅ Verified | LEADER | on_attack: DON -4 → KO opp ≤3 cost + leader +1000 |
 | OP02-073 | ✅ Verified | CHARACTER | on_play: play Jailer Beast from hand |
 | OP02-074 | ✅ Verified | CHARACTER | This card should not have blocker. It only gives "Blugori" Blocker when it is also on the field with him. |
-| OP02-075 | ⚠ Needs Fix | CHARACTER | This card needs to be placed in life, so we can deal damage and test the trigger out.  |
+| OP02-075 | ⚠ Needs Fix | CHARACTER | This card should be in life so we can test.  |
 | OP02-076 | ✅ Verified | CHARACTER | on_play: DON -1 → KO opp cost 1 or less |
 | OP02-077 | ✅ Verified | CHARACTER |  |
 | OP02-078 | ✅ Verified | CHARACTER | on_play: DON -2 → play SMILE cost 3 or less from hand |
@@ -230,40 +230,40 @@
 | OP02-082 | ✅ Verified | CHARACTER | This card should increase the power by 792000, only if the player returns 8 DON!! to their don deck. |
 | OP02-083 | ✅ Verified | CHARACTER | on_play: look 5, reveal purple Impel Down card |
 | OP02-084 | ✅ Verified | CHARACTER |  |
-| OP02-085 | ⚠ Needs Fix | CHARACTER | Right now if I use KO to KO Magellan on my turn it still makes the opponent return 2 DON!! to their DON deck, this should only be activated on the OPPONENTS TURN.  |
-| OP02-086 | ⚠ Needs Fix | CHARACTER | This card says "Add UP TO 1 DON!! card" so I should be prompted to add 0 or 1 DON!! cards from the don deck rested.  |
-| OP02-087 | ⚠ Needs Fix | CHARACTER | This card says \"Add UP TO 1 DON!! card\" so I should be prompted to add 0 or 1 DON!! cards from the don deck rested. |
+| OP02-085 | ✅ Verified | CHARACTER | Right now if I use KO to KO Magellan on my turn it still makes the opponent return 2 DON!! to their DON deck, this should only be activated on the OPPONENTS TURN. |
+| OP02-086 | ✅ Verified | CHARACTER | This card says "Add UP TO 1 DON!! card" so I should be prompted to add 0 or 1 DON!! cards from the don deck rested. |
+| OP02-087 | ✅ Verified | CHARACTER | This card says \"Add UP TO 1 DON!! card\" so I should be prompted to add 0 or 1 DON!! cards from the don deck rested. |
 | OP02-088 | ✅ Verified | CHARACTER |  |
-| OP02-089 | ⚠ Needs Fix | EVENT | This card SHOULD give -3000 power to either a leader and character or two characters, right now when I select 2 cards it only gives one of them -4000 power.  Also, since it says up to I should be given the option to give 0, 1 or 2 targets the -3000. If I choose only one they still only get -3000, it does not stack.  |
-| OP02-090 | ⚠ Needs Fix | EVENT | This card currently returns an opponents card to their hand, it should not do that. It should allow me to give 1 of my opponent's characters -3000 power for the remainder of the turn.  |
+| OP02-089 | ✅ Verified | EVENT | This card SHOULD give -3000 power to either a leader and character or two characters, right now when I select 2 cards it only gives one of them -4000 power.  Also, since it says up to I should be given the option to give 0, 1 or 2 targets the -3000. If I choose only one they still only get -3000, it does not stack. |
+| OP02-090 | ✅ Verified | EVENT | This card currently returns an opponents card to their hand, it should not do that. It should allow me to give 1 of my opponent's characters -3000 power for the remainder of the turn. |
 | OP02-091 | ✅ Verified | EVENT | on_play: add 1 DON from deck, set active |
 | OP02-092 | ✅ Verified | STAGE | activate: trash 1 + rest stage → look 3, reveal Impel Down card |
-| OP02-093 | ⚠ Needs Fix | LEADER | I do not think the leader effect is checking to see if the opponent has a 0 cost character AFTER the -1 cost is given. So for example, let's say the opponent has a 1 cost character, if I add a don to Smoker and use his leader effect then give that 1 cost -1 cost. It is now a 0 cost character so I should gain +1000 power for the turn. I should also have the option NOT to give -1 cost to an opponents character since it says up to. Then the check should still take place to see if there is a Character with a cost of 0.  |
-| OP02-094 | ⚠ Needs Fix | CHARACTER | When this character battles and KOs an opponents character if it has a DON on it, then it should automatically be set back as active.  |
-| OP02-095 | ⚠ Needs Fix | CHARACTER | To test this effect the leader needs to be Smoker.  |
+| OP02-093 | ✅ Verified | LEADER | I do not think the leader effect is checking to see if the opponent has a 0 cost character AFTER the -1 cost is given. So for example, let's say the opponent has a 1 cost character, if I add a don to Smoker and use his leader effect then give that 1 cost -1 cost. It is now a 0 cost character so I should gain +1000 power for the turn. I should also have the option NOT to give -1 cost to an opponents character since it says up to. Then the check should still take place to see if there is a Character with a cost of 0. |
+| OP02-094 | ✅ Verified | CHARACTER | When this character battles and KOs an opponents character if it has a DON on it, then it should automatically be set back as active. |
+| OP02-095 | ⚠ Needs Fix | CHARACTER | This card should ONLY have banish if there is a character with 0 cost. He has banish even without that condition being met.  |
 | OP02-096 | ✅ Verified | CHARACTER | on_play: draw 1; on_attack: opp char -4 cost |
 | OP02-097 | ✅ Verified | CHARACTER |  |
-| OP02-098 | ⚠ Needs Fix | CHARACTER | I should only be able to use Koby's effect to KO a opponent's character if I trash 1 card from hand. I should also be prompted if I want to use that effect. If I choose not to trash the card from hand then I do not get to KO an opponents 3 cost character or less.  |
-| OP02-099 | ⚠ Needs Fix | CHARACTER | Same as the Koby card before, I need to pay the cost of trashing 1 card from hand to get access to the KO up to 1 opponents character with cost of 5 or less.  |
+| OP02-098 | ✅ Verified | CHARACTER | I should only be able to use Koby's effect to KO a opponent's character if I trash 1 card from hand. I should also be prompted if I want to use that effect. If I choose not to trash the card from hand then I do not get to KO an opponents 3 cost character or less. |
+| OP02-099 | ✅ Verified | CHARACTER | Same as the Koby card before, I need to pay the cost of trashing 1 card from hand to get access to the KO up to 1 opponents character with cost of 5 or less. |
 | OP02-100 | ✅ Verified | CHARACTER | continuous: if Fullbody in play, can't be KO in battle |
-| OP02-101 | ⚠ Needs Fix | CHARACTER | Smoker needs to be the leader to test this card.  |
-| OP02-102 | ⚠ Needs Fix | CHARACTER | Smoker needs to be the leader to test this card.  |
+| OP02-101 | ⚠ Needs Fix | CHARACTER | Even though there is a character with a cost of 0, the opponent can still activate blockers with a cost of 5 or less during the battle - this should not be the case.  |
+| OP02-102 | ✅ Verified | CHARACTER | Smoker needs to be the leader to test this card. |
 | OP02-103 | ✅ Verified | CHARACTER | on_attack: DON x1; opp char -2 cost |
-| OP02-104 | ⚠ Needs Fix | CHARACTER | The trigger for this card is "Play this card" but when I use the trigger the card is sent to the trash.  |
+| OP02-104 | ✅ Verified | CHARACTER | The trigger for this card is "Play this card" but when I use the trigger the card is sent to the trash. |
 | OP02-105 | ✅ Verified | CHARACTER | on_attack: DON x1; opp char -3 cost |
 | OP02-106 | ✅ Verified | CHARACTER | on_play: opp char -2 cost |
 | OP02-107 | ✅ Verified | CHARACTER |  |
 | OP02-108 | ✅ Verified | CHARACTER | blocker |
 | OP02-109 | ✅ Verified | CHARACTER |  |
-| OP02-110 | ⚠ Needs Fix | CHARACTER | Even though I chose a character to not let them be able to attack per Hina's effect it still allows them to attack.  |
+| OP02-110 | ✅ Verified | CHARACTER | Even though I chose a character to not let them be able to attack per Hina's effect it still allows them to attack. |
 | OP02-111 | ✅ Verified | CHARACTER | on_attack: if Jango in play, +3000 power |
-| OP02-112 | ⚠ Needs Fix | CHARACTER | When I activate this character's effect it lets me give an opponents character -1 cost but it does not let me choose a leader or character to give +1000 power to.  |
-| OP02-113 | ⚠ Needs Fix | CHARACTER | This card should gain 2000 power when there is a character with a cost of 0. I gave -1 cost to a 1 cost character and it did not elt him gain the +2000 power.  |
+| OP02-112 | ✅ Verified | CHARACTER | When I activate this character's effect it lets me give an opponents character -1 cost but it does not let me choose a leader or character to give +1000 power to. |
+| OP02-113 | ⚠ Needs Fix | CHARACTER | This card is not gaining +2000 power when there is a character with a cost of 0. |
 | OP02-114 | ⚠ Needs Fix | CHARACTER | This card should only gain +1000 power on the opponents turn, he is currently getting it on my turn too.  |
-| OP02-115 | 🔲 To Do | CHARACTER | on_attack: DON x2; KO opp cost 0 char |
+| OP02-115 | ✅ Verified | CHARACTER | on_attack: DON x2; KO opp cost 0 char |
 | OP02-116 | ✅ Verified | CHARACTER |  |
 | OP02-117 | ✅ Verified | EVENT | on_play: opp char -5 cost |
-| OP02-118 | ⚠ Needs Fix | EVENT | I am using the effect on a card that is being targeted by an attack, the attack is big enough to kill and it is killing the character EVEN though the counter card says that the selected character cannot be KOd during THIS battle.  |
+| OP02-118 | ✅ Verified | EVENT | I am using the effect on a card that is being targeted by an attack, the attack is big enough to kill and it is killing the character EVEN though the counter card says that the selected character cannot be KOd during THIS battle. |
 | OP02-119 | ✅ Verified | EVENT | on_play: KO opp char cost 1 or less |
-| OP02-120 | ⚠ Needs Fix | CHARACTER | They lose the +1000 power when I end my turn, they should keep that buff until my NEXT turn begins.  |
-| OP02-121 | ⚠ Needs Fix | CHARACTER | When I play this card, it should give the -5 cost to all characters on the opponents field. Then the On Play should activate, if any of the opponents cards are at 0 cost, then I should be prompted to select one to KO.  |
+| OP02-120 | ✅ Verified | CHARACTER | They lose the +1000 power when I end my turn, they should keep that buff until my NEXT turn begins. |
+| OP02-121 | ⚠ Needs Fix | CHARACTER | There is still no prompt to KO a 0 cost, after he gives all the opponents characters -5 cost.  |

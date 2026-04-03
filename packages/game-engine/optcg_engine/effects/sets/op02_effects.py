@@ -3,6 +3,7 @@ Hardcoded effects for OP02 cards.
 """
 
 import random
+import re
 
 from ..hardcoded import (
     add_don_from_deck, create_add_from_trash_choice, create_bottom_deck_choice, create_cost_reduction_choice,
@@ -14,18 +15,31 @@ from ..hardcoded import (
 )
 
 
+def _has_base_effect_text(card) -> bool:
+    """Return True if the card has actual effect text beyond passive keywords/reminders."""
+    text = (getattr(card, 'effect', '') or '').replace('<br>', '\n').strip()
+    if not text:
+        return False
+    timing_or_effect_markers = (
+        '[On Play]', '[When Attacking]', '[Activate: Main]', '[On Block]', '[On K.O.]',
+        '[Your Turn]', "[Opponent's Turn]", '[End of Your Turn]', '[Start of Your Turn]',
+        '[DON!!', '[Once Per Turn]', '[Counter]', '[Trigger]'
+    )
+    if any(marker in text for marker in timing_or_effect_markers):
+        return True
+    simplified = re.sub(r'\[[^\]]+\]', '', text)
+    simplified = re.sub(r'\([^)]*\)', '', simplified)
+    return bool(simplified.strip())
+
+
 # --- OP02-023: You May Be a Fool...but I Still Love You ---
 @register_effect("OP02-023", "on_play", "[Main] If Whitebeard Pirates Leader and 3 or less Life, add 1 Life to hand; opponent can't add Life this turn")
 def you_may_be_a_fool_effect(game_state, player, card):
     """Main Event: If Leader is Whitebeard Pirates and you have 3 or fewer Life cards,
     add 1 Life to hand. Then, opponent cannot add Life cards to their hand this turn."""
     if player.leader and 'Whitebeard Pirates' in (player.leader.card_origin or ''):
-        if len(player.life_cards) <= 3 and player.life_cards:
-            life_card = player.life_cards.pop()
-            player.hand.append(life_card)
-            game_state._log(f"{player.name} adds 1 Life to hand via You May Be a Fool")
-        opponent = get_opponent(game_state, player)
-        opponent.cannot_add_life_to_hand_this_turn = True
+        player.cannot_add_life_to_hand_this_turn = True
+        game_state._log(f"{player.name} cannot take Life cards to hand by effects this turn")
         return True
     return True
 
@@ -87,6 +101,7 @@ def op02_025_kinemon_leader(game_state, player, card):
     if char_count <= 1:
         player.next_wano_discount = True
         card.op02_025_used = True
+        card.main_activated_this_turn = True
         return True
     return False
 
@@ -101,7 +116,7 @@ def op02_026_sanji_leader(game_state, player, card):
     if hasattr(card, 'op02_026_used') and card.op02_026_used:
         return False
     played_card = getattr(game_state, 'last_played_character', None)
-    if not played_card or getattr(played_card, 'effect', ''):
+    if not played_card or _has_base_effect_text(played_card):
         return False
 
     char_count = sum(1 for c in player.cards_in_play if getattr(c, 'card_type', '') == 'CHARACTER')
@@ -157,9 +172,10 @@ def op02_049_ivankov_leader(game_state, player, card):
 @register_effect("OP02-071", "on_don_return", "[Your Turn] When DON returned to deck, +1000 power")
 def op02_071_magellan_leader(game_state, player, card):
     """Your Turn, Once Per Turn: When a DON is returned to DON deck, this Leader gains +1000 power."""
-    if hasattr(card, 'op02_071_used') and card.op02_071_used:
+    if game_state.current_player is not player or getattr(card, 'op02_071_used', False):
         return False
     card.power_modifier = getattr(card, 'power_modifier', 0) + 1000
+    card._sticky_power_modifier = getattr(card, '_sticky_power_modifier', 0) + 1000
     card.op02_071_used = True
     return True
 
@@ -186,12 +202,24 @@ def op02_093_smoker_leader(game_state, player, card):
         opponent = get_opponent(game_state, player)
         if opponent.cards_in_play:
             card.op02_093_used = True
-            return create_cost_reduction_choice(
-                game_state, player, opponent.cards_in_play, -1,
+            return create_target_choice(
+                game_state, player, opponent.cards_in_play,
+                prompt="Choose up to 1 opponent Character to give -1 cost",
                 source_card=card,
-                prompt="Choose opponent's Character to give -1 cost"
+                min_selections=0,
+                max_selections=1,
+                callback_action="op02_093_cost_then_power",
+                callback_data={
+                    "player_id": player.player_id,
+                    "target_cards": [{"id": c.id, "name": c.name} for c in opponent.cards_in_play],
+                    "source_card_id": card.id,
+                },
             )
         card.op02_093_used = True
+        if any((getattr(c, 'cost', 0) or 0) + getattr(c, 'cost_modifier', 0) == 0
+               for c in player.cards_in_play + opponent.cards_in_play):
+            card.power_modifier = getattr(card, 'power_modifier', 0) + 1000
+            card._sticky_power_modifier = getattr(card, '_sticky_power_modifier', 0) + 1000
         return True
     return False
 
@@ -523,6 +551,7 @@ def op02_030_oden_activate(game_state, player, card):
         card.is_resting = False
         card.has_attacked = False  # Can attack again after being set active
         card.op02_030_used = True
+        card.main_activated_this_turn = True
         return True
     return False
 
@@ -974,24 +1003,19 @@ def op02_062_luffy(game_state, player, card):
     from ...game_engine import PendingChoice
     import uuid as _uuid
     if len(player.hand) >= 2:
-        options = []
-        for i, hc in enumerate(player.hand):
-            options.append({
-                "id": str(i),
-                "label": f"{hc.name} (Cost: {hc.cost or 0})",
-                "card_id": hc.id,
-                "card_name": hc.name,
-            })
         game_state.pending_choice = PendingChoice(
-            choice_id=f"luffy_trash_{_uuid.uuid4().hex[:8]}",
-            choice_type="select_cards",
-            prompt="Choose 2 cards from hand to trash (for Double Attack + return effect)",
-            options=options,
-            min_selections=2,
-            max_selections=2,
+            choice_id=f"luffy_yesno_{_uuid.uuid4().hex[:8]}",
+            choice_type="select_mode",
+            prompt="Monkey.D.Luffy: Trash 2 cards from hand to use this effect?",
+            options=[
+                {"id": "yes", "label": "Yes"},
+                {"id": "no", "label": "No"},
+            ],
+            min_selections=1,
+            max_selections=1,
             source_card_id=card.id,
             source_card_name=card.name,
-            callback_action="op02_062_trash_then_return",
+            callback_action="op02_062_choose_trash",
             callback_data={
                 "player_id": player.player_id,
                 "player_index": 0 if player is game_state.player1 else 1,
@@ -999,7 +1023,6 @@ def op02_062_luffy(game_state, player, card):
                 "source_card_name": card.name,
             }
         )
-        return True
     return True
 
 
@@ -1241,6 +1264,8 @@ def op02_085_magellan_play(game_state, player, card):
 @register_effect("OP02-085", "on_ko", "[Opponent's Turn] [On K.O.] Opponent returns 2 DON")
 def op02_085_magellan_ko(game_state, player, card):
     """On K.O. during opponent's turn: Opponent returns 2 DON."""
+    if game_state.current_player is player:
+        return True
     opponent = get_opponent(game_state, player)
     for _ in range(min(2, len(opponent.don_pool))):
         if opponent.don_pool:
@@ -1260,7 +1285,23 @@ def op02_086_minokoala_blocker(game_state, player, card):
 def op02_086_minokoala_ko(game_state, player, card):
     """On K.O.: If Leader is Impel Down, add 1 DON from DON deck rested."""
     if player.leader and 'Impel Down' in (player.leader.card_origin or ''):
-        add_don_from_deck(player, 1)
+        from ...game_engine import PendingChoice
+        import uuid as _uuid
+        game_state.pending_choice = PendingChoice(
+            choice_id=f"minokoala_don_{_uuid.uuid4().hex[:8]}",
+            choice_type="select_mode",
+            prompt="Minokoala: Add up to 1 DON!! card from your DON!! deck as rested?",
+            options=[
+                {"id": "yes", "label": "Add 1 DON!!"},
+                {"id": "no", "label": "Add 0 DON!!"},
+            ],
+            min_selections=1,
+            max_selections=1,
+            source_card_id=card.id,
+            source_card_name=card.name,
+            callback_action="op02_086_optional_add_don",
+            callback_data={"player_id": player.player_id},
+        )
     return True
 
 
@@ -1268,6 +1309,7 @@ def op02_086_minokoala_ko(game_state, player, card):
 @register_effect("OP02-087", "continuous", "[Double Attack]")
 def op02_087_minotaur_da(game_state, player, card):
     """Double Attack."""
+    card.has_doubleattack = True
     card.has_double_attack = True
     return True
 
@@ -1276,7 +1318,23 @@ def op02_087_minotaur_da(game_state, player, card):
 def op02_087_minotaur_ko(game_state, player, card):
     """On K.O.: If Leader is Impel Down, add 1 DON from DON deck rested."""
     if player.leader and 'Impel Down' in (player.leader.card_origin or ''):
-        add_don_from_deck(player, 1)
+        from ...game_engine import PendingChoice
+        import uuid as _uuid
+        game_state.pending_choice = PendingChoice(
+            choice_id=f"minotaur_don_{_uuid.uuid4().hex[:8]}",
+            choice_type="select_mode",
+            prompt="Minotaur: Add up to 1 DON!! card from your DON!! deck as rested?",
+            options=[
+                {"id": "yes", "label": "Add 1 DON!!"},
+                {"id": "no", "label": "Add 0 DON!!"},
+            ],
+            min_selections=1,
+            max_selections=1,
+            source_card_id=card.id,
+            source_card_name=card.name,
+            callback_action="op02_087_optional_add_don",
+            callback_data={"player_id": player.player_id},
+        )
     return True
 
 
@@ -1296,7 +1354,7 @@ def op02_095_onigumo(game_state, player, card):
     """If there's a cost 0 Character, gain Banish."""
     opponent = get_opponent(game_state, player)
     all_chars = player.cards_in_play + opponent.cards_in_play
-    if any((getattr(c, 'cost', 0) or 0) + getattr(c, 'cost_modifier', 0) == 0 for c in all_chars):
+    if any((getattr(c, 'cost', 0) or 0) + getattr(c, 'cost_modifier', 0) <= 0 for c in all_chars):
         card.has_banish = True
     return True
 
@@ -1323,13 +1381,24 @@ def op02_096_kuzan_attack(game_state, player, card):
 @register_effect("OP02-098", "on_play", "[On Play] Trash 1: K.O. opponent's cost 3 or less")
 def op02_098_koby(game_state, player, card):
     """On Play: Trash 1 card to K.O. opponent's cost 3 or less Character."""
+    from ...game_engine import PendingChoice
+    import uuid as _uuid
     if player.hand:
-        trash_from_hand(player, 1, game_state, card)
-        opponent = get_opponent(game_state, player)
-        targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 3]
-        if targets:
-            return create_ko_choice(game_state, player, targets, source_card=card,
-                                   prompt="Choose opponent's cost 3 or less to KO")
+        game_state.pending_choice = PendingChoice(
+            choice_id=f"koby_yesno_{_uuid.uuid4().hex[:8]}",
+            choice_type="select_mode",
+            prompt="Koby: Trash 1 card from hand to K.O. up to 1 opponent's cost 3 or less Character?",
+            options=[
+                {"id": "yes", "label": "Yes"},
+                {"id": "no", "label": "No"},
+            ],
+            min_selections=1,
+            max_selections=1,
+            source_card_id=card.id,
+            source_card_name=card.name,
+            callback_action="op02_098_optional_trash_then_ko",
+            callback_data={"player_id": player.player_id, "source_card_id": card.id},
+        )
     return True
 
 
@@ -1337,13 +1406,24 @@ def op02_098_koby(game_state, player, card):
 @register_effect("OP02-099", "on_play", "[On Play] Trash 1: K.O. opponent's cost 5 or less")
 def op02_099_sakazuki(game_state, player, card):
     """On Play: Trash 1 card to K.O. opponent's cost 5 or less Character."""
+    from ...game_engine import PendingChoice
+    import uuid as _uuid
     if player.hand:
-        trash_from_hand(player, 1, game_state, card)
-        opponent = get_opponent(game_state, player)
-        targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 5]
-        if targets:
-            return create_ko_choice(game_state, player, targets, source_card=card,
-                                   prompt="Choose opponent's cost 5 or less to KO")
+        game_state.pending_choice = PendingChoice(
+            choice_id=f"sakazuki_yesno_{_uuid.uuid4().hex[:8]}",
+            choice_type="select_mode",
+            prompt="Sakazuki: Trash 1 card from hand to K.O. up to 1 opponent's cost 5 or less Character?",
+            options=[
+                {"id": "yes", "label": "Yes"},
+                {"id": "no", "label": "No"},
+            ],
+            min_selections=1,
+            max_selections=1,
+            source_card_id=card.id,
+            source_card_name=card.name,
+            callback_action="op02_099_optional_trash_then_ko",
+            callback_data={"player_id": player.player_id, "source_card_id": card.id},
+        )
     return True
 
 
@@ -1362,10 +1442,8 @@ def op02_101_strawberry(game_state, player, card):
     """When Attacking: If cost 0 Character exists, opponent can't use Blocker cost 5 or less."""
     opponent = get_opponent(game_state, player)
     all_chars = player.cards_in_play + opponent.cards_in_play
-    if any((getattr(c, 'cost', 0) or 0) + getattr(c, 'cost_modifier', 0) == 0 for c in all_chars):
-        for c in opponent.cards_in_play:
-            if (getattr(c, 'cost', 0) or 0) <= 5:
-                c.blocker_disabled = True
+    if any((getattr(c, 'cost', 0) or 0) + getattr(c, 'cost_modifier', 0) <= 0 for c in all_chars):
+        game_state.blocker_cost_limit = 5
     return True
 
 
@@ -1398,6 +1476,16 @@ def op02_103_sengoku(game_state, player, card):
                                                prompt="Choose opponent's Character to give -2 cost")
         return True
     return False
+
+
+# --- OP02-104: Tashigi ---
+@register_effect("OP02-104", "trigger", "[Trigger] Play this card")
+def op02_104_tashigi_trigger(game_state, player, card):
+    """Trigger: Play this card."""
+    if card not in player.cards_in_play:
+        player.cards_in_play.append(card)
+    card.played_turn = getattr(game_state, 'turn_count', 0)
+    return True
 
 
 # --- OP02-105: Tashigi ---
@@ -1472,12 +1560,17 @@ def op02_112_bellmere(game_state, player, card):
         card.is_resting = True
         opponent = get_opponent(game_state, player)
         if opponent.cards_in_play:
-            return create_dual_target_choice(
-                game_state, player,
-                targets1=opponent.cards_in_play, callback1="cost_reduction_minus1",
-                targets2=player.cards_in_play, callback2="power_plus1000",
+            buff_targets = ([player.leader] if player.leader else []) + player.cards_in_play
+            return create_target_choice(
+                game_state, player, opponent.cards_in_play,
+                prompt="Choose opponent's Character to give -1 cost",
                 source_card=card,
-                prompt="Choose opponent's Character for -1 cost, then your Character for +1000"
+                callback_action="op02_112_cost_then_power",
+                callback_data={
+                    "player_id": player.player_id,
+                    "target_cards": [{"id": c.id, "name": c.name} for c in opponent.cards_in_play],
+                    "buff_targets": [{"id": c.id, "name": c.name} for c in buff_targets],
+                }
             )
         return True
     return False
@@ -1488,12 +1581,22 @@ def op02_112_bellmere(game_state, player, card):
 def op02_113_helmeppo(game_state, player, card):
     """When Attacking: Give opponent -2 cost. If cost 0 exists, gain +2000."""
     opponent = get_opponent(game_state, player)
+    if opponent.cards_in_play:
+        return create_target_choice(
+            game_state, player, opponent.cards_in_play,
+            prompt="Choose opponent's Character to give -2 cost",
+            source_card=card,
+            callback_action="op02_113_cost_then_power",
+            callback_data={
+                "player_id": player.player_id,
+                "target_cards": [{"id": c.id, "name": c.name} for c in opponent.cards_in_play],
+                "source_card_id": card.id,
+            }
+        )
     all_chars = player.cards_in_play + opponent.cards_in_play
     if any((getattr(c, 'cost', 0) or 0) + getattr(c, 'cost_modifier', 0) == 0 for c in all_chars):
         card.power_modifier = getattr(card, 'power_modifier', 0) + 2000
-    if opponent.cards_in_play:
-        return create_cost_reduction_choice(game_state, player, opponent.cards_in_play, -2, source_card=card,
-                                           prompt="Choose opponent's Character to give -2 cost")
+        card._sticky_power_modifier = getattr(card, '_sticky_power_modifier', 0) + 2000
     return True
 
 
@@ -1508,8 +1611,9 @@ def op02_113_helmeppo_trigger(game_state, player, card):
 @register_effect("OP02-114", "continuous", "[Opponent's Turn] Gain +1000 power, cannot be K.O.'d by effects")
 def op02_114_borsalino_cont(game_state, player, card):
     """Opponent's Turn: Gain +1000 power and cannot be K.O.'d by effects."""
-    card.power_modifier = getattr(card, 'power_modifier', 0) + 1000
-    card.cannot_be_ko_by_effects = True
+    if game_state.current_player is not player:
+        card.power_modifier = getattr(card, 'power_modifier', 0) + 1000
+        card.cannot_be_ko_by_effects = True
     return True
 
 
@@ -1551,9 +1655,10 @@ def op02_120_uta(game_state, player, card):
 @register_effect("OP02-121", "continuous", "[Your Turn] All opponent's Characters get -5 cost")
 def op02_121_kuzan_cont(game_state, player, card):
     """Your Turn: All opponent's Characters get -5 cost."""
-    opponent = get_opponent(game_state, player)
-    for c in opponent.cards_in_play:
-        c.cost_modifier = getattr(c, 'cost_modifier', 0) - 5
+    if game_state.current_player is player:
+        opponent = get_opponent(game_state, player)
+        for c in opponent.cards_in_play:
+            c.cost_modifier = getattr(c, 'cost_modifier', 0) - 5
     return True
 
 
@@ -1562,7 +1667,7 @@ def op02_121_kuzan_play(game_state, player, card):
     """On Play: K.O. opponent's cost 0 Character."""
     opponent = get_opponent(game_state, player)
     targets = [c for c in opponent.cards_in_play
-               if (getattr(c, 'cost', 0) or 0) + getattr(c, 'cost_modifier', 0) == 0]
+               if (getattr(c, 'cost', 0) or 0) + getattr(c, 'cost_modifier', 0) - 5 <= 0]
     if targets:
         return create_ko_choice(game_state, player, targets, source_card=card,
                                prompt="Choose opponent's cost 0 Character to KO")
@@ -1856,10 +1961,10 @@ def op02_070_new_kama_land(game_state, player, card):
 
 
 # --- OP02-089: Judgment of Hell (Purple Counter Event) ---
-@register_effect("OP02-089", "counter", "[Counter] DON!! -1: Give up to 2 opponent leader/chars -2000 power each")
+@register_effect("OP02-089", "counter", "[Counter] DON!! -1: Give up to 2 opponent leader/chars -3000 power each")
 def op02_089_judgment_of_hell(game_state, player, card):
     """[Counter] DON!! −1: Give up to a total of 2 of your opponent's Leader or
-    Characters −2000 power each during this battle."""
+    Characters −3000 power each during this battle."""
     result = optional_don_return(game_state, player, 1, source_card=card,
                                  after_callback="op02_089_judgment_effect",
                                  after_callback_data={"source_card_id": card.id})
@@ -1869,10 +1974,9 @@ def op02_089_judgment_of_hell(game_state, player, card):
 
 
 # --- OP02-090: Hydra (Purple Main Event) ---
-@register_effect("OP02-090", "on_play", "[Main] DON!! -1: Give opponent char -3000 power; return it to owner's hand")
+@register_effect("OP02-090", "on_play", "[Main] DON!! -1: Give up to 1 opponent char -3000 power")
 def op02_090_hydra(game_state, player, card):
-    """[Main] DON!! −1: Give up to 1 of your opponent's Characters −3000 power during
-    this turn. Then, return that Character to the owner's hand."""
+    """[Main] DON!! −1: Give up to 1 of your opponent's Characters −3000 power during this turn."""
     result = optional_don_return(game_state, player, 1, source_card=card,
                                  after_callback="op02_090_hydra_effect",
                                  after_callback_data={"source_card_id": card.id})

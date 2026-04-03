@@ -196,8 +196,11 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
             for i in range(3):
                 p1.cards_in_play.append(_straw_hat(300 + i, cost=i + 2))
 
-    elif t in ("counter", "trigger"):
+    elif t == "counter":
         p1.hand.append(tc)
+
+    elif t == "trigger":
+        p2.life_cards.append(tc)
 
     elif t == "on_block":
         tc.is_resting = False
