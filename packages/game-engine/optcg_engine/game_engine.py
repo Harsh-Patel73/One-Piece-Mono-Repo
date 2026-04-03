@@ -1822,6 +1822,197 @@ class GameState:
             'has_taunt': getattr(card, 'has_taunt', False),
         }
 
+    # -----------------------------------------------------------------
+    # DON return after-callback dispatch
+    # -----------------------------------------------------------------
+    def _dispatch_don_after_callback(self, player, after, after_data):
+        """Run the card-specific follow-up after DON has been returned to deck."""
+        if not after:
+            return
+        opponent = self.player2 if player == self.player1 else self.player1
+
+        # --- OP01 callbacks ---
+        if after == "op01_094_kaido_ko_all":
+            src_id = after_data.get("source_card_id")
+            leader_ok = 'animal kingdom pirates' in (player.leader.card_origin or '').lower() if player.leader else False
+            if leader_ok:
+                for c in opponent.cards_in_play[:]:
+                    opponent.cards_in_play.remove(c)
+                    opponent.trash.append(c)
+                    self._log(f"  {c.name} K.O.'d")
+                for c in player.cards_in_play[:]:
+                    if c.id != src_id:
+                        player.cards_in_play.remove(c)
+                        player.trash.append(c)
+                        self._log(f"  {c.name} K.O.'d")
+
+        elif after == "op01_096_king_ko":
+            from .effects.hardcoded import create_ko_choice
+            targets_3 = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 3]
+            if targets_3:
+                create_ko_choice(
+                    self, player, targets_3, source_card=None,
+                    prompt="Choose opponent's cost 3 or less Character to K.O.",
+                    callback_action="king_ko_then_2",
+                    callback_data={"player_id": player.player_id},
+                )
+
+        elif after == "op01_097_queen_rush_power":
+            src_id = after_data.get("source_card_id")
+            src = next((c for c in player.cards_in_play if c.id == src_id), None)
+            if src:
+                src.has_rush = True
+                self._log(f"  {src.name} gained [Rush]")
+            targets = [c for c in opponent.cards_in_play]
+            if targets:
+                from .effects.hardcoded import create_power_effect_choice
+                create_power_effect_choice(
+                    self, player, targets, -2000,
+                    source_card=src, prompt="Choose opponent's Character to give -2000 power"
+                )
+
+        elif after == "op01_108_kamazo_ko":
+            from .effects.hardcoded import create_ko_choice
+            targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 5]
+            if targets:
+                create_ko_choice(
+                    self, player, targets, source_card=None,
+                    prompt="Choose opponent's cost 5 or less Character to K.O.",
+                )
+
+        elif after == "op01_111_blackmaria_power":
+            src_id = after_data.get("source_card_id")
+            src = next((c for c in player.cards_in_play if c.id == src_id), None)
+            if src:
+                src.power_modifier = getattr(src, 'power_modifier', 0) + 1000
+                self._log(f"  {src.name} gained +1000 power")
+
+        elif after == "op01_112_pageone_active":
+            src_id = after_data.get("source_card_id")
+            src = next((c for c in player.cards_in_play if c.id == src_id), None)
+            if src:
+                src.can_attack_active = True
+                self._log(f"  {src.name} can now attack active Characters")
+
+        elif after == "op01_117_sheeps_horn_rest":
+            from .effects.hardcoded import create_rest_choice
+            targets = [c for c in opponent.cards_in_play
+                       if (getattr(c, 'cost', 0) or 0) <= 6 and not getattr(c, 'is_resting', False)]
+            if targets:
+                create_rest_choice(
+                    self, player, targets, source_card=None,
+                    prompt="Choose opponent's cost 6 or less Character to rest",
+                )
+
+        elif after == "op01_118_ulti_mortar_power":
+            from .effects.hardcoded import create_power_effect_choice, draw_cards
+            draw_cards(player, 1)
+            self._log(f"Ulti-Mortar: {player.name} draws 1 card")
+            targets = ([player.leader] if player.leader else []) + player.cards_in_play
+            if targets:
+                create_power_effect_choice(
+                    self, player, targets, 2000,
+                    source_card=None,
+                    prompt="Choose Leader or Character to give +2000 power",
+                )
+
+        # --- OP02 callbacks ---
+        elif after == "op02_072_zephyr_effect":
+            # OP02-072: +1000 power to leader, KO opponent's cost 3 or less
+            src_id = after_data.get("source_card_id")
+            src = next((c for c in ([player.leader] if player.leader else []) + player.cards_in_play
+                        if c.id == src_id), None)
+            if src:
+                src.power_modifier = getattr(src, 'power_modifier', 0) + 1000
+                self._log(f"  {src.name} gained +1000 power")
+            from .effects.hardcoded import create_ko_choice
+            targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 3]
+            if targets:
+                create_ko_choice(
+                    self, player, targets, source_card=src,
+                    prompt="Choose opponent's cost 3 or less Character to KO",
+                )
+
+        elif after == "op02_076_shiryu_effect":
+            # OP02-076: KO opponent's cost 1 or less
+            from .effects.hardcoded import create_ko_choice
+            targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 1]
+            if targets:
+                create_ko_choice(
+                    self, player, targets, source_card=None,
+                    prompt="Choose opponent's cost 1 or less to KO",
+                )
+
+        elif after == "op02_078_daifugo_effect":
+            # OP02-078: Play SMILE cost 3 or less from hand
+            from .effects.hardcoded import create_play_from_hand_choice
+            playable = [c for c in player.hand
+                        if (getattr(c, 'card_type', '') == 'CHARACTER' and
+                            'SMILE' in (c.card_origin or '') and
+                            (getattr(c, 'cost', 0) or 0) <= 3 and
+                            getattr(c, 'name', '') != 'Daifugo')]
+            if playable:
+                create_play_from_hand_choice(
+                    self, player, playable,
+                    source_card=None,
+                    prompt="Choose SMILE cost 3 or less to play",
+                )
+
+        elif after == "op02_079_bullet_effect":
+            # OP02-079: Rest opponent's cost 4 or less
+            from .effects.hardcoded import create_rest_choice
+            targets = [c for c in opponent.cards_in_play
+                       if (getattr(c, 'cost', 0) or 0) <= 4 and not getattr(c, 'is_resting', False)]
+            if targets:
+                create_rest_choice(
+                    self, player, targets, source_card=None,
+                    prompt="Choose opponent's cost 4 or less to rest",
+                )
+
+        elif after == "op02_082_world_effect":
+            # OP02-082: +792000 power
+            src_id = after_data.get("source_card_id")
+            src = next((c for c in player.cards_in_play if c.id == src_id), None)
+            if src:
+                src.power_modifier = getattr(src, 'power_modifier', 0) + 792000
+                self._log(f"  {src.name} gained +792000 power")
+
+        elif after == "op02_085_magellan_effect":
+            # OP02-085: Opponent returns 1 DON
+            if opponent.don_pool:
+                opponent.don_pool.pop()
+                self._log(f"  Opponent returned 1 DON!! to DON deck")
+
+        elif after == "op02_089_judgment_effect":
+            # OP02-089: Give up to 2 opponent leader/chars -2000 power each
+            from .effects.hardcoded import create_power_effect_choice
+            targets = ([opponent.leader] if opponent.leader else []) + opponent.cards_in_play
+            if targets:
+                create_power_effect_choice(
+                    self, player, targets, -2000,
+                    source_card=None,
+                    prompt="Judgment of Hell: Choose up to 2 opponent Leader/Characters to give -2000 power",
+                    min_selections=0, max_selections=2,
+                )
+
+        elif after == "op02_090_hydra_effect":
+            # OP02-090: Return opponent's character to hand
+            from .effects.hardcoded import create_return_to_hand_choice
+            targets = opponent.cards_in_play[:]
+            if targets:
+                create_return_to_hand_choice(
+                    self, player, targets, source_card=None,
+                    prompt="Hydra: Choose opponent's Character to return to hand (-3000 power)",
+                )
+
+        elif after == "op02_120_uta_effect":
+            # OP02-120: Leader and all Characters +1000 until next turn
+            if player.leader:
+                player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 1000
+            for c in player.cards_in_play:
+                c.power_modifier = getattr(c, 'power_modifier', 0) + 1000
+            self._log(f"  Leader and all Characters gained +1000 power")
+
     def _player_to_dict(self, player: Player, is_viewer: bool = False) -> dict:
         """Serialize a player to a dictionary.
 
@@ -3398,98 +3589,34 @@ class GameState:
                 # Dispatch card-specific follow-up
                 after = data.get("after_callback")
                 after_data = data.get("after_callback_data", {})
-                opponent = self.player2 if player == self.player1 else self.player1
+                self._dispatch_don_after_callback(player, after, after_data)
 
-                if after == "op01_094_kaido_ko_all":
-                    # K.O. all Characters other than source card
+            elif action == "don_optional":
+                # Player was asked whether to pay an optional DON!! -X cost.
+                if "yes" in selected:
+                    count = data.get("count", 1)
+                    after_cb = data.get("after_callback")
+                    after_data = data.get("after_callback_data", {})
                     src_id = after_data.get("source_card_id")
-                    leader_ok = 'animal kingdom pirates' in (player.leader.card_origin or '').lower() if player.leader else False
-                    if leader_ok:
-                        for c in opponent.cards_in_play[:]:
-                            opponent.cards_in_play.remove(c)
-                            opponent.trash.append(c)
-                            self._log(f"  {c.name} K.O.'d")
-                        for c in player.cards_in_play[:]:
-                            if c.id != src_id:
-                                player.cards_in_play.remove(c)
-                                player.trash.append(c)
-                                self._log(f"  {c.name} K.O.'d")
-
-                elif after == "op01_096_king_ko":
-                    # K.O. opponent's cost 3 or less AND cost 2 or less
-                    from .effects.hardcoded import create_ko_choice
-                    targets_3 = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 3]
-                    if targets_3:
-                        create_ko_choice(
-                            self, player, targets_3, source_card=None,
-                            prompt="Choose opponent's cost 3 or less Character to K.O.",
-                            callback_action="king_ko_then_2",
-                            callback_data={"player_id": player.player_id},
-                        )
-
-                elif after == "op01_097_queen_rush_power":
-                    # Give Rush + choose opponent to give -2000
-                    src_id = after_data.get("source_card_id")
-                    src = next((c for c in player.cards_in_play if c.id == src_id), None)
-                    if src:
-                        src.has_rush = True
-                        self._log(f"  {src.name} gained [Rush]")
-                    targets = [c for c in opponent.cards_in_play]
-                    if targets:
-                        from .effects.hardcoded import create_power_effect_choice
-                        create_power_effect_choice(
-                            self, player, targets, -2000,
-                            source_card=src, prompt="Choose opponent's Character to give -2000 power"
-                        )
-                elif after == "op01_108_kamazo_ko":
-                    # OP01-108: K.O. opponent's cost 5 or less Character
-                    from .effects.hardcoded import create_ko_choice
-                    targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 5]
-                    if targets:
-                        create_ko_choice(
-                            self, player, targets, source_card=None,
-                            prompt="Choose opponent's cost 5 or less Character to K.O.",
-                        )
-
-                elif after == "op01_111_blackmaria_power":
-                    # OP01-111: +1000 power to Black Maria this turn
-                    src_id = after_data.get("source_card_id")
-                    src = next((c for c in player.cards_in_play if c.id == src_id), None)
-                    if src:
-                        src.power_modifier = getattr(src, 'power_modifier', 0) + 1000
-                        self._log(f"  {src.name} gained +1000 power")
-
-                elif after == "op01_112_pageone_active":
-                    # OP01-112: Can attack active Characters this turn
-                    src_id = after_data.get("source_card_id")
-                    src = next((c for c in player.cards_in_play if c.id == src_id), None)
-                    if src:
-                        src.can_attack_active = True
-                        self._log(f"  {src.name} can now attack active Characters")
-
-                elif after == "op01_117_sheeps_horn_rest":
-                    # OP01-117: Rest opponent's cost 6 or less Character
-                    from .effects.hardcoded import create_rest_choice
-                    targets = [c for c in opponent.cards_in_play
-                               if (getattr(c, 'cost', 0) or 0) <= 6 and not getattr(c, 'is_resting', False)]
-                    if targets:
-                        create_rest_choice(
-                            self, player, targets, source_card=None,
-                            prompt="Choose opponent's cost 6 or less Character to rest",
-                        )
-
-                elif after == "op01_118_ulti_mortar_power":
-                    # OP01-118: +2000 power to Leader or Character, then draw 1
-                    from .effects.hardcoded import create_power_effect_choice, draw_cards
-                    draw_cards(player, 1)
-                    self._log(f"Ulti-Mortar: {player.name} draws 1 card")
-                    targets = ([player.leader] if player.leader else []) + player.cards_in_play
-                    if targets:
-                        create_power_effect_choice(
-                            self, player, targets, 2000,
-                            source_card=None,
-                            prompt="Choose Leader or Character to give +2000 power",
-                        )
+                    src_card = None
+                    if src_id:
+                        src_card = next((c for c in player.cards_in_play if c.id == src_id), None)
+                        if not src_card and player.leader and player.leader.id == src_id:
+                            src_card = player.leader
+                    from .effects.hardcoded import return_don_to_deck
+                    auto = return_don_to_deck(
+                        self, player, count,
+                        source_card=src_card,
+                        after_callback=after_cb,
+                        after_callback_data=after_data,
+                    )
+                    if auto:
+                        # DON auto-returned (all from pool, no real choice).
+                        # Dispatch the card-specific follow-up inline.
+                        self._log(f"Returned {count} DON!! to DON deck")
+                        self._dispatch_don_after_callback(player, after_cb, after_data)
+                else:
+                    self._log(f"Player chose not to return DON!!")
 
             elif action == "ko_for_op14_079":
                 # OP14-079 Crocodile: K.O. own character, then K.O. opponent's with same or less cost

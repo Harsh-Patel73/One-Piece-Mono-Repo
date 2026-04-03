@@ -641,15 +641,30 @@ def setup_socket_handlers(sio: socketio.AsyncServer, game_manager: GameManager):
             return
 
         # Use test card as leader if it IS a leader; otherwise keep default.
-        # If the effect requires a specific leader ("If your Leader is [X]" or
-        # "If your Leader has the {X} type"), find that leader in card_db so
-        # the condition fires during testing.
+        # If the effect requires a specific leader, find that leader in card_db
+        # so the condition fires during testing.
         _et_early = (card.effect or '').lower()
         _leader_name_m = re.search(r'if your leader is \[([^\]]+)\]', _et_early)
-        _leader_type_m = re.search(r'if your leader has the \{([^}]+)\} type', _et_early)
+        _leader_type_m = (
+            re.search(r'if your leader has the \{([^}]+)\} type', _et_early)
+            or re.search(r"leader'?s? type includes [\"']([^\"']+)[\"']", _et_early)
+        )
+        # Hard-coded set for cards that reference Whitebeard Pirates via patterns
+        # the regex can't reliably catch (e.g. "[Edward.Newgate]", trait checks
+        # on other cards, or no explicit leader text at all).
+        _WB_LEADER_CARDS = {
+            "OP02-001", "OP02-002", "OP02-003", "OP02-004", "OP02-005",
+            "OP02-008", "OP02-009", "OP02-013", "OP02-018", "OP02-021",
+            "OP02-023", "OP02-024", "OP02-047",
+        }
         _required_leader = None
         if card.card_type != "LEADER":
-            if _leader_name_m:
+            if card_id in _WB_LEADER_CARDS:
+                for _lc in game_manager.card_db.values():
+                    if _lc.card_type == "LEADER" and _lc.id == "OP02-001":
+                        _required_leader = copy.deepcopy(_lc)
+                        break
+            elif _leader_name_m:
                 _needed = _leader_name_m.group(1).lower()
                 for _lc in game_manager.card_db.values():
                     if _lc.card_type == "LEADER" and _needed in (_lc.name or '').lower():

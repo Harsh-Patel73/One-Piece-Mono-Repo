@@ -149,39 +149,39 @@
 | OP02-001 | ✅ Verified | LEADER | Every time the turn is ended a card from top of life should be added to the hand. |
 | OP02-002 | ✅ Verified | LEADER | I should be able to give -1 DON!! to a 7 cost or less. It currently does not prompt me to do this. |
 | OP02-003 | ✅ Verified | CHARACTER |  |
-| OP02-004 | ⚠ Needs Fix | CHARACTER | The when attacking with 2 don works as inteded. But it is not giving the leader +2000 power until the start of the players next turn.  |
+| OP02-004 | ⚠ Needs Fix | CHARACTER | The "then you cannot add life cards to your hand using your own effects during this turn" means that Newgate's leader effect or any other card that would take a life from the life pile and add it to hand cannot be done anymore during this turn. So for example Edward Newgate's leader effect states that at the end of the turn take a life card to hand. This essentially stops that from happening.  |
 | OP02-005 | ✅ Verified | CHARACTER | on_play: look 5, reveal red cost 1 char |
 | OP02-006 | ✅ Verified | CHARACTER |  |
 | OP02-007 | ✅ Verified | CHARACTER |  |
-| OP02-008 | ⚠ Needs Fix | CHARACTER | This card has conditional rush, when given don and when the leader's type is "Whitebeard Pirates", but he has rush regardless. Fix this, and make the leader edward newgate so we can test.  |
-| OP02-009 | ⚠ Needs Fix | CHARACTER | Make the leader edward newgate in the simulation so we can test.  |
+| OP02-008 | ✅ Verified | CHARACTER | Change the leader to edward newgate so I can test. |
+| OP02-009 | ✅ Verified | CHARACTER | Change the leader to edward newgate so I can test. |
 | OP02-010 | ✅ Verified | CHARACTER | activate: rest self → play red cost 1 from hand |
 | OP02-011 | ✅ Verified | CHARACTER | on_play: KO opp ≤3000 power |
 | OP02-012 | ✅ Verified | CHARACTER | blocker |
-| OP02-013 | ⚠ Needs Fix | CHARACTER | It shows that Katakuri had -3000 power but in the battle on the front end it showed that he was still at his default power.  |
+| OP02-013 | ⚠ Needs Fix | CHARACTER | If the leader's type includes "Whitebeard Pirates" this card should be given rush. The leader is Edward Newgate but he still does not have rush.  |
 | OP02-014 | ✅ Verified | CHARACTER | continuous: DON x1, attack active chars |
 | OP02-015 | ✅ Verified | CHARACTER | activate: rest self → red cost 1 char +3000 |
 | OP02-016 | ✅ Verified | CHARACTER | on_play: red cost 1 char +3000 |
 | OP02-017 | ✅ Verified | CHARACTER | on_attack: DON x2, KO opp ≤2000 power |
-| OP02-018 | ⚠ Needs Fix | CHARACTER | When this card dies, I should be able to trash a card with "Whitebeard Pirates" in it to play the card from the trash.  |
+| OP02-018 | ✅ Verified | CHARACTER | When this card dies, I should be able to trash a card with "Whitebeard Pirates" in it to play the card from the trash. |
 | OP02-019 | ✅ Verified | CHARACTER | continuous: DON x1, WB chars +1000 |
 | OP02-020 | ✅ Verified | CHARACTER |  |
-| OP02-021 | ⚠ Needs Fix | EVENT | Leader needs to be Edward Newgate so I can test.  |
+| OP02-021 | ✅ Verified | EVENT | Make the leader edward newgate |
 | OP02-022 | ✅ Verified | EVENT | on_play: look 5, reveal WB char; trigger |
-| OP02-023 | ⚠ Needs Fix | EVENT | Leader needs to be Edward Newgate so I can test.  |
-| OP02-024 | ⚠ Needs Fix | STAGE | Leader needs to be Edward Newgate so I can test.  |
-| OP02-025 | 🔲 To Do | LEADER | activate: if ≤1 char, next Land of Wano cost 3+ costs -1 |
-| OP02-026 | 🔲 To Do | LEADER | on_play_character: if ≤3 chars, set 2 DON active |
+| OP02-023 | ⚠ Needs Fix | EVENT | Make te leader edward newgate |
+| OP02-024 | ⚠ Needs Fix | STAGE | This stage should give "Edward Newgate" and ALL Whitebeard Pirates type cards +2000 power if they have 1 life or less.  |
+| OP02-025 | ⚠ Needs Fix | LEADER | Says "Error: Cannot activate effect", if there is 1 or less characters on the board then I should be able to use this effect.  |
+| OP02-026 | ⚠ Needs Fix | LEADER | When a character with no base effect (card is a vanilla it has no effects at all), then I should be prompted if I want to set up to 2 DON!! as active. User should be able to choose 0, 1, or 2 DON!! to restand.  |
 | OP02-027 | 🔲 To Do | CHARACTER | continuous: if all DON rested, immune to opp removal |
 | OP02-028 | ✅ Verified | CHARACTER |  |
-| OP02-029 | ⚠ Needs Fix | CHARACTER | At the end of the turn 1 DON!! should be restanded |
-| OP02-030 | ⚠ Needs Fix | CHARACTER | It let's me activate but I should have to rest 3 don to activate. Also, when the character is active again the can_attack should be set to true again. There is also no option to play a green land of wano card with a cost of 3 or less from the deck.   |
-| OP02-031 | ⚠ Needs Fix | CHARACTER | This card should only have blocker if there is a Kozuki Oden character on the field. It has blocker by default.  |
-| OP02-032 | ⚠ Needs Fix | CHARACTER | When this card is played I should be prompted to rest 2 DON!! and set 1 minks type character with a cost of 5 or less as active.  |
+| OP02-029 | ⚠ Needs Fix | CHARACTER | Carrot is automatically setting 1 DON as active, I should be prompted since it says up to 1, if I want to set 0 DON! as active or 1.  |
+| OP02-030 | ⚠ Needs Fix | CHARACTER | When this card is KOd, it should prompt me with EVERY 3 cost Green Land of Wano type character in the deck to play out. I can play 0 out as well. Then the deck should be shuffled.  |
+| OP02-031 | ⚠ Needs Fix | CHARACTER | The card OP02-042 has the effect "Treat this cards name as ALSO Kozuki Oden", so when this card is in play Toki should also gain blocker.  |
+| OP02-032 | ✅ Verified | CHARACTER | When this card is played I should be prompted to rest 2 DON!! and set 1 minks type character with a cost of 5 or less as active. |
 | OP02-033 | ✅ Verified | CHARACTER |  |
 | OP02-034 | ✅ Verified | CHARACTER | on_attack: DON x1, rest opp cost 2 or less |
-| OP02-035 | ⚠ Needs Fix | CHARACTER | It should rest 1 DON when I activate to return this card to the owners hand and then prompt me to play a 3 cost or less from hand.  |
-| OP02-036 | ⚠ Needs Fix | CHARACTER | This card should search top 3 for a film type card other than nami and add it to hand.  I should be prompted if I want to rest 1 DON and use that search effect though. I should only be able to search if you rest 1 DON!! |
+| OP02-035 | ✅ Verified | CHARACTER | It should rest 1 DON when I activate to return this card to the owners hand and then prompt me to play a 3 cost or less from hand. |
+| OP02-036 | ⚠ Needs Fix | CHARACTER | The on play is coded correctly, it should also prompt me to use the effect when the card attacks.  |
 | OP02-037 | ✅ Verified | CHARACTER | on_play: play FILM/SHC cost 2 or less from hand |
 | OP02-038 | ✅ Verified | CHARACTER | blocker |
 | OP02-039 | ✅ Verified | CHARACTER |  |
@@ -189,11 +189,11 @@
 | OP02-041 | ✅ Verified | CHARACTER | blocker; on_play: play FILM/SHC cost 4 or less from hand |
 | OP02-042 | ✅ Verified | CHARACTER | on_play: rest opp cost 6 or less (treated as Oden) |
 | OP02-043 | ✅ Verified | CHARACTER |  |
-| OP02-044 | ⚠ Needs Fix | CHARACTER | It should prompt me to play up to 1 Minks type not do it automatically. I should have the option to choose 0.  |
-| OP02-045 | 🔲 To Do | EVENT | counter: +6000 to leader; play vanilla char cost 3 or less |
+| OP02-044 | ✅ Verified | CHARACTER | It should prompt me to play up to 1 Minks type not do it automatically. I should have the option to choose 0. |
+| OP02-045 | ✅ Verified | EVENT | counter: +6000 to leader; play vanilla char cost 3 or less |
 | OP02-046 | ✅ Verified | EVENT | on_play: KO opp rested char cost 4 or less |
 | OP02-047 | ✅ Verified | EVENT | on_play: rest opp char cost 4 or less |
-| OP02-048 | ⚠ Needs Fix | STAGE | It should prompt me if I want to trash 1 Land of Wano type card from hand and rest the stage. If I do, then it should set up to 1 DON!! cards as active.  |
+| OP02-048 | ✅ Verified | STAGE | It should prompt me if I want to trash 1 Land of Wano type card from hand and rest the stage. If I do, then it should set up to 1 DON!! cards as active. |
 | OP02-049 | ✅ Verified | LEADER | end_of_turn: if 0 hand, draw 2 |
 | OP02-050 | ✅ Verified | CHARACTER | continuous: if ≤1 hand, +2000; blocker |
 | OP02-051 | ✅ Verified | CHARACTER | on_play: draw to 3, play blue Impel Down cost 6 or less |
@@ -203,31 +203,31 @@
 | OP02-055 | ✅ Verified | CHARACTER |  |
 | OP02-056 | ✅ Verified | CHARACTER | Does not search the top 3, the when attacking effect is coded correctly. |
 | OP02-057 | ✅ Verified | CHARACTER | on_play: look 2, reveal Seven Warlords card |
-| OP02-058 | ⚠ Needs Fix | CHARACTER | It does not let me add Impel Down characters other than Buggy to my hand it just immediately lets me start placing them at bottom of deck.  |
-| OP02-059 | ⚠ Needs Fix | CHARACTER | WHen it says trash up to 3 cards from hand, I should be able to select how many cards I want to trash. This also gives me to option to trash 0 cards, so I can choose to trash none.  |
+| OP02-058 | ✅ Verified | CHARACTER | It does not let me add Impel Down characters other than Buggy to my hand it just immediately lets me start placing them at bottom of deck. |
+| OP02-059 | ⚠ Needs Fix | CHARACTER | It should prompt me if I want to trash up to 3 cards from hand after I do the draw 1 trash 1 effect.  |
 | OP02-060 | ✅ Verified | CHARACTER |  |
-| OP02-061 | ⚠ Needs Fix | CHARACTER | Blockers with a cost of 5 or less should not be able to block when this card and ONLY this card attacks and the player has less than 1 card in hand. Currently they can still block with characters cost 5 or less.  |
-| OP02-062 | ⚠ Needs Fix | CHARACTER | I should be prompted to select which 2 cards I want to trash in order to use the effect, and then I get to select a 4 cost or less to return to hand.  |
-| OP02-063 | ⚠ Needs Fix | CHARACTER | We need a blue event card with cost of 1 or less in the trash so we can test.  |
-| OP02-064 | ⚠ Needs Fix | CHARACTER | It does do what the effect says, but it should prompt me to choose a card to trash from hand. Also, this card should get sent to the bottom of the deck at the end of the battle.  |
-| OP02-065 | ⚠ Needs Fix | CHARACTER | When I end turn it should prompt and ask me if I want to trash a card from hand and set this character back as active.  |
-| OP02-066 | ⚠ Needs Fix | EVENT | This card's effect is not programmed. It does nothing when I select it.  |
+| OP02-061 | ✅ Verified | CHARACTER | Blockers with a cost of 5 or less should not be able to block when this card and ONLY this card attacks and the player has less than 1 card in hand. Currently they can still block with characters cost 5 or less. |
+| OP02-062 | ⚠ Needs Fix | CHARACTER | The cards on play is coded,but it does not prompt when attacking like it should.  |
+| OP02-063 | ⚠ Needs Fix | CHARACTER | The effect is not working, it does correctly show me the blue 1 cost events in the trash, but when I go to add one to hand it is not being added to the hand  |
+| OP02-064 | ✅ Verified | CHARACTER | It does do what the effect says, but it should prompt me to choose a card to trash from hand. Also, this card should get sent to the bottom of the deck at the end of the battle. |
+| OP02-065 | ✅ Verified | CHARACTER | When I end turn it should prompt and ask me if I want to trash a card from hand and set this character back as active. |
+| OP02-066 | ✅ Verified | EVENT | This card's effect is not programmed. It does nothing when I select it. |
 | OP02-067 | ✅ Verified | EVENT | on_play: return opp char cost 4 or less to hand |
-| OP02-068 | ⚠ Needs Fix | EVENT | It should prompt me to select a card to trash to use the effect of this card.  |
-| OP02-069 | 🔲 To Do | EVENT | counter: +6000 to leader; draw to 2 |
-| OP02-070 | 🔲 To Do | STAGE | activate: rest stage; if Ivankov: draw 1, trash 1, trash up to 3 more |
+| OP02-068 | ✅ Verified | EVENT | It should prompt me to select a card to trash to use the effect of this card. |
+| OP02-069 | ✅ Verified | EVENT | counter: +6000 to leader; draw to 2 |
+| OP02-070 | ⚠ Needs Fix | STAGE | After I do the draw 1 and trash 1. It should prompt me to trash up to 3 cards from hand, so I can choose to trash 0, 1, 2, or 3 cards.  |
 | OP02-071 | 🔲 To Do | LEADER | on_don_return: +1000 power this turn |
 | OP02-072 | 🔲 To Do | LEADER | on_attack: DON -4 → KO opp ≤3 cost + leader +1000 |
-| OP02-073 | 🔲 To Do | CHARACTER | on_play: play Jailer Beast from hand |
-| OP02-074 | 🔲 To Do | CHARACTER | continuous: Blugori gains Blocker |
-| OP02-075 | ⬜ No Effect | CHARACTER | |
+| OP02-073 | ✅ Verified | CHARACTER | on_play: play Jailer Beast from hand |
+| OP02-074 | ⚠ Needs Fix | CHARACTER | This card should not have blocker. It only gives "Blugori" Blocker when it is also on the field with him.  |
+| OP02-075 | ⚠ Needs Fix | CHARACTER | This card needs to be placed in life, so we can deal damage and test the trigger out.  |
 | OP02-076 | 🔲 To Do | CHARACTER | on_play: DON -1 → KO opp cost 1 or less |
 | OP02-077 | ✅ Verified | CHARACTER |  |
 | OP02-078 | 🔲 To Do | CHARACTER | on_play: DON -2 → play SMILE cost 3 or less from hand |
 | OP02-079 | 🔲 To Do | CHARACTER | on_play: DON -1 → rest opp cost 4 or less |
 | OP02-080 | ✅ Verified | CHARACTER |  |
 | OP02-081 | ✅ Verified | CHARACTER | blocker |
-| OP02-082 | 🔲 To Do | CHARACTER | activate: DON -8 → +792000 power |
+| OP02-082 | ⚠ Needs Fix | CHARACTER | This card should increase the power by 792000, only if the player returns 8 DON!! to their don deck.  |
 | OP02-083 | ✅ Verified | CHARACTER | on_play: look 5, reveal purple Impel Down card |
 | OP02-084 | ✅ Verified | CHARACTER |  |
 | OP02-085 | 🔲 To Do | CHARACTER | on_play: DON -1 → opp returns 1 DON; on_ko: opp returns 2 DON; your_turn: if opp ≤1 life, +1000 |

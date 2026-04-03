@@ -509,6 +509,52 @@ def return_don_to_deck(game_state: 'GameState', player: 'Player', count: int,
     return False  # Pending — caller should return True
 
 
+def optional_don_return(game_state: 'GameState', player: 'Player', count: int,
+                        source_card: 'Card' = None,
+                        after_callback: str = None,
+                        after_callback_data: dict = None) -> bool:
+    """Prompt the player whether they want to pay an optional DON!! -X cost.
+
+    In OPTCG, bolded DON!! -X costs are optional.  This creates a yes/no
+    choice first.  If the player says yes, it chains into ``return_don_to_deck``
+    so they can choose *which* DON to return.
+
+    Returns True  → cost cannot be paid (not enough DON) — caller should
+                    treat the effect as fizzled and ``return True``.
+    Returns False → a PendingChoice was created — caller should ``return True``
+                    and let the callback system handle the rest.
+    """
+    from ..game_engine import PendingChoice
+
+    total_don = len(player.don_pool) + sum(getattr(c, 'attached_don', 0) for c in player.cards_in_play)
+    if getattr(player, 'leader', None):
+        total_don += getattr(player.leader, 'attached_don', 0)
+    if total_don < count:
+        return True  # Can't pay — fizzle silently
+
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"don_opt_{uuid.uuid4().hex[:8]}",
+        choice_type="yes_no",
+        prompt=f"Return {count} DON!! to DON deck to activate {source_card.name}'s effect?" if source_card else f"Return {count} DON!! to DON deck?",
+        options=[
+            {"id": "yes", "label": f"Yes, return {count} DON!!", "card_id": "don_opt", "card_name": "DON!!"},
+            {"id": "no", "label": "No, skip this effect", "card_id": "don_opt", "card_name": "DON!!"},
+        ],
+        min_selections=1,
+        max_selections=1,
+        source_card_id=source_card.id if source_card else None,
+        source_card_name=source_card.name if source_card else None,
+        callback_action="don_optional",
+        callback_data={
+            "player_id": player.player_id,
+            "count": count,
+            "after_callback": after_callback,
+            "after_callback_data": after_callback_data or {},
+        },
+    )
+    return False  # Pending
+
+
 def give_don_to_card(player: 'Player', target: 'Card', count: int, rested_only: bool = False) -> int:
     """Give DON from pool to a card (increments attached_don, removes from pool)."""
     given = 0
