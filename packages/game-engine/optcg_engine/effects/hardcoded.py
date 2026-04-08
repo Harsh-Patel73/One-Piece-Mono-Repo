@@ -926,7 +926,8 @@ def create_own_character_choice(game_state: 'GameState', player: 'Player',
 def create_cost_reduction_choice(game_state: 'GameState', player: 'Player',
                                   targets: List['Card'], cost_reduction: int,
                                   source_card: 'Card' = None,
-                                  prompt: str = None) -> bool:
+                                  prompt: str = None,
+                                  max_selections: int = 1) -> bool:
     """Create a pending choice for applying cost reduction to opponent's character.
 
     Args:
@@ -960,7 +961,7 @@ def create_cost_reduction_choice(game_state: 'GameState', player: 'Player',
         prompt=prompt or f"Choose a Character to give {cost_reduction} cost",
         options=options,
         min_selections=1,
-        max_selections=1,
+        max_selections=max_selections,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
         callback_action="apply_cost_reduction",

@@ -113,6 +113,15 @@ def _cp_leader(life=4) -> Card:
     return c
 
 
+def _impel_down_leader(life=4) -> Card:
+    """Impel Down leader for OP03 prison cards."""
+    c = _card("OP02-081", "Magellan", "LEADER",
+              None, 5000, ["Purple"], "Impel Down")
+    c.life = life
+    c.counter = None
+    return c
+
+
 def _ace_leader(life=4) -> Card:
     """Ace leader for OP03 Whitebeard/Ace cards."""
     c = _card("OP03-001", "Portgas.D.Ace", "LEADER",
@@ -374,6 +383,9 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
     if card_id in CP_LEADER_CARDS and tc.card_type != "LEADER":
         p1.leader = _cp_leader(4)
 
+    if card_id in ("OP03-068", "OP03-069") and tc.card_type != "LEADER":
+        p1.leader = _impel_down_leader(4)
+
     # Cards requiring Iceburg leader
     ICEBURG_LEADER_CARDS = {"OP03-075"}
     if card_id in ICEBURG_LEADER_CARDS and tc.card_type != "LEADER":
@@ -440,6 +452,13 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
         kuro_char.power_modifier = 0
         p1.cards_in_play.append(kuro_char)
 
+    if card_id == "OP03-021":
+        for i in range(2):
+            east_blue = _card(f"EB-{i}", f"East Blue Test {i+1}", "CHARACTER",
+                               3, 4000, ["Green"], "East Blue")
+            east_blue.is_resting = False
+            p1.cards_in_play.append(east_blue)
+
     # OP03-042: Need a blue Usopp in trash
     if card_id == "OP03-042":
         usopp_trash = _card("USP-001", "Usopp", "CHARACTER",
@@ -449,6 +468,10 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
     # OP03-064, OP03-067: Need Galley-La Company leader
     if card_id in ("OP03-064", "OP03-067"):
         p1.leader = _iceburg_leader(4)
+
+    if card_id == "OP03-094":
+        cp_top = _card("CP-T05", "CP9 Topdeck", "CHARACTER", 5, 6000, ["Black"], "CP9")
+        p1.deck.insert(0, cp_top)
 
     return gs, p1, tc
 
