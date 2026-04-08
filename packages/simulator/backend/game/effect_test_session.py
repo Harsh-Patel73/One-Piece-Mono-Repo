@@ -389,6 +389,17 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
     if card_id in NAMI_LEADER_CARDS and tc.card_type != "LEADER":
         p1.leader = _nami_blue_leader(4)
 
+    if card_id == "OP03-033":
+        p2.leader = _eb_leader(4)
+
+    if card_id == "OP03-040":
+        while len(p1.deck) > 4:
+            p1.trash.append(p1.deck.pop())
+
+    if card_id in {"OP03-045", "OP03-049", "OP03-053"}:
+        while len(p1.deck) > 20:
+            p1.trash.append(p1.deck.pop())
+
     # OP03-080, OP03-092: Need CP cards in trash for "place 2 CP from trash at bottom"
     if card_id in ("OP03-080", "OP03-092"):
         cp1 = _card("CP-T01", "CP9 Agent", "CHARACTER", 3, 4000, ["Black"], "CP9")

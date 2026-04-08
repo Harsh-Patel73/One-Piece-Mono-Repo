@@ -940,6 +940,21 @@ def setup_socket_handlers(sio: socketio.AsyncServer, game_manager: GameManager):
                         gs.player1.cards_in_play.append(wfc_copy)
                         gs._apply_keywords(wfc_copy)
 
+        # OP03-specific frontend test setup overrides from pending fixes.
+        if card.id == "OP03-033":
+            for _lc in game_manager.card_db.values():
+                if _lc.card_type == "LEADER" and 'east blue' in (_lc.card_origin or '').lower():
+                    gs.player2.leader = copy.deepcopy(_lc)
+                    break
+
+        if card.id == "OP03-040":
+            while len(gs.player1.deck) > 4:
+                gs.player1.trash.append(gs.player1.deck.pop())
+
+        if card.id in {"OP03-045", "OP03-049", "OP03-053"}:
+            while len(gs.player1.deck) > 20:
+                gs.player1.trash.append(gs.player1.deck.pop())
+
         # For cards that check opponent's attribute (e.g. Luffy OP01-024 vs Strike attribute),
         # seed P2's field with matching attribute characters.
         _attribute_types = ['strike', 'ranged', 'wisdom', 'special', 'slash']

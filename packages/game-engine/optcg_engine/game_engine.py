@@ -2615,6 +2615,27 @@ class GameState:
                         self._log(f"{c.name} returns to field rested")
                         break
 
+            elif action == "op03_027_rest_then_optional_buchi":
+                # OP03-027 Sham: rest chosen target, then optionally play 1 Buchi from hand if none is in play
+                target_idx = int(selected[0]) if selected else -1
+                target_cards = data.get("target_cards", [])
+                opponent = self.player2 if player == self.player1 else self.player1
+                if 0 <= target_idx < len(target_cards):
+                    target_info = target_cards[target_idx]
+                    for c in opponent.cards_in_play:
+                        if c.id == target_info["id"]:
+                            c.is_resting = True
+                            self._log(f"{c.name} was rested")
+                            break
+                has_buchi = any(getattr(c, 'name', '') == 'Buchi' for c in player.cards_in_play)
+                hand_buchi = [c for c in player.hand if getattr(c, 'name', '') == 'Buchi']
+                if hand_buchi and not has_buchi:
+                    from .effects.hardcoded import create_play_from_hand_choice
+                    create_play_from_hand_choice(
+                        self, player, hand_buchi, source_card=None,
+                        prompt="Sham: You may play 1 Buchi from your hand"
+                    )
+
             elif action == "op03_016_ko_then_boost":
                 # OP03-016 Flame Emperor: KO target then boost leader +3000 and double attack
                 target_idx = int(selected[0]) if selected else -1
@@ -2633,6 +2654,7 @@ class GameState:
                     player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 3000
                     player.leader._sticky_power_modifier = getattr(player.leader, '_sticky_power_modifier', 0) + 3000
                     player.leader.has_doubleattack = True
+                    player.leader.has_double_attack = True
                     player.leader._temp_doubleattack = True
                     self._log(f"{player.leader.name} gains +3000 power and [Double Attack] this turn")
 
@@ -2744,6 +2766,70 @@ class GameState:
                     create_power_effect_choice(game_state=self, player=player, targets=own_chars, power_amount=1000,
                                               source_card=None, prompt="One, Two, Jango: Choose 1 of your cards to give +1000 power",
                                               min_selections=0, max_selections=1)
+
+            elif action == "op03_047_return_then_optional_trash":
+                # OP03-047 Zeff: return chosen cost 3 or less, then optionally trash 2 from deck
+                target_idx = int(selected[0]) if selected else -1
+                target_cards = data.get("target_cards", [])
+                if 0 <= target_idx < len(target_cards):
+                    target_info = target_cards[target_idx]
+                    for p_ in [player, self.player2 if player == self.player1 else self.player1]:
+                        for c in p_.cards_in_play[:]:
+                            if c.id == target_info["id"]:
+                                p_.cards_in_play.remove(c)
+                                p_.hand.append(c)
+                                self._log(f"{c.name} was returned to hand")
+                                break
+                import uuid as _uuid
+                self.pending_choice = PendingChoice(
+                    choice_id=f"op03_047_trash_{_uuid.uuid4().hex[:8]}",
+                    choice_type="yes_no",
+                    prompt="Zeff: Trash 2 cards from the top of your deck?",
+                    options=[
+                        {"id": "yes", "label": "Yes", "card_id": "op03_047", "card_name": "Zeff"},
+                        {"id": "no", "label": "No", "card_id": "op03_047", "card_name": "Zeff"},
+                    ],
+                    min_selections=1,
+                    max_selections=1,
+                    source_card_id=data.get("source_card_id"),
+                    source_card_name="Zeff",
+                    callback_action="optional_trash_from_deck",
+                    callback_data={"player_id": player.player_id, "count": 2},
+                )
+
+            elif action == "op03_054_power_then_optional_trash":
+                # OP03-054 Rubber Band: give selected own target +2000, then optionally trash 1 from deck
+                target_idx = int(selected[0]) if selected else -1
+                target_cards = data.get("target_cards", [])
+                if 0 <= target_idx < len(target_cards):
+                    target_info = target_cards[target_idx]
+                    target = None
+                    for c in player.cards_in_play:
+                        if c.id == target_info["id"]:
+                            target = c
+                            break
+                    if not target and player.leader and player.leader.id == target_info["id"]:
+                        target = player.leader
+                    if target:
+                        target.power_modifier = getattr(target, 'power_modifier', 0) + 2000
+                        target._sticky_power_modifier = getattr(target, '_sticky_power_modifier', 0) + 2000
+                        self._log(f"{target.name} gets +2000 power")
+                import uuid as _uuid
+                self.pending_choice = PendingChoice(
+                    choice_id=f"op03_054_trash_{_uuid.uuid4().hex[:8]}",
+                    choice_type="yes_no",
+                    prompt="Usopp's Rubber Band of Doom!!!: Trash 1 card from the top of your deck?",
+                    options=[
+                        {"id": "yes", "label": "Yes", "card_id": "op03_054", "card_name": "Usopp's Rubber Band of Doom!!!"},
+                        {"id": "no", "label": "No", "card_id": "op03_054", "card_name": "Usopp's Rubber Band of Doom!!!"},
+                    ],
+                    min_selections=1,
+                    max_selections=1,
+                    source_card_id=data.get("source_card_id"),
+                    source_card_name="Usopp's Rubber Band of Doom!!!",
+                    callback_action="optional_trash_from_deck",
+                    callback_data={"player_id": player.player_id, "count": 1},
+                )
 
             elif action == "king_ko_then_2":
                 # OP01-096 King: KO the selected cost-3-or-less target, then prompt for cost 2 or less
@@ -4857,7 +4943,7 @@ class GameState:
                 target_idx = int(selected[0]) if selected else -1
                 if 0 <= target_idx < len(target_cards):
                     target_info = target_cards[target_idx]
-                    tid = target_info.get("card_id", "")
+                    tid = target_info.get("id", "")
                     target = None
                     for c in player.cards_in_play:
                         if c.id == tid:

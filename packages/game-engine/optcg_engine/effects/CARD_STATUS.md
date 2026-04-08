@@ -274,128 +274,128 @@
 
 | ID | Status | Type | Notes |
 |----|--------|------|-------|
-| OP03-001 | ⚠ Needs Fix | LEADER | I should be prompted to select which cards I want to trash from hand. Currently it is happening automatically.  |
+| OP03-001 | ✅ Verified | LEADER | I should be prompted to select which cards I want to trash from hand. Currently it is happening automatically. |
 | OP03-002 | ✅ Verified | CHARACTER | DON x1: opp can't use Blocker 2000 or less |
 | OP03-003 | ✅ Verified | CHARACTER | on_play: look 5, reveal Whitebeard Pirates card |
-| OP03-004 | ⚠ Needs Fix | CHARACTER | When I attach the DON!! he gets rush as he should. However, it should not let me attack the leader with rush when I use the effect. It states that the leader cannot be attacked on the turn that this card is played.  |
-| OP03-005 | ⚠ Needs Fix | CHARACTER | When I activate his effect, this card should get sent to the trash at the end of the turn.  |
+| OP03-004 | ✅ Verified | CHARACTER | When I attach the DON!! he gets rush as he should. However, it should not let me attack the leader with rush when I use the effect. It states that the leader cannot be attacked on the turn that this card is played. |
+| OP03-005 | ✅ Verified | CHARACTER | When I activate his effect, this card should get sent to the trash at the end of the turn. |
 | OP03-006 | ✅ Verified | CHARACTER |  |
 | OP03-007 | ✅ Verified | CHARACTER |  |
-| OP03-008 | ⚠ Needs Fix | CHARACTER | If the card attacking this card has the slash attribute, even if they win the combat he should not be able to be KOd.  |
-| OP03-009 | ⚠ Needs Fix | CHARACTER | It seems he is giving the rested don card to a leader or character, but that character/leader is not gaining +1000 power when the rested DON is attached to them.  |
+| OP03-008 | ✅ Verified | CHARACTER | If the card attacking this card has the slash attribute, even if they win the combat he should not be able to be KOd. |
+| OP03-009 | ✅ Verified | CHARACTER | It seems he is giving the rested don card to a leader or character, but that character/leader is not gaining +1000 power when the rested DON is attached to them. |
 | OP03-010 | ✅ Verified | CHARACTER | blocker |
-| OP03-011 | ⚠ Needs Fix | CHARACTER | When I attach DON!! and attack wtih this character I should be prompted to give -2000 power to 1 of the opponents character.  |
-| OP03-012 | ⚠ Needs Fix | CHARACTER | This card should let me select from my hand as well for the trash option. Also, after I trash I am not drawing the 1 card.  Also, the card is not being sent to the trash.  |
-| OP03-013 | ⚠ Needs Fix | CHARACTER | I should be prompted to select the card to trash from hand to use his effect, otherwise the effect works great.  |
+| OP03-011 | ✅ Verified | CHARACTER | When I attach DON!! and attack wtih this character I should be prompted to give -2000 power to 1 of the opponents character. |
+| OP03-012 | ✅ Verified | CHARACTER | This card should let me select from my hand as well for the trash option. Also, after I trash I am not drawing the 1 card.  Also, the card is not being sent to the trash. |
+| OP03-013 | ⚠ Needs Fix | CHARACTER | I am not being prompted to play this character from the trash rested now.  |
 | OP03-014 | ✅ Verified | CHARACTER | on_attack: play red cost 1 from hand |
-| OP03-015 | ⚠ Needs Fix | CHARACTER | I should be given the option to select the leader as well when this character is KOd.  |
-| OP03-016 | ⚠ Needs Fix | EVENT | Currently it let's me kill 8000 power and above, it should be 8000 power or less. Also, it is not indicating that my leader is gaining +3000 power and double attack.  |
-| OP03-017 | ⚠ Needs Fix | EVENT | This card should give -4000 power, it is only giving -2000 power.  |
-| OP03-018 | ⚠ Needs Fix | EVENT | It let's me KO 1 of the opponent's characters with 5000 power or less, but it should also let me KO a 4000 power or less.  |
-| OP03-019 | ⚠ Needs Fix | EVENT | It is not increasing my leader's power by 4000.  |
+| OP03-015 | ⚠ Needs Fix | CHARACTER | If this card is KOd I should only be able to give an opponent's leader or character -2000 power if it is the opponents turn.  |
+| OP03-016 | ✅ Verified | EVENT | Currently it let's me kill 8000 power and above, it should be 8000 power or less. Also, it is not indicating that my leader is gaining +3000 power and double attack. |
+| OP03-017 | ⚠ Needs Fix | EVENT | This card is allowing me to select the opponents leader to give minus power, it should only be characters.  |
+| OP03-018 | ⚠ Needs Fix | EVENT | If I have 2 copies of Fire Fist OP03-018 in my hand, I should be able to trash the other one to use this cards effect. Right now it does not let me do that.  |
+| OP03-019 | ✅ Verified | EVENT | It is not increasing my leader's power by 4000. |
 | OP03-020 | ✅ Verified | STAGE | activate: DON -2, if Ace leader, look 5 add Event |
-| OP03-021 | 🔲 To Do | LEADER | activate: rest 3 DON + 2 East Blue, set active, rest opp 5- |
-| OP03-022 | 🔲 To Do | LEADER | DON x2 on_attack: DON -1, play cost 4 with Trigger |
+| OP03-021 | ⚠ Needs Fix | LEADER | Add 2 east blue type characters to the field so I can test this leader effect.  |
+| OP03-022 | ⚠ Needs Fix | LEADER | This leader should not return 1 DON!! to the DON!! deck, it should just rest 1 DON!! to use the effect. But the rest of it is working great.  |
 | OP03-023 | ✅ Verified | CHARACTER |  |
-| OP03-024 | ⚠ Needs Fix | CHARACTER | It should prompt me to select which 2 of my opponent's 4 cost or less characters to rest.  |
-| OP03-025 | ⚠ Needs Fix | CHARACTER | I should have to trash 1 card from hand, which is correct and prompts so that is good. The problem is I should only be able to KO 2 rested 4 costs or less IF I trash the card. It is doing that automatically. I also should be prompted to select which rested 4 costs or less I want to KO.  |
+| OP03-024 | ✅ Verified | CHARACTER | It should prompt me to select which 2 of my opponent's 4 cost or less characters to rest. |
+| OP03-025 | ⚠ Needs Fix | CHARACTER | I get "Invalid Choice response" when trying to use this effect.  |
 | OP03-026 | ✅ Verified | CHARACTER | on_play: if East Blue leader, rest opp char; trigger |
-| OP03-027 | ⚠ Needs Fix | CHARACTER | Also, when Buchi is played out via Sham's effect, it should still activate his on play.  |
-| OP03-028 | 🔲 To Do | CHARACTER | on_play: set East Blue cost 6- active OR rest opp |
+| OP03-027 | ✅ Verified | CHARACTER | Also, when Buchi is played out via Sham's effect, it should still activate his on play. |
+| OP03-028 | ⚠ Needs Fix | CHARACTER | This card has 2 effects, and I should be prompted to select which one I want to use, either the set a East Blue Leader or Character as active, OR rest this character and 1 of the opponents characters.  |
 | OP03-029 | ✅ Verified | CHARACTER | on_play: KO rested cost 4-; trigger |
 | OP03-030 | ✅ Verified | CHARACTER | on_play: look 5, reveal green East Blue; trigger |
 | OP03-031 | ✅ Verified | CHARACTER | blocker |
-| OP03-032 | ⚠ Needs Fix | CHARACTER | If the card attacking this card (leader or character) has the slash attribute, regardless of if they win the combat this character should not be able to be KOd.  |
-| OP03-033 | ⚠ Needs Fix | CHARACTER | Make the opponent's leader have the East Blue type. I believe OP03-021 will work.  |
+| OP03-032 | ✅ Verified | CHARACTER | If the card attacking this card (leader or character) has the slash attribute, regardless of if they win the combat this character should not be able to be KOd. |
+| OP03-033 | ⚠ Needs Fix | CHARACTER | Leader needs to be an East Blue Type in the simulation to test.  |
 | OP03-034 | ✅ Verified | CHARACTER | on_play: KO rested cost 2- |
 | OP03-035 | ✅ Verified | CHARACTER |  |
 | OP03-036 | 🔲 To Do | EVENT | on_play: rest East Blue, set Kuro active |
-| OP03-037 | 🔲 To Do | EVENT | on_play: rest East Blue, KO rested cost 4- |
-| OP03-038 | ⚠ Needs Fix | EVENT | I should be given the option to select 2 characters with a cost of 2 or less, currently it only lets me choose 1.  |
-| OP03-039 | ⚠ Needs Fix | EVENT | I should be prompted to select which 1 cost I want to rest. 0 should also be an option, then I should be prompted to select which character to give +1000 power to for the turn.  |
+| OP03-037 | ⚠ Needs Fix | EVENT | I should be prompted to select which East Blue Type character I want to rest.  |
+| OP03-038 | ✅ Verified | EVENT | I should be given the option to select 2 characters with a cost of 2 or less, currently it only lets me choose 1. |
+| OP03-039 | ⚠ Needs Fix | EVENT | The leader is an option to give +1000 power, it should ONLY let me select characters. |
 | OP03-040 | ⚠ Needs Fix | LEADER | Move 36 cards to the trash. I want the deck size to be 4 for this leader.  |
-| OP03-041 | ⚠ Needs Fix | CHARACTER | When this character deal's damage (by attacking leader), the top 7 cards from the deck should be added to the trash.  |
-| OP03-042 | ⚠ Needs Fix | CHARACTER | It should prompt me to select which card to add to hand.  |
-| OP03-043 | ⚠ Needs Fix | CHARACTER | If any of my cards, leader or character deals damage to the opponent, I should be promtped per Gaimon effect to choose if I want to trash 3 cards from the top of my deck. If I choose to do so, trash the gaimon.  |
+| OP03-041 | ✅ Verified | CHARACTER | When this character deal's damage (by attacking leader), the top 7 cards from the deck should be added to the trash. |
+| OP03-042 | ✅ Verified | CHARACTER | It should prompt me to select which card to add to hand. |
+| OP03-043 | ✅ Verified | CHARACTER | If any of my cards, leader or character deals damage to the opponent, I should be promtped per Gaimon effect to choose if I want to trash 3 cards from the top of my deck. If I choose to do so, trash the gaimon. |
 | OP03-044 | ✅ Verified | CHARACTER | on_play: draw 2, trash 2 |
-| OP03-045 | ⚠ Needs Fix | CHARACTER | Make the deck size 20, so I can test this card.  |
+| OP03-045 | ⚠ Needs Fix | CHARACTER | The +3000 power when there are 20 or less cards in deck should only be on the opponents turn.  |
 | OP03-046 | ✅ Verified | CHARACTER |  |
-| OP03-047 | ⚠ Needs Fix | CHARACTER | I should be able to choose the opponents 3 costs or less as well, for the on play effect. And then be given the option to trash 2 cards from the top of my deck.  |
+| OP03-047 | ⚠ Needs Fix | CHARACTER | When this card deals damage I should be prompted if I want to trash the top 7 cards of my deck. This is ONLY if I have a DON!! on the card.  |
 | OP03-048 | ✅ Verified | CHARACTER | on_play: if Nami leader, return opp cost 5- |
-| OP03-049 | ⚠ Needs Fix | CHARACTER | Set my deck to 20 cards so I can test this card.  |
-| OP03-050 | ⚠ Needs Fix | CHARACTER | I should be given the option if I want to trash 1 card from the top of the deck.  |
-| OP03-051 | ⚠ Needs Fix | CHARACTER | The On KO works, but I should be given to option to trash 7 cards from the top of my deck when I deal damage and there is don attached to this card.  |
+| OP03-049 | ✅ Verified | CHARACTER | Set my deck to 20 cards so I can test this card. |
+| OP03-050 | ✅ Verified | CHARACTER | I should be given the option if I want to trash 1 card from the top of the deck. |
+| OP03-051 | ⚠ Needs Fix | CHARACTER | I should be prompted similarly to when I deal damage, when the card is KOd, if I want to trash the top 3 cards from the deck.  |
 | OP03-052 | ✅ Verified | CHARACTER |  |
-| OP03-053 | ⚠ Needs Fix | CHARACTER | Set my deck to 20 cards so I can test this card.  |
-| OP03-054 | ⚠ Needs Fix | EVENT | I should be given the option to select which leader or character gains +2000 power for the battle, also I should have the option to trash the 1 card from the top of the deck.  |
-| OP03-055 | 🔲 To Do | EVENT | counter: trash 1, leader +4000 |
-| OP03-056 | 🔲 To Do | EVENT | on_play: draw 2 |
-| OP03-057 | 🔲 To Do | EVENT | on_play: place cost 5- at bottom |
-| OP03-058 | 🔲 To Do | LEADER | continuous: cannot attack; activate: DON -1, play Galley-La 5- |
-| OP03-059 | 🔲 To Do | CHARACTER | on_attack: DON -1, gain Banish |
-| OP03-060 | 🔲 To Do | CHARACTER | on_attack: DON -1, draw 2, trash 1 |
-| OP03-061 | ⬜ No Effect | CHARACTER |  |
-| OP03-062 | 🔲 To Do | CHARACTER | on_play: look 5, reveal Water Seven card |
-| OP03-063 | 🔲 To Do | CHARACTER | blocker; on_play: DON -1, if Water Seven leader draw 1 |
-| OP03-064 | 🔲 To Do | CHARACTER | on_ko: if Galley-La leader, add 1 DON rested |
-| OP03-065 | 🔲 To Do | CHARACTER | blocker |
-| OP03-066 | 🔲 To Do | CHARACTER | on_play: rest 2 DON, add 1 active; if 8+ DON KO cost 4- |
-| OP03-067 | 🔲 To Do | CHARACTER | DON x1 on_attack: if Galley-La leader, add 1 DON rested |
-| OP03-068 | 🔲 To Do | CHARACTER | Banish; on_ko: if Impel Down leader, add 1 DON rested |
-| OP03-069 | 🔲 To Do | CHARACTER | on_ko: if Impel Down leader, draw 2 trash 1 |
-| OP03-070 | 🔲 To Do | CHARACTER | on_play: DON -1, trash cost 5, gain Rush |
-| OP03-071 | 🔲 To Do | CHARACTER | on_attack: DON -1, rest opp cost 5- |
-| OP03-072 | 🔲 To Do | EVENT | counter: trash 1, +3000 |
-| OP03-073 | 🔲 To Do | EVENT | on_play: DON -1, draw 1 |
-| OP03-074 | 🔲 To Do | EVENT | on_play: DON -2, place opp cost 4- at bottom |
-| OP03-075 | 🔲 To Do | STAGE | activate: rest, if Iceburg leader add DON |
-| OP03-076 | 🔲 To Do | LEADER | on_opponent_ko: trash 2, set leader active |
-| OP03-077 | 🔲 To Do | LEADER | DON x2 on_attack: DON -1, if 1- life add deck to life |
-| OP03-078 | 🔲 To Do | CHARACTER | DON x1 continuous: opp chars -3 cost; on_play: if opp 6+ hand trash 2 |
-| OP03-079 | 🔲 To Do | CHARACTER | DON x1 continuous: can't be KO in battle |
-| OP03-080 | 🔲 To Do | CHARACTER | on_play: place 2 CP from trash at bottom, KO cost 3- |
-| OP03-081 | 🔲 To Do | CHARACTER | on_play: draw 2, trash 2, opp -2 cost |
-| OP03-082 | ⬜ No Effect | CHARACTER |  |
-| OP03-083 | 🔲 To Do | CHARACTER | on_play: look 5, trash up to 2, rest at bottom |
-| OP03-084 | ⬜ No Effect | CHARACTER |  |
-| OP03-085 | ⬜ No Effect | CHARACTER |  |
-| OP03-086 | 🔲 To Do | CHARACTER | on_play: if CP leader, look 3, reveal CP card |
-| OP03-087 | ⬜ No Effect | CHARACTER |  |
-| OP03-088 | 🔲 To Do | CHARACTER | continuous: immune to KO by effects; blocker |
-| OP03-089 | 🔲 To Do | CHARACTER | on_play: look 3, reveal Navy card |
-| OP03-090 | 🔲 To Do | CHARACTER | DON x1 continuous: Blocker; on_ko: play CP cost 4- from trash |
+| OP03-053 | ✅ Verified | CHARACTER | Set my deck to 20 cards so I can test this card. |
+| OP03-054 | ✅ Verified | EVENT | I should be given the option to select which leader or character gains +2000 power for the battle, also I should have the option to trash the 1 card from the top of the deck. |
+| OP03-055 | ⚠ Needs Fix | EVENT | I still need to be prompted if I want to trash 2 cards from the top of the deck when I use this card.  |
+| OP03-056 | ✅ Verified | EVENT | on_play: draw 2 |
+| OP03-057 | ✅ Verified | EVENT | on_play: place cost 5- at bottom |
+| OP03-058 | ✅ Verified | LEADER | continuous: cannot attack; activate: DON -1, play Galley-La 5- |
+| OP03-059 | ✅ Verified | CHARACTER | on_attack: DON -1, gain Banish |
+| OP03-060 | ✅ Verified | CHARACTER | on_attack: DON -1, draw 2, trash 1 |
+| OP03-061 | ✅ Verified | CHARACTER |  |
+| OP03-062 | ✅ Verified | CHARACTER | on_play: look 5, reveal Water Seven card |
+| OP03-063 | ✅ Verified | CHARACTER | blocker; on_play: DON -1, if Water Seven leader draw 1 |
+| OP03-064 | ⚠ Needs Fix | CHARACTER | This card is not prompting me if I want to add 1 DON!! card from my DON!! deck and rest it when KOd.  |
+| OP03-065 | ✅ Verified | CHARACTER | blocker |
+| OP03-066 | ⚠ Needs Fix | CHARACTER | I should be prompted at every stage of this effect. The first prompt should be if I want to rest 2 DON!! to use the effect. If I say yes, then I should be prompted if I want to Add up to 1 DON!! deck and set it as active, even if I choose NOT to do this or CANNOT do this then I should still be prompted to KO 1 of my opponents characters with a cost of 4 or less GRANTED I have 8 or more DON!! cards on my field.  |
+| OP03-067 | ⚠ Needs Fix | CHARACTER | When attacking I should be prompted if I want to add up to 1 DON! card from my DON!! deck and rest it. Granted there is a DON!! on this card.  |
+| OP03-068 | ⚠ Needs Fix | CHARACTER | The On KO effect is not coded for this card. Or I am not prompted to do it.  |
+| OP03-069 | ✅ Verified | CHARACTER | on_ko: if Impel Down leader, draw 2 trash 1 |
+| OP03-070 | ⚠ Needs Fix | CHARACTER | I am using the DON -1 On play effect and trashing a 5 cost from hand but this card is not getting rush. It should if and only if I do the DON -1 and trash the card.  |
+| OP03-071 | ✅ Verified | CHARACTER | I do the DON -1 effect and choose a character of cost 5 or less to rest, but it does not actually rest that character. |
+| OP03-072 | ✅ Verified | EVENT | counter: trash 1, +3000 |
+| OP03-073 | ⚠ Needs Fix | EVENT | I am not prompted to KO the 2 cost or less after I return the DON as I should be. |
+| OP03-074 | ✅ Verified | EVENT | on_play: DON -2, place opp cost 4- at bottom |
+| OP03-075 | ⚠ Needs Fix | STAGE | For some reason it is adding 3 rested DON!! instead of 1? |
+| OP03-076 | ⚠ Needs Fix | LEADER | When this card get's set as active again it should be able to attack again.  |
+| OP03-077 | ⚠ Needs Fix | LEADER | This card's effect should be that when 2 DON!! are attached to it and the leader card is attacking ANYTHING I should have the option to rest 2 more DON!! and then trash 1 card from hand. If I choose to trash the card from hand, then if I have 1 or less life cards, I can add up to 1 card from the top of my deck to the top of my life.  Currently it is just adding the top of deck to life, not prompting me to trash 1card first.  |
+| OP03-078 | ⚠ Needs Fix | CHARACTER | I should be prompted to select 2 cards from the opponents hand to trash (I should not be able to see their hand just which cards I want to trash) |
+| OP03-079 | ✅ Verified | CHARACTER | DON x1 continuous: can't be KO in battle |
+| OP03-080 | ⚠ Needs Fix | CHARACTER | I should ONLY be able to KO a character if I have 2 cards with the CP type in my trash, and if I return them to the bottom of my deck in the order I choose. To test this we will need CP type cards in the trash.  |
+| OP03-081 | ⚠ Needs Fix | CHARACTER | I have to Draw 2 cards and Select which 2 cards I want to trash before I can give the -2 cost.  |
+| OP03-082 | ✅ Verified | CHARACTER |  |
+| OP03-083 | ✅ Verified | CHARACTER | on_play: look 5, trash up to 2, rest at bottom |
+| OP03-084 | ✅ Verified | CHARACTER |  |
+| OP03-085 | ✅ Verified | CHARACTER |  |
+| OP03-086 | ⚠ Needs Fix | CHARACTER | After looking at the top 3 it is making me send the others back to the bottom of the deck, in this case specfically we want to add them to the trash.  |
+| OP03-087 | ✅ Verified | CHARACTER |  |
+| OP03-088 | ⚠ Needs Fix | CHARACTER | This card should not be able to be KOd by ANY card EFFECTS, so if it is in combat then it can be KOd, but if a card says KO a 3 cost for less example, they can target this card but it should not actually get KOd and just waste the event card.  |
+| OP03-089 | ⚠ Needs Fix | CHARACTER | After looking at top 3 in this instance the other cards that are not selected should be trashed not sent to bottom of the deck.  |
+| OP03-090 | ✅ Verified | CHARACTER | DON x1 continuous: Blocker; on_ko: play CP cost 4- from trash |
 | OP03-091 | 🔲 To Do | CHARACTER | on_play: set opp no-effect char cost to 0 |
-| OP03-092 | 🔲 To Do | CHARACTER | on_play: place 2 CP from trash at bottom, gain Rush |
-| OP03-093 | 🔲 To Do | CHARACTER | on_play: trash 1, if CP leader KO cost 1- |
-| OP03-094 | 🔲 To Do | EVENT | on_play: if CP leader, look 5, play CP cost 5- |
-| OP03-095 | 🔲 To Do | EVENT | on_play: give 2 opp chars -2 cost |
-| OP03-096 | 🔲 To Do | EVENT | on_play: KO opp cost 0 or Stage |
-| OP03-097 | 🔲 To Do | EVENT | counter: trash 1, +3000 |
-| OP03-098 | 🔲 To Do | STAGE | activate: rest, if CP leader opp -2 cost |
+| OP03-092 | ⚠ Needs Fix | CHARACTER | I should be prompted to select 2 cards with type "CP" in the trash to add back to the bottom of the deck. And then this character should have rush if I do this.  |
+| OP03-093 | ⚠ Needs Fix | CHARACTER | I need to trash 1 card from my hand first to be able to use this effect.  |
+| OP03-094 | ⚠ Needs Fix | EVENT | Put a character with the type "CP" and a cost of 5 or less at the top of the deck so I can test this card.  |
+| OP03-095 | ⚠ Needs Fix | EVENT | It only let's me select 1 card right now.  |
+| OP03-096 | ✅ Verified | EVENT | on_play: KO opp cost 0 or Stage |
+| OP03-097 | ✅ Verified | EVENT | counter: trash 1, +3000 |
+| OP03-098 | ✅ Verified | STAGE | activate: rest, if CP leader opp -2 cost |
 | OP03-099 | 🔲 To Do | LEADER | DON x1 on_attack: look 1 life, place top/bottom, +1000 |
-| OP03-100 | 🔲 To Do | CHARACTER | trigger: trash 1 life, play this |
-| OP03-101 | ⬜ No Effect | CHARACTER |  |
+| OP03-100 | ⚠ Needs Fix | CHARACTER | Player should be prompted if they want to choose the top or bottom of the life cards, to use the "Play this card" part of the trigger.  |
+| OP03-101 | ✅ Verified | CHARACTER |  |
 | OP03-102 | 🔲 To Do | CHARACTER | DON x2 on_attack: add 1 life to hand, add deck to life |
-| OP03-103 | ⬜ No Effect | CHARACTER |  |
+| OP03-103 | ✅ Verified | CHARACTER |  |
 | OP03-104 | 🔲 To Do | CHARACTER | blocker; on_play: look 1 life, place top/bottom |
-| OP03-105 | 🔲 To Do | CHARACTER | DON x1 on_attack: trash Trigger, +3000 |
-| OP03-106 | ⬜ No Effect | CHARACTER |  |
-| OP03-107 | 🔲 To Do | CHARACTER | blocker |
-| OP03-108 | 🔲 To Do | CHARACTER | DON x1 continuous: if less life, Double Attack +1000 |
+| OP03-105 | ⚠ Needs Fix | CHARACTER | Effect works as intended but I should be promtped onwhich card to trash with a trigger.  |
+| OP03-106 | ✅ Verified | CHARACTER |  |
+| OP03-107 | ✅ Verified | CHARACTER | blocker |
+| OP03-108 | ⚠ Needs Fix | CHARACTER | The trigger for this card says "You may trash 1 from hand": Play this card. If the player DOES trash the card from hand then this should be played to the field. Also, when I have less life this card should gain Double Attack which is working, but let's say I have 4 life and the opponent has 5. After the first attack resolves we both have 4 life so this card is going back to its base power. This should not be the case it should lose the double attack, but the attack already went through so it should still deal 2 damage.  |
 | OP03-109 | 🔲 To Do | CHARACTER | on_play: trash 1 life, add deck card to life |
-| OP03-110 | 🔲 To Do | CHARACTER | on_attack: add 1 life to hand, +2000 |
-| OP03-111 | ⬜ No Effect | CHARACTER |  |
-| OP03-112 | 🔲 To Do | CHARACTER | on_play: look 4, reveal Sanji or Big Mom Pirates card |
-| OP03-113 | 🔲 To Do | CHARACTER | on_ko: look 3, reveal Big Mom Pirates card |
-| OP03-114 | 🔲 To Do | CHARACTER | on_play: if BM leader, add deck to life, trash opp life |
-| OP03-115 | 🔲 To Do | CHARACTER | on_play: trash Trigger, KO cost 1- |
-| OP03-116 | 🔲 To Do | CHARACTER | on_play: draw 3, trash 2; trigger |
-| OP03-117 | 🔲 To Do | CHARACTER | activate: rest, Charlotte Linlin +1000; trigger |
-| OP03-118 | 🔲 To Do | EVENT | counter: +5000 |
-| OP03-119 | 🔲 To Do | EVENT | on_play: if less life, KO opp cost 6- |
-| OP03-120 | 🔲 To Do | EVENT | on_play: if opp 4+ life, trash opp life |
-| OP03-121 | 🔲 To Do | EVENT | on_play: trash 1 life, KO opp cost 5- |
-| OP03-122 | 🔲 To Do | CHARACTER | on_play: return cost 6- to hand, draw 2, trash 2 |
+| OP03-110 | ⚠ Needs Fix | CHARACTER | The effect works as intended, but I should be prompted if I want to take top or bottom or none, if I choose none then this card does not gain 2000 power.  |
+| OP03-111 | ✅ Verified | CHARACTER |  |
+| OP03-112 | ✅ Verified | CHARACTER | on_play: look 4, reveal Sanji or Big Mom Pirates card |
+| OP03-113 | ✅ Verified | CHARACTER | on_ko: look 3, reveal Big Mom Pirates card |
+| OP03-114 | ✅ Verified | CHARACTER | on_play: if BM leader, add deck to life, trash opp life |
+| OP03-115 | ⚠ Needs Fix | CHARACTER | I should be prompted to choose a card with trigger from hand, if I do not then I do not get to KO a 1 cost or less per the effect.  |
+| OP03-116 | ✅ Verified | CHARACTER | on_play: draw 3, trash 2; trigger |
+| OP03-117 | ⚠ Needs Fix | CHARACTER | I should be able to choose which Carlotte Linlin card I want to give +1000 power, currently it is automatic. |
+| OP03-118 | ✅ Verified | EVENT | counter: +5000 |
+| OP03-119 | ⚠ Needs Fix | EVENT | Currently this lets me KO a 6 cost or less, it should be 4 cost or less.  |
+| OP03-120 | ✅ Verified | EVENT | on_play: if opp 4+ life, trash opp life |
+| OP03-121 | ✅ Verified | EVENT | on_play: trash 1 life, KO opp cost 5- |
+| OP03-122 | ⚠ Needs Fix | CHARACTER | This card is currently not drawing 2 and trashing 2. Also, this cards name should also be treated as "Usopp" meaning if a card says "Add an Usopp Card from Trash to Hand" this should be a valid target.  |
 | OP03-123 | 🔲 To Do | CHARACTER | on_play: add cost 8- char to life top/bottom |
 
 # Card Effect Status — OP14

@@ -87,8 +87,14 @@ def get_opponent(game_state: 'GameState', player: 'Player') -> 'Player':
 
 
 def add_power_modifier(card, amount: int):
-    """Add (or subtract) power to a card's temporary power modifier."""
+    """Add (or subtract) power to a card's temporary power modifier.
+
+    Mirror the change into the sticky modifier so mid-turn continuous-effect
+    recalculations (for example after attaching DON!!) do not wipe out
+    already-applied temporary buffs/debuffs.
+    """
     card.power_modifier = getattr(card, 'power_modifier', 0) + amount
+    card._sticky_power_modifier = getattr(card, '_sticky_power_modifier', 0) + amount
 
 
 def check_leader_type(player, type_str: str) -> bool:
