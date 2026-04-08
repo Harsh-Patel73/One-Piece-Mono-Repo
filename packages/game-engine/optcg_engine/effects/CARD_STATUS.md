@@ -171,11 +171,11 @@
 | OP02-023 | ✅ Verified | EVENT | Currently, this card is taking a life and adding it to hand. It should simply prevent the user from taking cards from life to hand by EFFECTS on their turn. So Newgate's leader effect would not let him take the life since you can no longer take life by effects when you have 3 life or less. |
 | OP02-024 | ✅ Verified | STAGE | This stage should give "Edward Newgate" and ALL Whitebeard Pirates type cards +2000 power if they have 1 life or less. |
 | OP02-025 | ⚠ Needs Fix | LEADER | Still getting "Error: Cannot activate effect" error.  |
-| OP02-026 | ⚠ Needs Fix | LEADER | When a character with no base effect so no on play, no activate main, no when attacking, there should be NO description on the card.  When that card is played, I should be prompted to set UP TO 2 DON!! cards as active.  |
+| OP02-026 | ✅ Verified | LEADER | When a character with no base effect so no on play, no activate main, no when attacking, there should be NO description on the card.  When that card is played, I should be prompted to set UP TO 2 DON!! cards as active. |
 | OP02-027 | 🔲 To Do | CHARACTER | continuous: if all DON rested, immune to opp removal |
 | OP02-028 | ✅ Verified | CHARACTER |  |
 | OP02-029 | ✅ Verified | CHARACTER | Carrot is automatically setting 1 DON as active, I should be prompted since it says up to 1, if I want to set 0 DON! as active or 1. |
-| OP02-030 | ⚠ Needs Fix | CHARACTER | It should only let me use the Activate Main effect ONCE per turn, it currently lets me do it as many times as I want.  |
+| OP02-030 | ⚠ Needs Fix | CHARACTER | I do not think the Once Per Turn is coded correctly, it is letting me restand a 2nd time.  |
 | OP02-031 | ✅ Verified | CHARACTER | The card OP02-042 has the effect "Treat this cards name as ALSO Kozuki Oden", so when this card is in play Toki should also gain blocker. |
 | OP02-032 | ✅ Verified | CHARACTER | When this card is played I should be prompted to rest 2 DON!! and set 1 minks type character with a cost of 5 or less as active. |
 | OP02-033 | ✅ Verified | CHARACTER |  |
@@ -216,7 +216,7 @@
 | OP02-068 | ✅ Verified | EVENT | It should prompt me to select a card to trash to use the effect of this card. |
 | OP02-069 | ✅ Verified | EVENT | counter: +6000 to leader; draw to 2 |
 | OP02-070 | ✅ Verified | STAGE | After I do the draw 1 and trash 1. It should prompt me to trash up to 3 cards from hand, so I can choose to trash 0, 1, 2, or 3 cards. |
-| OP02-071 | ⚠ Needs Fix | LEADER | On the players turn, ONCE per turn if a DON card is returned to the DON!! deck, the Magellan leader should gain +1000 power for the turn. Currently nothing is happening when a don is returned.  |
+| OP02-071 | ✅ Verified | LEADER | On the players turn, ONCE per turn if a DON card is returned to the DON!! deck, the Magellan leader should gain +1000 power for the turn. Currently nothing is happening when a don is returned. |
 | OP02-072 | ✅ Verified | LEADER | on_attack: DON -4 → KO opp ≤3 cost + leader +1000 |
 | OP02-073 | ✅ Verified | CHARACTER | on_play: play Jailer Beast from hand |
 | OP02-074 | ✅ Verified | CHARACTER | This card should not have blocker. It only gives "Blugori" Blocker when it is also on the field with him. |
@@ -240,13 +240,13 @@
 | OP02-092 | ✅ Verified | STAGE | activate: trash 1 + rest stage → look 3, reveal Impel Down card |
 | OP02-093 | ✅ Verified | LEADER | I do not think the leader effect is checking to see if the opponent has a 0 cost character AFTER the -1 cost is given. So for example, let's say the opponent has a 1 cost character, if I add a don to Smoker and use his leader effect then give that 1 cost -1 cost. It is now a 0 cost character so I should gain +1000 power for the turn. I should also have the option NOT to give -1 cost to an opponents character since it says up to. Then the check should still take place to see if there is a Character with a cost of 0. |
 | OP02-094 | ✅ Verified | CHARACTER | When this character battles and KOs an opponents character if it has a DON on it, then it should automatically be set back as active. |
-| OP02-095 | ⚠ Needs Fix | CHARACTER | This card should ONLY have banish if there is a character with 0 cost. He has banish even without that condition being met.  |
+| OP02-095 | ⚠ Needs Fix | CHARACTER | This card has banish even with no 0 cost on the opponents board, this should not be the case.   |
 | OP02-096 | ✅ Verified | CHARACTER | on_play: draw 1; on_attack: opp char -4 cost |
 | OP02-097 | ✅ Verified | CHARACTER |  |
 | OP02-098 | ✅ Verified | CHARACTER | I should only be able to use Koby's effect to KO a opponent's character if I trash 1 card from hand. I should also be prompted if I want to use that effect. If I choose not to trash the card from hand then I do not get to KO an opponents 3 cost character or less. |
 | OP02-099 | ✅ Verified | CHARACTER | Same as the Koby card before, I need to pay the cost of trashing 1 card from hand to get access to the KO up to 1 opponents character with cost of 5 or less. |
 | OP02-100 | ✅ Verified | CHARACTER | continuous: if Fullbody in play, can't be KO in battle |
-| OP02-101 | ⚠ Needs Fix | CHARACTER | Even though there is a character with a cost of 0, the opponent can still activate blockers with a cost of 5 or less during the battle - this should not be the case.  |
+| OP02-101 | ✅ Verified | CHARACTER | Even though there is a character with a cost of 0, the opponent can still activate blockers with a cost of 5 or less during the battle - this should not be the case. |
 | OP02-102 | ✅ Verified | CHARACTER | Smoker needs to be the leader to test this card. |
 | OP02-103 | ✅ Verified | CHARACTER | on_attack: DON x1; opp char -2 cost |
 | OP02-104 | ✅ Verified | CHARACTER | The trigger for this card is "Play this card" but when I use the trigger the card is sent to the trash. |
@@ -258,7 +258,7 @@
 | OP02-110 | ✅ Verified | CHARACTER | Even though I chose a character to not let them be able to attack per Hina's effect it still allows them to attack. |
 | OP02-111 | ✅ Verified | CHARACTER | on_attack: if Jango in play, +3000 power |
 | OP02-112 | ✅ Verified | CHARACTER | When I activate this character's effect it lets me give an opponents character -1 cost but it does not let me choose a leader or character to give +1000 power to. |
-| OP02-113 | ⚠ Needs Fix | CHARACTER | This card is not gaining +2000 power when there is a character with a cost of 0. |
+| OP02-113 | ⚠ Needs Fix | CHARACTER | The power gain should only last for the battle, so once the combat is done it shuld return to it's base power.  |
 | OP02-114 | ⚠ Needs Fix | CHARACTER | This card should only gain +1000 power on the opponents turn, he is currently getting it on my turn too.  |
 | OP02-115 | ✅ Verified | CHARACTER | on_attack: DON x2; KO opp cost 0 char |
 | OP02-116 | ✅ Verified | CHARACTER |  |
@@ -267,3 +267,139 @@
 | OP02-119 | ✅ Verified | EVENT | on_play: KO opp char cost 1 or less |
 | OP02-120 | ✅ Verified | CHARACTER | They lose the +1000 power when I end my turn, they should keep that buff until my NEXT turn begins. |
 | OP02-121 | ⚠ Needs Fix | CHARACTER | There is still no prompt to KO a 0 cost, after he gives all the opponents characters -5 cost.  |
+
+---
+
+# Card Effect Status — OP03
+
+| ID | Status | Type | Notes |
+|----|--------|------|-------|
+| OP03-001 | ⚠ Needs Fix | LEADER | I should be prompted to select which cards I want to trash from hand. Currently it is happening automatically.  |
+| OP03-002 | ✅ Verified | CHARACTER | DON x1: opp can't use Blocker 2000 or less |
+| OP03-003 | ✅ Verified | CHARACTER | on_play: look 5, reveal Whitebeard Pirates card |
+| OP03-004 | ⚠ Needs Fix | CHARACTER | When I attach the DON!! he gets rush as he should. However, it should not let me attack the leader with rush when I use the effect. It states that the leader cannot be attacked on the turn that this card is played.  |
+| OP03-005 | ⚠ Needs Fix | CHARACTER | When I activate his effect, this card should get sent to the trash at the end of the turn.  |
+| OP03-006 | ✅ Verified | CHARACTER |  |
+| OP03-007 | ✅ Verified | CHARACTER |  |
+| OP03-008 | ⚠ Needs Fix | CHARACTER | If the card attacking this card has the slash attribute, even if they win the combat he should not be able to be KOd.  |
+| OP03-009 | ⚠ Needs Fix | CHARACTER | It seems he is giving the rested don card to a leader or character, but that character/leader is not gaining +1000 power when the rested DON is attached to them.  |
+| OP03-010 | ✅ Verified | CHARACTER | blocker |
+| OP03-011 | ⚠ Needs Fix | CHARACTER | When I attach DON!! and attack wtih this character I should be prompted to give -2000 power to 1 of the opponents character.  |
+| OP03-012 | ⚠ Needs Fix | CHARACTER | This card should let me select from my hand as well for the trash option. Also, after I trash I am not drawing the 1 card.  Also, the card is not being sent to the trash.  |
+| OP03-013 | ⚠ Needs Fix | CHARACTER | I should be prompted to select the card to trash from hand to use his effect, otherwise the effect works great.  |
+| OP03-014 | ✅ Verified | CHARACTER | on_attack: play red cost 1 from hand |
+| OP03-015 | ⚠ Needs Fix | CHARACTER | I should be given the option to select the leader as well when this character is KOd.  |
+| OP03-016 | ⚠ Needs Fix | EVENT | Currently it let's me kill 8000 power and above, it should be 8000 power or less. Also, it is not indicating that my leader is gaining +3000 power and double attack.  |
+| OP03-017 | ⚠ Needs Fix | EVENT | This card should give -4000 power, it is only giving -2000 power.  |
+| OP03-018 | ⚠ Needs Fix | EVENT | It let's me KO 1 of the opponent's characters with 5000 power or less, but it should also let me KO a 4000 power or less.  |
+| OP03-019 | ⚠ Needs Fix | EVENT | It is not increasing my leader's power by 4000.  |
+| OP03-020 | ✅ Verified | STAGE | activate: DON -2, if Ace leader, look 5 add Event |
+| OP03-021 | 🔲 To Do | LEADER | activate: rest 3 DON + 2 East Blue, set active, rest opp 5- |
+| OP03-022 | 🔲 To Do | LEADER | DON x2 on_attack: DON -1, play cost 4 with Trigger |
+| OP03-023 | ✅ Verified | CHARACTER |  |
+| OP03-024 | ⚠ Needs Fix | CHARACTER | It should prompt me to select which 2 of my opponent's 4 cost or less characters to rest.  |
+| OP03-025 | ⚠ Needs Fix | CHARACTER | I should have to trash 1 card from hand, which is correct and prompts so that is good. The problem is I should only be able to KO 2 rested 4 costs or less IF I trash the card. It is doing that automatically. I also should be prompted to select which rested 4 costs or less I want to KO.  |
+| OP03-026 | ✅ Verified | CHARACTER | on_play: if East Blue leader, rest opp char; trigger |
+| OP03-027 | ⚠ Needs Fix | CHARACTER | Also, when Buchi is played out via Sham's effect, it should still activate his on play.  |
+| OP03-028 | 🔲 To Do | CHARACTER | on_play: set East Blue cost 6- active OR rest opp |
+| OP03-029 | ✅ Verified | CHARACTER | on_play: KO rested cost 4-; trigger |
+| OP03-030 | ✅ Verified | CHARACTER | on_play: look 5, reveal green East Blue; trigger |
+| OP03-031 | ✅ Verified | CHARACTER | blocker |
+| OP03-032 | ⚠ Needs Fix | CHARACTER | If the card attacking this card (leader or character) has the slash attribute, regardless of if they win the combat this character should not be able to be KOd.  |
+| OP03-033 | ⚠ Needs Fix | CHARACTER | Make the opponent's leader have the East Blue type. I believe OP03-021 will work.  |
+| OP03-034 | ✅ Verified | CHARACTER | on_play: KO rested cost 2- |
+| OP03-035 | ✅ Verified | CHARACTER |  |
+| OP03-036 | 🔲 To Do | EVENT | on_play: rest East Blue, set Kuro active |
+| OP03-037 | 🔲 To Do | EVENT | on_play: rest East Blue, KO rested cost 4- |
+| OP03-038 | ⚠ Needs Fix | EVENT | I should be given the option to select 2 characters with a cost of 2 or less, currently it only lets me choose 1.  |
+| OP03-039 | ⚠ Needs Fix | EVENT | I should be prompted to select which 1 cost I want to rest. 0 should also be an option, then I should be prompted to select which character to give +1000 power to for the turn.  |
+| OP03-040 | ⚠ Needs Fix | LEADER | Move 36 cards to the trash. I want the deck size to be 4 for this leader.  |
+| OP03-041 | ⚠ Needs Fix | CHARACTER | When this character deal's damage (by attacking leader), the top 7 cards from the deck should be added to the trash.  |
+| OP03-042 | ⚠ Needs Fix | CHARACTER | It should prompt me to select which card to add to hand.  |
+| OP03-043 | ⚠ Needs Fix | CHARACTER | If any of my cards, leader or character deals damage to the opponent, I should be promtped per Gaimon effect to choose if I want to trash 3 cards from the top of my deck. If I choose to do so, trash the gaimon.  |
+| OP03-044 | ✅ Verified | CHARACTER | on_play: draw 2, trash 2 |
+| OP03-045 | ⚠ Needs Fix | CHARACTER | Make the deck size 20, so I can test this card.  |
+| OP03-046 | ✅ Verified | CHARACTER |  |
+| OP03-047 | ⚠ Needs Fix | CHARACTER | I should be able to choose the opponents 3 costs or less as well, for the on play effect. And then be given the option to trash 2 cards from the top of my deck.  |
+| OP03-048 | ✅ Verified | CHARACTER | on_play: if Nami leader, return opp cost 5- |
+| OP03-049 | ⚠ Needs Fix | CHARACTER | Set my deck to 20 cards so I can test this card.  |
+| OP03-050 | ⚠ Needs Fix | CHARACTER | I should be given the option if I want to trash 1 card from the top of the deck.  |
+| OP03-051 | ⚠ Needs Fix | CHARACTER | The On KO works, but I should be given to option to trash 7 cards from the top of my deck when I deal damage and there is don attached to this card.  |
+| OP03-052 | ✅ Verified | CHARACTER |  |
+| OP03-053 | ⚠ Needs Fix | CHARACTER | Set my deck to 20 cards so I can test this card.  |
+| OP03-054 | ⚠ Needs Fix | EVENT | I should be given the option to select which leader or character gains +2000 power for the battle, also I should have the option to trash the 1 card from the top of the deck.  |
+| OP03-055 | 🔲 To Do | EVENT | counter: trash 1, leader +4000 |
+| OP03-056 | 🔲 To Do | EVENT | on_play: draw 2 |
+| OP03-057 | 🔲 To Do | EVENT | on_play: place cost 5- at bottom |
+| OP03-058 | 🔲 To Do | LEADER | continuous: cannot attack; activate: DON -1, play Galley-La 5- |
+| OP03-059 | 🔲 To Do | CHARACTER | on_attack: DON -1, gain Banish |
+| OP03-060 | 🔲 To Do | CHARACTER | on_attack: DON -1, draw 2, trash 1 |
+| OP03-061 | ⬜ No Effect | CHARACTER |  |
+| OP03-062 | 🔲 To Do | CHARACTER | on_play: look 5, reveal Water Seven card |
+| OP03-063 | 🔲 To Do | CHARACTER | blocker; on_play: DON -1, if Water Seven leader draw 1 |
+| OP03-064 | 🔲 To Do | CHARACTER | on_ko: if Galley-La leader, add 1 DON rested |
+| OP03-065 | 🔲 To Do | CHARACTER | blocker |
+| OP03-066 | 🔲 To Do | CHARACTER | on_play: rest 2 DON, add 1 active; if 8+ DON KO cost 4- |
+| OP03-067 | 🔲 To Do | CHARACTER | DON x1 on_attack: if Galley-La leader, add 1 DON rested |
+| OP03-068 | 🔲 To Do | CHARACTER | Banish; on_ko: if Impel Down leader, add 1 DON rested |
+| OP03-069 | 🔲 To Do | CHARACTER | on_ko: if Impel Down leader, draw 2 trash 1 |
+| OP03-070 | 🔲 To Do | CHARACTER | on_play: DON -1, trash cost 5, gain Rush |
+| OP03-071 | 🔲 To Do | CHARACTER | on_attack: DON -1, rest opp cost 5- |
+| OP03-072 | 🔲 To Do | EVENT | counter: trash 1, +3000 |
+| OP03-073 | 🔲 To Do | EVENT | on_play: DON -1, draw 1 |
+| OP03-074 | 🔲 To Do | EVENT | on_play: DON -2, place opp cost 4- at bottom |
+| OP03-075 | 🔲 To Do | STAGE | activate: rest, if Iceburg leader add DON |
+| OP03-076 | 🔲 To Do | LEADER | on_opponent_ko: trash 2, set leader active |
+| OP03-077 | 🔲 To Do | LEADER | DON x2 on_attack: DON -1, if 1- life add deck to life |
+| OP03-078 | 🔲 To Do | CHARACTER | DON x1 continuous: opp chars -3 cost; on_play: if opp 6+ hand trash 2 |
+| OP03-079 | 🔲 To Do | CHARACTER | DON x1 continuous: can't be KO in battle |
+| OP03-080 | 🔲 To Do | CHARACTER | on_play: place 2 CP from trash at bottom, KO cost 3- |
+| OP03-081 | 🔲 To Do | CHARACTER | on_play: draw 2, trash 2, opp -2 cost |
+| OP03-082 | ⬜ No Effect | CHARACTER |  |
+| OP03-083 | 🔲 To Do | CHARACTER | on_play: look 5, trash up to 2, rest at bottom |
+| OP03-084 | ⬜ No Effect | CHARACTER |  |
+| OP03-085 | ⬜ No Effect | CHARACTER |  |
+| OP03-086 | 🔲 To Do | CHARACTER | on_play: if CP leader, look 3, reveal CP card |
+| OP03-087 | ⬜ No Effect | CHARACTER |  |
+| OP03-088 | 🔲 To Do | CHARACTER | continuous: immune to KO by effects; blocker |
+| OP03-089 | 🔲 To Do | CHARACTER | on_play: look 3, reveal Navy card |
+| OP03-090 | 🔲 To Do | CHARACTER | DON x1 continuous: Blocker; on_ko: play CP cost 4- from trash |
+| OP03-091 | 🔲 To Do | CHARACTER | on_play: set opp no-effect char cost to 0 |
+| OP03-092 | 🔲 To Do | CHARACTER | on_play: place 2 CP from trash at bottom, gain Rush |
+| OP03-093 | 🔲 To Do | CHARACTER | on_play: trash 1, if CP leader KO cost 1- |
+| OP03-094 | 🔲 To Do | EVENT | on_play: if CP leader, look 5, play CP cost 5- |
+| OP03-095 | 🔲 To Do | EVENT | on_play: give 2 opp chars -2 cost |
+| OP03-096 | 🔲 To Do | EVENT | on_play: KO opp cost 0 or Stage |
+| OP03-097 | 🔲 To Do | EVENT | counter: trash 1, +3000 |
+| OP03-098 | 🔲 To Do | STAGE | activate: rest, if CP leader opp -2 cost |
+| OP03-099 | 🔲 To Do | LEADER | DON x1 on_attack: look 1 life, place top/bottom, +1000 |
+| OP03-100 | 🔲 To Do | CHARACTER | trigger: trash 1 life, play this |
+| OP03-101 | ⬜ No Effect | CHARACTER |  |
+| OP03-102 | 🔲 To Do | CHARACTER | DON x2 on_attack: add 1 life to hand, add deck to life |
+| OP03-103 | ⬜ No Effect | CHARACTER |  |
+| OP03-104 | 🔲 To Do | CHARACTER | blocker; on_play: look 1 life, place top/bottom |
+| OP03-105 | 🔲 To Do | CHARACTER | DON x1 on_attack: trash Trigger, +3000 |
+| OP03-106 | ⬜ No Effect | CHARACTER |  |
+| OP03-107 | 🔲 To Do | CHARACTER | blocker |
+| OP03-108 | 🔲 To Do | CHARACTER | DON x1 continuous: if less life, Double Attack +1000 |
+| OP03-109 | 🔲 To Do | CHARACTER | on_play: trash 1 life, add deck card to life |
+| OP03-110 | 🔲 To Do | CHARACTER | on_attack: add 1 life to hand, +2000 |
+| OP03-111 | ⬜ No Effect | CHARACTER |  |
+| OP03-112 | 🔲 To Do | CHARACTER | on_play: look 4, reveal Sanji or Big Mom Pirates card |
+| OP03-113 | 🔲 To Do | CHARACTER | on_ko: look 3, reveal Big Mom Pirates card |
+| OP03-114 | 🔲 To Do | CHARACTER | on_play: if BM leader, add deck to life, trash opp life |
+| OP03-115 | 🔲 To Do | CHARACTER | on_play: trash Trigger, KO cost 1- |
+| OP03-116 | 🔲 To Do | CHARACTER | on_play: draw 3, trash 2; trigger |
+| OP03-117 | 🔲 To Do | CHARACTER | activate: rest, Charlotte Linlin +1000; trigger |
+| OP03-118 | 🔲 To Do | EVENT | counter: +5000 |
+| OP03-119 | 🔲 To Do | EVENT | on_play: if less life, KO opp cost 6- |
+| OP03-120 | 🔲 To Do | EVENT | on_play: if opp 4+ life, trash opp life |
+| OP03-121 | 🔲 To Do | EVENT | on_play: trash 1 life, KO opp cost 5- |
+| OP03-122 | 🔲 To Do | CHARACTER | on_play: return cost 6- to hand, draw 2, trash 2 |
+| OP03-123 | 🔲 To Do | CHARACTER | on_play: add cost 8- char to life top/bottom |
+
+# Card Effect Status — OP14
+
+| ID | Status | Type | Notes |
+|----|--------|------|-------|
+| OP14-073 | ✅ Verified | CHARACTER |  |

@@ -278,6 +278,47 @@ async def submit_verdict(data: dict):
             updated = True
             break
 
+    if not updated:
+        # Card not in CARD_STATUS.md yet — find or create the set section and add it
+        set_code = re.match(r"([A-Z]+\d+)", card_id)
+        set_prefix = set_code.group(1) if set_code else ""
+        card_type = ""
+        card_obj = CARD_DB.get(card_id)
+        if card_obj:
+            card_type = getattr(card_obj, "card_type", "") or ""
+        new_row = f"| {card_id} | {new_status} | {card_type} | {note} |"
+
+        # Find the right section to insert into
+        section_header = f"# Card Effect Status — {set_prefix}"
+        section_idx = None
+        for i, line in enumerate(lines):
+            if section_header in line:
+                section_idx = i
+                break
+
+        if section_idx is not None:
+            # Find the last table row in this section
+            insert_at = section_idx + 1
+            for i in range(section_idx + 1, len(lines)):
+                if lines[i].startswith("| "):
+                    parts_check = [p.strip() for p in lines[i].split("|")]
+                    if len(parts_check) >= 3 and re.match(r"[A-Z0-9]+-\d+", parts_check[1]):
+                        insert_at = i + 1
+                    elif parts_check[1] in ("ID", "----", "---"):
+                        insert_at = i + 1
+                elif lines[i].strip() == "" or lines[i].startswith("#") or lines[i].startswith("**") or lines[i].startswith("---"):
+                    break
+            lines.insert(insert_at, new_row)
+        else:
+            # No section for this set yet — create one at end of file
+            lines.append("")
+            lines.append(f"# Card Effect Status — {set_prefix}")
+            lines.append("")
+            lines.append("| ID | Status | Type | Notes |")
+            lines.append("|----|--------|------|-------|")
+            lines.append(new_row)
+        updated = True
+
     if updated:
         status_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

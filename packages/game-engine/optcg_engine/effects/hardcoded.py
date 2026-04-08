@@ -86,6 +86,26 @@ def get_opponent(game_state: 'GameState', player: 'Player') -> 'Player':
     return game_state.opponent_player if game_state.current_player == player else game_state.current_player
 
 
+def add_power_modifier(card, amount: int):
+    """Add (or subtract) power to a card's temporary power modifier."""
+    card.power_modifier = getattr(card, 'power_modifier', 0) + amount
+
+
+def check_leader_type(player, type_str: str) -> bool:
+    """Check if the player's leader has the given type/origin string."""
+    return player.leader is not None and type_str in (getattr(player.leader, 'card_origin', '') or '')
+
+
+def check_life_count(player, count: int, op: str = 'le') -> bool:
+    """Check player's life card count against a threshold."""
+    life = len(player.life_cards)
+    if op == 'le': return life <= count
+    if op == 'lt': return life < count
+    if op == 'ge': return life >= count
+    if op == 'eq': return life == count
+    return life <= count
+
+
 def draw_cards(player: 'Player', count: int) -> List['Card']:
     """Draw cards from deck."""
     import traceback
@@ -1030,10 +1050,13 @@ def create_bottom_deck_choice(game_state: 'GameState', player: 'Player',
 
 def create_rest_choice(game_state: 'GameState', player: 'Player',
                         targets: List['Card'], source_card: 'Card' = None,
-                        prompt: str = None) -> bool:
-    """Create a pending choice for resting a target.
+                        prompt: str = None, max_selections: int = 1,
+                        min_selections: int = 1,
+                        callback_action: str = None) -> bool:
+    """Create a pending choice for resting target(s).
 
     Returns True if choice was created.
+    max_selections > 1 uses rest_targets_multi callback to handle multiple rests.
     """
     from ..game_engine import PendingChoice
 
@@ -1050,16 +1073,19 @@ def create_rest_choice(game_state: 'GameState', player: 'Player',
             "card_name": card.name,
         })
 
+    # Use multi-rest callback when selecting more than 1 target
+    cb_action = callback_action or ("rest_targets_multi" if max_selections > 1 else "rest_target")
+
     game_state.pending_choice = PendingChoice(
         choice_id=f"rest_{uuid.uuid4().hex[:8]}",
         choice_type="select_target",
-        prompt=prompt or "Choose a Character to rest",
+        prompt=prompt or f"Choose up to {max_selections} Character(s) to rest",
         options=options,
-        min_selections=1,
-        max_selections=1,
+        min_selections=min_selections,
+        max_selections=max_selections,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
-        callback_action="rest_target",
+        callback_action=cb_action,
         callback_data={
             "player_id": player.player_id,
             "target_cards": [{"id": c.id, "name": c.name} for c in targets],

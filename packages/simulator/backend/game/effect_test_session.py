@@ -95,6 +95,60 @@ def _wb_leader(life=4) -> Card:
     return c
 
 
+def _eb_leader(life=4) -> Card:
+    """East Blue leader (Kuro) for OP03 East Blue cards."""
+    c = _card("OP03-021", "Kuro", "LEADER",
+              None, 5000, ["Green"], "East Blue/Black Cat Pirates")
+    c.life = life
+    c.counter = None
+    return c
+
+
+def _cp_leader(life=4) -> Card:
+    """CP9 leader (Rob Lucci) for OP03 CP cards."""
+    c = _card("OP03-076", "Rob Lucci", "LEADER",
+              None, 5000, ["Black"], "CP9")
+    c.life = life
+    c.counter = None
+    return c
+
+
+def _ace_leader(life=4) -> Card:
+    """Ace leader for OP03 Whitebeard/Ace cards."""
+    c = _card("OP03-001", "Portgas.D.Ace", "LEADER",
+              None, 5000, ["Red"], "Whitebeard Pirates")
+    c.life = life
+    c.counter = None
+    return c
+
+
+def _bm_leader(life=4) -> Card:
+    """Big Mom Pirates leader (Charlotte Katakuri) for OP03 Big Mom cards."""
+    c = _card("OP03-099", "Charlotte Katakuri", "LEADER",
+              None, 5000, ["Yellow"], "Big Mom Pirates")
+    c.life = life
+    c.counter = None
+    return c
+
+
+def _nami_blue_leader(life=4) -> Card:
+    """Blue Nami leader for OP03 blue East Blue cards."""
+    c = _card("OP03-040", "Nami", "LEADER",
+              None, 5000, ["Blue"], "East Blue")
+    c.life = life
+    c.counter = None
+    return c
+
+
+def _iceburg_leader(life=4) -> Card:
+    """Iceburg leader for OP03 Galley-La/Water Seven cards."""
+    c = _card("OP03-058", "Iceburg", "LEADER",
+              None, 5000, ["Purple"], "Water Seven/Galley-La Company")
+    c.life = life
+    c.counter = None
+    return c
+
+
 def _make_test_card(card_data: dict) -> Card:
     id_ = card_data.get("id") or card_data.get("id_normal", "UNKNOWN")
     id_norm = card_data.get("id_normal") or id_
@@ -298,6 +352,93 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
                             1, None, ["Blue"], "Impel Down")
         p1.trash.append(blue_event)
 
+    # ── OP03 Card-specific test seeding ────────────────────────────
+
+    # Cards requiring East Blue leader
+    EB_LEADER_CARDS = {
+        "OP03-024", "OP03-026", "OP03-027", "OP03-028", "OP03-029",
+        "OP03-033", "OP03-034", "OP03-036", "OP03-037",
+    }
+    if card_id in EB_LEADER_CARDS and tc.card_type != "LEADER":
+        p1.leader = _eb_leader(4)
+
+    # Cards requiring Ace leader
+    ACE_LEADER_CARDS = {"OP03-016", "OP03-020"}
+    if card_id in ACE_LEADER_CARDS and tc.card_type != "LEADER":
+        p1.leader = _ace_leader(4)
+
+    # Cards requiring CP leader
+    CP_LEADER_CARDS = {
+        "OP03-080", "OP03-086", "OP03-093", "OP03-094", "OP03-096", "OP03-098",
+    }
+    if card_id in CP_LEADER_CARDS and tc.card_type != "LEADER":
+        p1.leader = _cp_leader(4)
+
+    # Cards requiring Iceburg leader
+    ICEBURG_LEADER_CARDS = {"OP03-075"}
+    if card_id in ICEBURG_LEADER_CARDS and tc.card_type != "LEADER":
+        p1.leader = _iceburg_leader(4)
+
+    # Cards requiring Big Mom Pirates leader
+    BM_LEADER_CARDS = {"OP03-114", "OP03-119", "OP03-120"}
+    if card_id in BM_LEADER_CARDS and tc.card_type != "LEADER":
+        p1.leader = _bm_leader(4)
+
+    # Cards requiring Nami (Blue) leader
+    NAMI_LEADER_CARDS = {"OP03-048"}
+    if card_id in NAMI_LEADER_CARDS and tc.card_type != "LEADER":
+        p1.leader = _nami_blue_leader(4)
+
+    # OP03-080, OP03-092: Need CP cards in trash for "place 2 CP from trash at bottom"
+    if card_id in ("OP03-080", "OP03-092"):
+        cp1 = _card("CP-T01", "CP9 Agent", "CHARACTER", 3, 4000, ["Black"], "CP9")
+        cp2 = _card("CP-T02", "CP9 Operative", "CHARACTER", 2, 3000, ["Black"], "CP9")
+        cp3 = _card("CP-T03", "CP9 Assassin", "CHARACTER", 4, 5000, ["Black"], "CP9")
+        p1.trash.extend([cp1, cp2, cp3])
+
+    # OP03-090: Need CP cards in trash for on_ko play from trash
+    if card_id == "OP03-090":
+        cp_trash = _card("CP-T04", "CP9 Rookie", "CHARACTER", 3, 4000, ["Black"], "CP9")
+        p1.trash.append(cp_trash)
+
+    # OP03-105, OP03-115: Need Trigger cards in hand for trash-Trigger effects
+    if card_id in ("OP03-105", "OP03-115"):
+        trigger_card = _card("TRIG-001", "Trigger Card", "CHARACTER",
+                              2, 3000, ["Yellow"], "Big Mom Pirates")
+        trigger_card.trigger = "Play this card"
+        p1.hand.insert(0, trigger_card)
+
+    # OP03-018: Need Event cards in hand for Fire Fist
+    if card_id == "OP03-018":
+        evt = _card("EVT-001", "Red Event Card", "EVENT",
+                     2, None, ["Red"], "Whitebeard Pirates")
+        p1.hand.insert(0, evt)
+
+    # OP03-070: Need cost 5 Characters in hand for Luffy's trash-for-Rush
+    if card_id == "OP03-070":
+        cost5 = _card("C5-001", "Cost 5 Character", "CHARACTER",
+                        5, 6000, ["Purple"], "Water Seven/Straw Hat Crew")
+        p1.hand.insert(0, cost5)
+
+    # OP03-036: Need a Kuro character on field (rested) and East Blue chars
+    if card_id == "OP03-036":
+        kuro_char = _card("KURO-001", "Kuro", "CHARACTER",
+                           3, 4000, ["Green"], "East Blue/Black Cat Pirates")
+        kuro_char.is_resting = True
+        kuro_char.attached_don = 0
+        kuro_char.power_modifier = 0
+        p1.cards_in_play.append(kuro_char)
+
+    # OP03-042: Need a blue Usopp in trash
+    if card_id == "OP03-042":
+        usopp_trash = _card("USP-001", "Usopp", "CHARACTER",
+                             4, 5000, ["Blue"], "East Blue")
+        p1.trash.append(usopp_trash)
+
+    # OP03-064, OP03-067: Need Galley-La Company leader
+    if card_id in ("OP03-064", "OP03-067"):
+        p1.leader = _iceburg_leader(4)
+
     return gs, p1, tc
 
 
@@ -346,18 +487,31 @@ def _diff(before: dict, after: dict) -> List[str]:
 # ─────────────────────────────────────────────────────────────────
 
 def load_status_entries(set_code: str) -> List[dict]:
+    """Load card status entries for a set (or all sets if set_code is 'ALL')."""
     if not STATUS_FILE.exists():
         return []
     entries = []
     for line in STATUS_FILE.read_text(encoding="utf-8").splitlines():
-        if not line.startswith(f"| {set_code}"):
+        if not line.startswith("| "):
             continue
         parts = [p.strip() for p in line.split("|")]
-        if len(parts) < 7:
+        if len(parts) < 5:
             continue
+        card_id = parts[1]
+        # Skip header rows
+        if not re.match(r"[A-Z0-9]+-\d+", card_id):
+            continue
+        # Filter by set code (or include all)
+        if set_code != "ALL" and not card_id.startswith(set_code):
+            continue
+        # Actual column order: | ID | Status | Type | Notes... |
         entries.append({
-            "id": parts[1], "name": parts[2], "type": parts[3],
-            "status": parts[4], "effect": parts[5], "notes": parts[6],
+            "id": card_id,
+            "name": card_id,  # real name populated from card_db later
+            "type": parts[3] if len(parts) > 3 else "",
+            "status": parts[2],
+            "effect": parts[5] if len(parts) > 5 else "",
+            "notes": parts[4] if len(parts) > 4 else "",
         })
     return entries
 
@@ -371,10 +525,11 @@ def update_card_status(card_id: str, new_status: str, notes: str = None):
     for line in lines:
         if line.startswith(f"| {card_id} |"):
             parts = line.split("|")
-            if len(parts) >= 7:
-                parts[4] = f" {new_status} "
+            # Actual column order: | ID | Status | Type | Notes... |
+            if len(parts) >= 4:
+                parts[2] = f" {new_status} "
                 if notes is not None:
-                    parts[6] = f" {notes} "
+                    parts[4] = f" {notes} " if len(parts) > 4 else f" {notes} "
                 line = "|".join(parts)
         new_lines.append(line)
     result = "\n".join(new_lines)
