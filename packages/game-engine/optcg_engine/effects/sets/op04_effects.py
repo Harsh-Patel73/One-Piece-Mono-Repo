@@ -7,9 +7,10 @@ import random
 from ..hardcoded import (
     add_don_from_deck, create_bottom_deck_choice, create_cost_reduction_choice,
     create_hand_discard_choice, create_ko_choice, create_rest_choice, create_return_to_hand_choice,
-    create_mode_choice, create_play_from_trash_choice, create_power_effect_choice,
-    create_set_active_choice, create_target_choice, draw_cards, get_characters_by_cost,
-    get_characters_by_type, get_opponent, register_effect, search_top_cards, trash_from_hand,
+    create_mode_choice, create_play_from_trash_choice, create_power_effect_choice, create_trash_choice,
+    create_set_active_choice, create_target_choice, add_power_modifier, check_life_count,
+    draw_cards, get_characters_by_cost, get_characters_by_type, get_opponent, register_effect,
+    search_top_cards, trash_from_hand,
 )
 
 
@@ -46,217 +47,109 @@ def _return_active_don_to_deck(player):
     return False
 
 
-# --- OP04-081: Cavendish ---
-@register_effect("OP04-081", "WHEN_ATTACKING", "Rest Leader to KO cost 1 or less, trash 2 from deck")
-def cavendish_effect(game_state, player, card):
-    if player.leader and not player.leader.is_resting:
-        player.leader.is_resting = True
-        opponent = get_opponent(game_state, player)
-        # Trash 2 from deck first (not a choice)
-        for _ in range(2):
-            if player.deck:
-                player.trash.append(player.deck.pop(0))
-        # Then KO cost 1 or less with choice
-        targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 1]
-        if targets:
-            return create_ko_choice(game_state, player, targets, source_card=card,
-                                     prompt="Choose opponent's cost 1 or less Character to KO")
-        return True
-    return False
-
-
-# --- OP04-080: Gyats ---
-@register_effect("OP04-080", "ON_PLAY", "Dressrosa char can attack active this turn")
-def gyats_effect(game_state, player, card):
-    dressrosa = get_characters_by_type(player, 'dressrosa')
-    if dressrosa:
-        dressrosa[0].can_attack_active = True
-        return True
-    return False
-
-
-# --- OP04-020: Issho (Leader) ---
-@register_effect("OP04-020", "END_OF_TURN", "Rest 1 DON: Set cost 5 or less char active")
-def issho_leader_effect(game_state, player, card):
-    active_don = [d for d in player.don_pool if not d.is_resting]
-    if active_don:
-        active_don[0].is_resting = True
-        chars = get_characters_by_cost(player, max_cost=5)
-        rested = [c for c in chars if c.is_resting]
-        if rested:
-            rested[0].is_resting = False
-            return True
-    return False
-
-
-# --- OP04-069: Mr.2.Bon.Kurei(Bentham) ---
-@register_effect("OP04-069", "ON_OPPONENT_ATTACK", "DON -1: Copy attacker's power")
-def mr2_op04_effect(game_state, player, card):
-    if hasattr(game_state, 'current_attacker'):
-        card.power = getattr(game_state.current_attacker, 'power', 0)
-        # Return DON
-        active_don = [d for d in player.don_pool if not d.is_resting]
-        if active_don and hasattr(player, 'don_deck'):
-            don = active_don[0]
-            player.don_pool.remove(don)
-            player.don_deck.append(don)
-            return True
-    return False
-
-
-# --- OP04-097: Otama ---
-@register_effect("OP04-097", "ON_PLAY", "Add opponent's Animal/SMILE cost 3 or less to their Life")
-def otama_effect(game_state, player, card):
-    opponent = get_opponent(game_state, player)
-    targets = [c for c in opponent.cards_in_play
-              if ('animal' in (c.card_origin or '').lower()
-                  or 'smile' in (c.card_origin or '').lower())
-              and (getattr(c, 'cost', 0) or 0) <= 3]
-    if targets:
-        return create_target_choice(
-            game_state, player, targets,
-            callback_action="add_to_opponent_life",
-            source_card=card,
-            prompt="Choose opponent's Animal/SMILE cost 3 or less Character to add to their Life"
-        )
-    return False
-
-
-# --- OP04-048: Sasaki ---
-@register_effect("OP04-048", "ON_PLAY", "Return hand to deck, shuffle, draw same number")
-def sasaki_effect(game_state, player, card):
-    hand_count = len(player.hand)
-    player.deck.extend(player.hand)
-    player.hand.clear()
-    random.shuffle(player.deck)
-    draw_cards(player, hand_count)
-    return True
-
-
-# --- OP04-047: Ice Oni ---
-@register_effect("OP04-047", "END_OF_BATTLE", "Place battled character at bottom if cost 5 or less")
-def ice_oni_effect(game_state, player, card):
-    """At end of battle, place opponent's battled character at bottom if cost 5 or less."""
-    opponent = get_opponent(game_state, player)
-    if hasattr(game_state, 'last_battle_target'):
-        target = game_state.last_battle_target
-        if target and target in opponent.cards_in_play:
-            if (getattr(target, 'cost', 0) or 0) <= 5:
-                opponent.cards_in_play.remove(target)
-                opponent.deck.append(target)
+def _rest_active_don(player, count):
+    if player.don_pool.count("active") < count:
+        return False
+    rested = 0
+    for idx, don in enumerate(list(player.don_pool)):
+        if don == "active":
+            player.don_pool[idx] = "rested"
+            rested += 1
+            if rested == count:
                 return True
     return False
 
 
-# --- OP04-099: Olin ---
-@register_effect("OP04-099", "CONTINUOUS", "Also treat name as Charlotte Linlin")
-def olin_name_effect(game_state, player, card):
-    """Card name is also treated as Charlotte Linlin."""
-    card.alternate_names = ['Charlotte Linlin']
-    return True
+def _set_rested_don_active(player, count):
+    activated = 0
+    for idx, don in enumerate(list(player.don_pool)):
+        if don == "rested":
+            player.don_pool[idx] = "active"
+            activated += 1
+            if activated == count:
+                break
+    return activated
 
 
-# --- OP04-094: Trueno Bastardo ---
-@register_effect("OP04-094", "MAIN", "KO cost 4 or less (cost 6 if 15+ trash)")
-def trueno_bastardo_effect(game_state, player, card):
-    """KO opponent's character with cost based on trash count."""
+def _trash_top_cards(player, count):
+    for _ in range(min(count, len(player.deck))):
+        player.trash.append(player.deck.pop(0))
+
+
+def _card_colors(card):
+    colors = getattr(card, 'colors', None)
+    if isinstance(colors, str):
+        return [colors]
+    if isinstance(colors, (list, tuple, set)):
+        return list(colors)
+    color = getattr(card, 'color', None)
+    return [color] if color else []
+
+
+def check_trash_count(player, count: int, op: str = 'ge') -> bool:
+    trash_count = len(getattr(player, 'trash', []))
+    if op == 'ge':
+        return trash_count >= count
+    if op == 'gt':
+        return trash_count > count
+    if op == 'eq':
+        return trash_count == count
+    if op == 'lt':
+        return trash_count < count
+    return trash_count <= count
+
+
+def ko_opponent_character(game_state, player, max_cost: int, source_card=None):
     opponent = get_opponent(game_state, player)
-    max_cost = 6 if len(player.trash) >= 15 else 4
-    targets = [c for c in opponent.cards_in_play
-              if (getattr(c, 'cost', 0) or 0) <= max_cost]
+    targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= max_cost]
     if targets:
         return create_ko_choice(
-            game_state, player, targets, source_card=card,
-            prompt=f"Choose opponent's cost {max_cost} or less to KO"
+            game_state, player, targets, source_card=source_card,
+            prompt=f"Choose opponent's cost {max_cost} or less Character to K.O."
         )
-    return False
-
-
-# --- OP04-093: Gum-Gum King Kong Gun ---
-@register_effect("OP04-093", "MAIN", "Dressrosa char +6000, if 15+ trash gains Double Attack")
-def op04_093_king_kong_gun(game_state, player, card):
-    dressrosa_chars = [c for c in player.cards_in_play
-                       if 'Dressrosa' in (getattr(c, 'card_origin', '') or '')]
-    if dressrosa_chars:
-        target = dressrosa_chars[0]
-        add_power_modifier(target, 6000)
-        if check_trash_count(player, 15, 'ge'):
-            target.double_attack = True
     return True
 
 
-# --- OP04-111: Hera ---
-@register_effect("OP04-111", "ACTIVATE_MAIN", "Trash Homies char and rest this: Set Charlotte Linlin active")
-def op04_111_hera(game_state, player, card):
-    homies = [c for c in player.cards_in_play
-              if c != card and 'Homies' in (getattr(c, 'card_origin', '') or '')]
-    if homies:
-        to_trash = homies[0]
-        player.cards_in_play.remove(to_trash)
-        player.trash.append(to_trash)
-        card.is_resting = True
-        # Set Charlotte Linlin active
-        linlins = [c for c in player.cards_in_play
-                   if 'Charlotte Linlin' in (getattr(c, 'name', '') or '') and c.is_resting]
-        if linlins:
-            linlins[0].is_resting = False
-    return True
+def create_power_reduction_choice(game_state, player, targets, amount, source_card=None, prompt=None, callback=None):
+    return create_power_effect_choice(
+        game_state, player, targets, amount, source_card=source_card, prompt=prompt, callback=callback
+    )
 
 
-# --- OP04-075: Nez-Palm Cannon ---
-@register_effect("OP04-075", "COUNTER", "+6000 power, add DON if 2 or less life")
-def op04_075_nez_palm(game_state, player, card):
-    """Counter: +6000 power, add 1 DON if 2 or less life."""
-    target = player.leader if player.leader else (player.cards_in_play[0] if player.cards_in_play else None)
-    if target:
-        add_power_modifier(target, 6000)
-        if check_life_count(player, 2):
-            add_don_from_deck(player, 1, set_active=False)
-        return True
-    return False
+def create_power_boost_choice(game_state, player, targets, amount, source_card=None, prompt=None, callback=None):
+    return create_power_effect_choice(
+        game_state, player, targets, amount, source_card=source_card, prompt=prompt, callback=callback
+    )
 
 
-# --- OP04-098: Toko ---
-@register_effect("OP04-098", "ON_PLAY", "Trash 2 Wano cards: If 1 or less life, add deck to life")
-def op04_098_toko(game_state, player, card):
-    """On Play: Trash 2 Land of Wano cards, if 1 or less life add deck card to life."""
-    wano_cards = [c for c in player.hand
-                  if 'land of wano' in (c.card_origin or '').lower()]
-    if len(wano_cards) >= 2:
-        for i in range(2):
-            c = wano_cards[i]
-            player.hand.remove(c)
-            player.trash.append(c)
-        if check_life_count(player, 1) and player.deck:
-            deck_card = player.deck.pop(0)
-            player.life_cards.append(deck_card)
-        return True
-    return False
+def create_attack_active_choice(game_state, player, targets, source_card=None, prompt=None):
+    snapshot = list(targets)
+
+    def callback(selected):
+        target_idx = int(selected[0]) if selected else -1
+        if 0 <= target_idx < len(snapshot):
+            snapshot[target_idx].can_attack_active = True
+            game_state._log(f"{snapshot[target_idx].name} can attack active Characters this turn")
+
+    return create_target_choice(
+        game_state, player, snapshot, prompt or "Choose a Character to attack active Characters",
+        source_card=source_card, callback=callback
+    )
 
 
-# =============================================================================
-# TRASH CONDITION CARDS - "If you have X or more cards in trash..."
-# =============================================================================
+def create_cannot_attack_choice(game_state, player, targets, source_card=None, prompt=None):
+    snapshot = list(targets)
 
-# --- OP04-095: Barrier!! ---
-@register_effect("OP04-095", "COUNTER", "+2000 power, +2000 more if 15+ trash")
-def op04_095_barrier(game_state, player, card):
-    """Counter: +2000 power, additional +2000 if 15+ cards in trash."""
-    target = player.leader if player.leader else (player.cards_in_play[0] if player.cards_in_play else None)
-    if target:
-        add_power_modifier(target, 2000)
-        if check_trash_count(player, 15):
-            add_power_modifier(target, 2000)
-        return True
-    return False
+    def callback(selected):
+        target_idx = int(selected[0]) if selected else -1
+        if 0 <= target_idx < len(snapshot):
+            snapshot[target_idx].cannot_attack = True
+            game_state._log(f"{snapshot[target_idx].name} cannot attack until the start of your next turn")
 
-
-# --- OP04-094: Trueno Bastardo ---
-@register_effect("OP04-094", "MAIN", "KO cost 4 or less (cost 6 if 15+ trash)")
-def op04_094_trueno(game_state, player, card):
-    """Main: KO cost 4 or less (cost 6 or less if 15+ trash)."""
-    max_cost = 6 if check_trash_count(player, 15) else 4
-    return ko_opponent_character(game_state, player, max_cost=max_cost, source_card=card)
+    return create_target_choice(
+        game_state, player, snapshot, prompt or "Choose a Character that cannot attack",
+        source_card=source_card, callback=callback
+    )
 
 
 # =============================================================================
@@ -276,10 +169,7 @@ def op04_001_vivi_activate(game_state, player, card):
     """Once Per Turn, Rest 2: Draw 1 card. If you have 0 Characters, opponent trashes 1 from hand."""
     if hasattr(card, 'op04_001_used') and card.op04_001_used:
         return False
-    active_don = player.don_pool.count("active")
-    if len(active_don) >= 2:
-        for don in active_don[:2]:
-            don.is_resting = True
+    if _rest_active_don(player, 2):
         draw_cards(player, 1)
         if len(player.cards_in_play) == 0:
             opponent = get_opponent(game_state, player)
@@ -293,9 +183,7 @@ def op04_001_vivi_activate(game_state, player, card):
 @register_effect("OP04-019", "end_of_turn", "[End of Your Turn] Set up to 2 DON active")
 def op04_019_doffy_leader(game_state, player, card):
     """End of Your Turn: Set up to 2 of your DON cards as active."""
-    rested_don = player.don_pool.count("rested")
-    for don in rested_don[:2]:
-        don.is_resting = False
+    _set_rested_don_active(player, 2)
     return True
 
 
@@ -314,9 +202,7 @@ def op04_020_issho_continuous(game_state, player, card):
 @register_effect("OP04-020", "end_of_turn", "[End of Your Turn] Rest 1: K.O. cost 0")
 def op04_020_issho_eot(game_state, player, card):
     """End of Your Turn, Rest 1: K.O. opponent's cost 0 Character."""
-    active_don = player.don_pool.count("active")
-    if active_don:
-        active_don[0].is_resting = True
+    if _rest_active_don(player, 1):
         opponent = get_opponent(game_state, player)
         cost_zero = [c for c in opponent.cards_in_play
                      if (getattr(c, 'cost', 0) or 0) + getattr(c, 'cost_modifier', 0) <= 0]
@@ -341,9 +227,7 @@ def op04_039_rebecca_activate(game_state, player, card):
     """Once Per Turn, Rest 1: If you have 6 or more Characters, draw 2 cards."""
     if hasattr(card, 'op04_039_used') and card.op04_039_used:
         return False
-    active_don = player.don_pool.count("active")
-    if active_don and len(player.cards_in_play) >= 6:
-        active_don[0].is_resting = True
+    if len(player.cards_in_play) >= 6 and _rest_active_don(player, 1):
         draw_cards(player, 2)
         card.op04_039_used = True
         return True
@@ -392,15 +276,12 @@ def op04_002_igaram(game_state, player, card):
     if not getattr(card, 'is_resting', False) and player.leader:
         card.is_resting = True
         player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) - 5000
-        if player.deck:
-            # Look at 5 cards and add Alabasta card
-            top_cards = player.deck[:5]
-            for c in top_cards:
-                if 'Alabasta' in (c.card_origin or ''):
-                    player.hand.append(c)
-                    player.deck.remove(c)
-                    break
-        return True
+        return search_top_cards(
+            game_state, player, look_count=5, add_count=1,
+            filter_fn=lambda c: 'alabasta' in (c.card_origin or '').lower(),
+            source_card=card,
+            prompt="Look at top 5: choose up to 1 Alabasta card to add to hand"
+        )
     return False
 
 
@@ -424,14 +305,9 @@ def op04_004_karoo(game_state, player, card):
         card.is_resting = True
         alabasta_chars = [c for c in player.cards_in_play if 'Alabasta' in (c.card_origin or '')]
         for char in alabasta_chars:
-            if player.don_pool:
-                rested_don = player.don_pool.count("rested")
-                if rested_don:
-                    don = rested_don[0]
-                    player.don_pool.remove(don)
-                    if not hasattr(char, 'attached_don'):
-                        char.attached_don = 0
-                    char.attached_don.append(don)
+            if "rested" in player.don_pool:
+                player.don_pool.remove("rested")
+                char.attached_don = getattr(char, 'attached_don', 0) + 1
         return True
     return False
 
@@ -464,8 +340,28 @@ def op04_008_chaka(game_state, player, card):
     if attached >= 1 and player.leader and 'Vivi' in getattr(player.leader, 'name', ''):
         opponent = get_opponent(game_state, player)
         if opponent.cards_in_play:
-            return create_power_reduction_choice(game_state, player, list(opponent.cards_in_play), -3000, source_card=card,
-                                                prompt="Choose opponent's Character to give -3000 power")
+            snapshot = list(opponent.cards_in_play)
+
+            def callback(selected):
+                target_idx = int(selected[0]) if selected else -1
+                if 0 <= target_idx < len(snapshot):
+                    target = snapshot[target_idx]
+                    add_power_modifier(target, -3000)
+                    game_state._log(f"{target.name} gets -3000 power")
+                ko_targets = [
+                    c for c in get_opponent(game_state, player).cards_in_play
+                    if (getattr(c, 'power', 0) or 0) + getattr(c, 'power_modifier', 0) <= 0
+                ]
+                if ko_targets:
+                    create_ko_choice(
+                        game_state, player, ko_targets, source_card=card,
+                        prompt="Choose up to 1 Character with 0 power or less to K.O."
+                    )
+
+            return create_power_reduction_choice(
+                game_state, player, snapshot, -3000, source_card=card,
+                prompt="Choose up to 1 opponent's Character to give -3000 power", callback=callback
+            )
         return True
     return False
 
@@ -727,12 +623,26 @@ def op04_030_trebol_defense(game_state, player, card):
 def op04_031_doflamingo(game_state, player, card):
     """On Play: Up to 3 opponent's rested cards won't refresh next turn."""
     opponent = get_opponent(game_state, player)
-    targets = [c for c in opponent.cards_in_play if getattr(c, 'is_resting', False)][:3]
-    for target in targets:
-        target.skip_next_refresh = True
+    rested_targets = [c for c in opponent.cards_in_play if getattr(c, 'is_resting', False)]
     if opponent.leader and getattr(opponent.leader, 'is_resting', False):
-        opponent.leader.skip_next_refresh = True
-    return True
+        rested_targets.insert(0, opponent.leader)
+    if not rested_targets:
+        return True
+
+    snapshot = list(rested_targets)
+
+    def callback(selected):
+        for sel in selected:
+            target_idx = int(sel)
+            if 0 <= target_idx < len(snapshot):
+                snapshot[target_idx].skip_next_refresh = True
+                game_state._log(f"{snapshot[target_idx].name} will not become active next Refresh Phase")
+
+    return create_target_choice(
+        game_state, player, snapshot,
+        prompt="Choose up to 3 rested Leader/Character cards that will not become active next Refresh Phase",
+        source_card=card, min_selections=0, max_selections=min(3, len(snapshot)), callback=callback
+    )
 
 
 # --- OP04-032: Baby 5 ---
@@ -785,16 +695,38 @@ def op04_034_lao_g(game_state, player, card):
 @register_effect("OP04-041", "on_play", "[On Play] Trash 2: Look at 5, add East Blue card")
 def op04_041_apis(game_state, player, card):
     """On Play: Trash 2 cards to look at 5 and add East Blue card."""
-    if len(player.hand) >= 2:
-        trash_from_hand(player, 2, game_state, card)
-        if player.deck:
-            top_cards = player.deck[:5]
-            for c in top_cards:
-                if 'East Blue' in (c.card_origin or ''):
-                    player.hand.append(c)
-                    player.deck.remove(c)
-                    break
-        return True
+    if len(player.hand) < 2:
+        return False
+
+    def resolve_search():
+        return search_top_cards(
+            game_state, player, look_count=5, add_count=1,
+            filter_fn=lambda c: 'east blue' in (c.card_origin or '').lower(),
+            source_card=card,
+            prompt="Look at top 5: choose up to 1 East Blue card to add to hand"
+        )
+
+    if len(player.hand) == 2:
+        trash_from_hand(player, 2)
+        return resolve_search()
+
+    hand_snapshot = list(player.hand)
+
+    def callback(selected):
+        for idx in sorted((int(sel) for sel in selected), reverse=True):
+            if 0 <= idx < len(hand_snapshot):
+                discarded = hand_snapshot[idx]
+                if discarded in player.hand:
+                    player.hand.remove(discarded)
+                    player.trash.append(discarded)
+                    game_state._log(f"{player.name} trashed {discarded.name}")
+        resolve_search()
+
+    return create_trash_choice(
+        game_state, player, 2, source_card=card,
+        prompt="Choose 2 cards from your hand to trash",
+        callback=callback
+    )
     return False
 
 
@@ -870,16 +802,13 @@ def op04_045_king(game_state, player, card):
 def op04_046_queen(game_state, player, card):
     """On Play: If Animal Kingdom Leader, look at 7 and add Plague Rounds/Ice Oni."""
     if player.leader and 'Animal Kingdom Pirates' in (player.leader.card_origin or ''):
-        if player.deck:
-            top_cards = player.deck[:7]
-            found = 0
-            for c in list(top_cards):
-                name = getattr(c, 'name', '')
-                if ('Plague Rounds' in name or 'Ice Oni' in name) and found < 2:
-                    player.hand.append(c)
-                    player.deck.remove(c)
-                    found += 1
-    return True
+        return search_top_cards(
+            game_state, player, look_count=7, add_count=2,
+            filter_fn=lambda c: getattr(c, 'name', '') in {'Plague Rounds', 'Ice Oni'},
+            source_card=card,
+            prompt="Look at top 7: choose up to 2 Plague Rounds or Ice Oni cards to add to hand"
+        )
+    return False
 
 
 # --- OP04-047: Ice Oni ---
@@ -927,14 +856,13 @@ def op04_050_hanger(game_state, player, card):
 @register_effect("OP04-051", "on_play", "[On Play] Look at 5, add Animal Kingdom card")
 def op04_051_whos_who(game_state, player, card):
     """On Play: Look at 5 and add Animal Kingdom card."""
-    if player.deck:
-        top_cards = player.deck[:5]
-        for c in top_cards:
-            if 'Animal Kingdom Pirates' in (c.card_origin or '') and getattr(c, 'name', '') != "Who's Who":
-                player.hand.append(c)
-                player.deck.remove(c)
-                break
-    return True
+    return search_top_cards(
+        game_state, player, look_count=5, add_count=1,
+        filter_fn=lambda c: 'animal kingdom pirates' in (c.card_origin or '').lower()
+        and getattr(c, 'name', '') != "Who's Who",
+        source_card=card,
+        prompt="Look at top 5: choose up to 1 Animal Kingdom Pirates card other than Who's Who to add to hand"
+    )
 
 
 # --- OP04-052: Black Maria ---
@@ -1025,7 +953,7 @@ def op04_061_tom(game_state, player, card):
         if card in player.cards_in_play:
             player.cards_in_play.remove(card)
             player.trash.append(card)
-            add_don_from_deck(player, 1, rested=True)
+            add_don_from_deck(player, 1, set_active=False)
             return True
     return False
 
@@ -1040,9 +968,14 @@ def op04_063_franky(game_state, player, card):
                 don = player.don_pool.pop()
                 player.don_deck.append(don)
                 card.op04_063_used = True
-                if player.cards_in_play:
-                    return create_power_boost_choice(game_state, player, list(player.cards_in_play), 1000, source_card=card,
-                                                    prompt="Choose your Character to give +1000 power")
+                targets = list(player.cards_in_play)
+                if player.leader:
+                    targets.insert(0, player.leader)
+                if targets:
+                    return create_power_boost_choice(
+                        game_state, player, targets, 1000, source_card=card,
+                        prompt="Choose up to 1 of your Leader or Characters to give +1000 power during this battle"
+                    )
                 return True
     return False
 
@@ -1051,7 +984,7 @@ def op04_063_franky(game_state, player, card):
 @register_effect("OP04-064", "on_play", "[On Play] Add 1 DON (rested), draw 1 if 6+ DON")
 def op04_064_ms_all_sunday(game_state, player, card):
     """On Play: Add 1 DON rested. Draw 1 if 6+ DON."""
-    add_don_from_deck(player, 1, rested=True)
+    add_don_from_deck(player, 1, set_active=False)
     if len(player.don_pool) >= 6:
         draw_cards(player, 1)
     return True
@@ -1167,8 +1100,11 @@ def op04_069_bon_kurei(game_state, player, card):
     if player.don_pool:
         don = player.don_pool.pop()
         player.don_deck.append(don)
-        # Would need to get attacker's power - simplified
-        card.power_modifier = getattr(card, 'power_modifier', 0) + 4000
+        attacker = getattr(game_state, 'current_attacker', None)
+        if attacker is not None:
+            card.power_modifier = getattr(card, 'power_modifier', 0) + (
+                getattr(attacker, 'power', 0) - getattr(card, 'power', 0)
+            )
         return True
     return False
 
@@ -1356,13 +1292,24 @@ def op04_082_kyros_prevention(game_state, player, card):
 def op04_082_kyros_play(game_state, player, card):
     """On Play: If Rebecca Leader, K.O. cost 1 or less and trash 1."""
     if player.leader and 'Rebecca' in getattr(player.leader, 'name', ''):
-        if player.deck:
-            player.trash.append(player.deck.pop(0))
         opponent = get_opponent(game_state, player)
         targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 1]
         if targets:
-            return create_ko_choice(game_state, player, targets, source_card=card,
-                                   prompt="Choose opponent's cost 1 or less Character to K.O.")
+            def callback(selected):
+                target_idx = int(selected[0]) if selected else -1
+                if 0 <= target_idx < len(targets):
+                    target = targets[target_idx]
+                    if target in opponent.cards_in_play:
+                        opponent.cards_in_play.remove(target)
+                        opponent.trash.append(target)
+                        game_state._log(f"{target.name} was K.O.'d")
+                _trash_top_cards(player, 1)
+
+            return create_ko_choice(
+                game_state, player, targets, source_card=card,
+                prompt="Choose up to 1 opponent's cost 1 or less Character to K.O.", callback=callback
+            )
+        _trash_top_cards(player, 1)
         return True
     return False
 
@@ -1390,16 +1337,15 @@ def op04_083_sabo_play(game_state, player, card):
 def op04_084_stussy(game_state, player, card):
     """On Play: Look at 3 and play CP cost 2 or less character."""
     if player.deck:
-        top_cards = player.deck[:3]
+        top_cards = list(player.deck[:3])
         for c in list(top_cards):
             types = (c.card_origin or '')
             if 'CP' in types and getattr(c, 'name', '') != 'Stussy' and (getattr(c, 'cost', 0) or 0) <= 2:
                 player.deck.remove(c)
                 player.cards_in_play.append(c)
+                top_cards.remove(c)
                 break
-        # Trash the rest
-        remaining = [c for c in player.deck[:3] if c in player.deck]
-        for c in remaining:
+        for c in top_cards:
             player.deck.remove(c)
             player.trash.append(c)
     return True
@@ -1410,12 +1356,22 @@ def op04_084_stussy(game_state, player, card):
 def op04_085_suleiman_play(game_state, player, card):
     """On Play: If Dressrosa Leader, give -2 cost and trash 1 from deck."""
     if player.leader and 'Dressrosa' in (player.leader.card_origin or ''):
-        if player.deck:
-            player.trash.append(player.deck.pop(0))
         opponent = get_opponent(game_state, player)
         if opponent.cards_in_play:
-            return create_cost_reduction_choice(game_state, player, list(opponent.cards_in_play), -2, source_card=card,
-                                               prompt="Choose opponent's Character to give -2 cost")
+            snapshot = list(opponent.cards_in_play)
+
+            def callback(selected):
+                target_idx = int(selected[0]) if selected else -1
+                if 0 <= target_idx < len(snapshot):
+                    snapshot[target_idx].cost_modifier = getattr(snapshot[target_idx], 'cost_modifier', 0) - 2
+                    game_state._log(f"{snapshot[target_idx].name} gets -2 cost this turn")
+                _trash_top_cards(player, 1)
+
+            return create_cost_reduction_choice(
+                game_state, player, snapshot, -2, source_card=card,
+                prompt="Choose up to 1 opponent's Character to give -2 cost", callback=callback
+            )
+        _trash_top_cards(player, 1)
         return True
     return False
 
@@ -1424,12 +1380,22 @@ def op04_085_suleiman_play(game_state, player, card):
 def op04_085_suleiman_attack(game_state, player, card):
     """When Attacking: If Dressrosa Leader, give -2 cost and trash 1 from deck."""
     if player.leader and 'Dressrosa' in (player.leader.card_origin or ''):
-        if player.deck:
-            player.trash.append(player.deck.pop(0))
         opponent = get_opponent(game_state, player)
         if opponent.cards_in_play:
-            return create_cost_reduction_choice(game_state, player, list(opponent.cards_in_play), -2, source_card=card,
-                                               prompt="Choose opponent's Character to give -2 cost")
+            snapshot = list(opponent.cards_in_play)
+
+            def callback(selected):
+                target_idx = int(selected[0]) if selected else -1
+                if 0 <= target_idx < len(snapshot):
+                    snapshot[target_idx].cost_modifier = getattr(snapshot[target_idx], 'cost_modifier', 0) - 2
+                    game_state._log(f"{snapshot[target_idx].name} gets -2 cost this turn")
+                _trash_top_cards(player, 1)
+
+            return create_cost_reduction_choice(
+                game_state, player, snapshot, -2, source_card=card,
+                prompt="Choose up to 1 opponent's Character to give -2 cost", callback=callback
+            )
+        _trash_top_cards(player, 1)
         return True
     return False
 
@@ -1497,13 +1463,24 @@ def op04_091_leo(game_state, player, card):
     if player.leader and 'Dressrosa' in (player.leader.card_origin or ''):
         if not getattr(player.leader, 'is_resting', False):
             player.leader.is_resting = True
-            for _ in range(min(2, len(player.deck))):
-                player.trash.append(player.deck.pop(0))
             opponent = get_opponent(game_state, player)
             targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 1]
             if targets:
-                return create_ko_choice(game_state, player, targets, source_card=card,
-                                       prompt="Choose opponent's cost 1 or less Character to K.O.")
+                def callback(selected):
+                    target_idx = int(selected[0]) if selected else -1
+                    if 0 <= target_idx < len(targets):
+                        target = targets[target_idx]
+                        if target in opponent.cards_in_play:
+                            opponent.cards_in_play.remove(target)
+                            opponent.trash.append(target)
+                            game_state._log(f"{target.name} was K.O.'d")
+                    _trash_top_cards(player, 2)
+
+                return create_ko_choice(
+                    game_state, player, targets, source_card=card,
+                    prompt="Choose up to 1 opponent's cost 1 or less Character to K.O.", callback=callback
+                )
+            _trash_top_cards(player, 2)
             return True
     return False
 
@@ -1513,15 +1490,14 @@ def op04_091_leo(game_state, player, card):
 def op04_092_rebecca(game_state, player, card):
     """On Play: Look at 3 and add Dressrosa card."""
     if player.deck:
-        top_cards = player.deck[:3]
+        top_cards = list(player.deck[:3])
         for c in list(top_cards):
             if 'Dressrosa' in (c.card_origin or '') and getattr(c, 'name', '') != 'Rebecca':
                 player.hand.append(c)
                 player.deck.remove(c)
+                top_cards.remove(c)
                 break
-        # Trash the rest
-        remaining = player.deck[:3]
-        for c in list(remaining):
+        for c in top_cards:
             player.deck.remove(c)
             player.trash.append(c)
     return True
@@ -1832,7 +1808,7 @@ def op04_113_rabiyan(game_state, player, card):
 def op04_118_vivi(game_state, player, card):
     """Continuous: Red characters with cost 3+ other than this gain Rush."""
     for c in player.cards_in_play:
-        if c != card and 'Red' in getattr(c, 'colors', []) and (getattr(c, 'cost', 0) or 0) >= 3:
+        if c != card and 'Red' in _card_colors(c) and (getattr(c, 'cost', 0) or 0) >= 3:
             c.has_rush = True
     return True
 
@@ -1853,7 +1829,7 @@ def op04_119_rosinante_play(game_state, player, card):
     """On Play: Rest this to play cost 5 green Character from hand."""
     card.is_resting = True
     for c in list(player.hand):
-        if 'Green' in getattr(c, 'colors', []) and (getattr(c, 'cost', 0) or 0) == 5:
+        if 'Green' in _card_colors(c) and (getattr(c, 'cost', 0) or 0) == 5:
             player.hand.remove(c)
             player.cards_in_play.append(c)
             break
