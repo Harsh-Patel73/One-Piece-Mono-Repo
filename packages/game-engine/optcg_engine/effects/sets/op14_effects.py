@@ -156,9 +156,24 @@ def perona_ko(game_state, player, card):
                   and (getattr(c, 'cost', 0) or 0) <= 5
                   and getattr(c, 'card_type', '') == 'CHARACTER']
     if active and green_chars:
+        active_snap = list(active)
+        def perona_ko_cb(selected: list) -> None:
+            from ..hardcoded import create_play_from_hand_choice
+            target_idx = int(selected[0]) if selected else -1
+            if 0 <= target_idx < len(active_snap):
+                target = active_snap[target_idx]
+                target.is_resting = True
+                game_state._log(f"{target.name} was rested")
+            playable = [c for c in player.hand
+                        if 'green' in (getattr(c, 'colors', '') or '').lower()
+                        and (getattr(c, 'cost', 0) or 0) <= 5
+                        and getattr(c, 'card_type', '') == 'CHARACTER']
+            if playable:
+                create_play_from_hand_choice(game_state, player, playable, source_card=None,
+                                             prompt="Choose green cost 5 or less Character to play")
         return create_target_choice(
             game_state, player, active,
-            callback_action="perona_rest_then_play",
+            callback=perona_ko_cb,
             source_card=card,
             prompt="Choose your Character to rest (then play green cost 5 or less from hand)"
         )
@@ -308,9 +323,23 @@ def op14_001_law_leader(game_state, player, card):
                or 'heart pirates' in (c.card_origin or '').lower()]
     if len(targets) >= 2:
         card.op14_001_used = True
+        targets_snap = list(targets)
+        def swap_power_cb(selected: list) -> None:
+            indices = [int(s) for s in selected if s.isdigit()][:2]
+            if len(indices) == 2:
+                a = targets_snap[indices[0]] if 0 <= indices[0] < len(targets_snap) else None
+                b = targets_snap[indices[1]] if 0 <= indices[1] < len(targets_snap) else None
+                if a and b:
+                    a_base = getattr(a, 'base_power', a.power or 0)
+                    b_base = getattr(b, 'base_power', b.power or 0)
+                    a.power = b_base + getattr(a, 'power_modifier', 0)
+                    b.power = a_base + getattr(b, 'power_modifier', 0)
+                    a.base_power = b_base
+                    b.base_power = a_base
+                    game_state._log(f"Swapped base power: {a.name} ↔ {b.name}")
         return create_multi_target_choice(
             game_state, player, targets, count=2,
-            callback_action="swap_base_power",
+            callback=swap_power_cb,
             source_card=card,
             prompt="Choose 2 Supernovas/Heart Pirates Characters to swap base power"
         )
@@ -378,9 +407,25 @@ def op14_079_croc_activate(game_state, player, card):
     if hasattr(card, 'op14_079_used') and card.op14_079_used:
         return False
     if player.cards_in_play:
-        # First, player chooses which of their own characters to K.O.
+        card.op14_079_used = True
+        own_snap = list(player.cards_in_play)
+        def croc_cb(selected: list) -> None:
+            target_idx = int(selected[0]) if selected else -1
+            ko_cost = 0
+            if 0 <= target_idx < len(own_snap):
+                target = own_snap[target_idx]
+                ko_cost = getattr(target, 'cost', 0) or 0
+                if target in player.cards_in_play:
+                    player.cards_in_play.remove(target)
+                    player.trash.append(target)
+                    game_state._log(f"{target.name} was K.O.'d (cost {ko_cost})")
+            opponent = get_opponent(game_state, player)
+            opp_targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= ko_cost]
+            if opp_targets:
+                create_ko_choice(game_state, player, opp_targets, source_card=None,
+                                prompt=f"Choose opponent's cost {ko_cost} or less Character to K.O.")
         return create_own_character_choice(game_state, player, player.cards_in_play,
-                                           "ko_for_op14_079", source_card=card,
+                                           callback=croc_cb, source_card=card,
                                            prompt="Choose your Character to K.O.")
     return False
 

@@ -137,6 +137,18 @@ def op02_026_sanji_leader(game_state, player, card):
         }
         for i, idx in enumerate(rested_don)
     ]
+    rested_don_snapshot = list(rested_don)
+
+    def sanji_don_cb(selected: list) -> None:
+        chosen_positions = sorted({int(s) for s in selected}, reverse=True) if selected else []
+        for pos in chosen_positions:
+            if 0 <= pos < len(rested_don_snapshot):
+                pool_idx = rested_don_snapshot[pos]
+                if 0 <= pool_idx < len(player.don_pool) and player.don_pool[pool_idx] == "rested":
+                    player.don_pool[pool_idx] = "active"
+        if chosen_positions:
+            game_state._log(f"Sanji: set {len(chosen_positions)} DON!! card(s) as active")
+
     game_state.pending_choice = PendingChoice(
         choice_id=f"sanji_don_{_uuid.uuid4().hex[:8]}",
         choice_type="select_cards",
@@ -146,13 +158,7 @@ def op02_026_sanji_leader(game_state, player, card):
         max_selections=min(2, len(rested_don)),
         source_card_id=card.id,
         source_card_name=card.name,
-        callback_action="op02_026_set_don_active",
-        callback_data={
-            "player_id": player.player_id,
-            "player_index": 0 if player is game_state.player1 else 1,
-            "rested_indices": rested_don,
-            "leader_id": card.id,
-        }
+        callback=sanji_don_cb,
     )
     card.op02_026_used = True
     return True
@@ -202,18 +208,29 @@ def op02_093_smoker_leader(game_state, player, card):
         opponent = get_opponent(game_state, player)
         if opponent.cards_in_play:
             card.op02_093_used = True
+            opp_snapshot = list(opponent.cards_in_play)
+            leader_card = card
+
+            def smoker_cost_cb(selected: list) -> None:
+                if selected:
+                    target_idx = int(selected[0])
+                    if 0 <= target_idx < len(opp_snapshot):
+                        target = opp_snapshot[target_idx]
+                        target.cost_modifier = getattr(target, 'cost_modifier', 0) - 1
+                        game_state._log(f"{target.name} gets -1 cost this turn")
+                all_chars = player.cards_in_play + opponent.cards_in_play
+                if any((getattr(c, 'cost', 0) or 0) + getattr(c, 'cost_modifier', 0) == 0 for c in all_chars):
+                    leader_card.power_modifier = getattr(leader_card, 'power_modifier', 0) + 1000
+                    leader_card._sticky_power_modifier = getattr(leader_card, '_sticky_power_modifier', 0) + 1000
+                    game_state._log(f"{leader_card.name} gets +1000 power")
+
             return create_target_choice(
-                game_state, player, opponent.cards_in_play,
+                game_state, player, opp_snapshot,
                 prompt="Choose up to 1 opponent Character to give -1 cost",
                 source_card=card,
                 min_selections=0,
                 max_selections=1,
-                callback_action="op02_093_cost_then_power",
-                callback_data={
-                    "player_id": player.player_id,
-                    "target_cards": [{"id": c.id, "name": c.name} for c in opponent.cards_in_play],
-                    "source_card_id": card.id,
-                },
+                callback=smoker_cost_cb,
             )
         card.op02_093_used = True
         if any((getattr(c, 'cost', 0) or 0) + getattr(c, 'cost_modifier', 0) == 0
@@ -236,6 +253,19 @@ def op02_004_newgate_play(game_state, player, card):
     if player.leader:
         from ...game_engine import PendingChoice
         import uuid as _uuid
+        leader_snapshot = player.leader
+        power_amount = 2000
+
+        def newgate_power_cb(selected: list) -> None:
+            if selected:
+                target_idx = int(selected[0]) if selected[0] is not None else -1
+                if target_idx == 0 and leader_snapshot:
+                    leader_snapshot.power_modifier = getattr(leader_snapshot, 'power_modifier', 0) + power_amount
+                    leader_snapshot._sticky_power_modifier = getattr(leader_snapshot, '_sticky_power_modifier', 0) + power_amount
+                    leader_snapshot.power_modifier_expires_on_turn = game_state.turn_count + 1
+                    leader_snapshot._sticky_power_modifier_expires_on_turn = game_state.turn_count + 1
+                    game_state._log(f"{leader_snapshot.name} gets +{power_amount} power until end of next turn")
+
         game_state.pending_choice = PendingChoice(
             choice_id=f"newgate_play_{_uuid.uuid4().hex[:8]}",
             choice_type="select_target",
@@ -245,12 +275,7 @@ def op02_004_newgate_play(game_state, player, card):
             max_selections=1,
             source_card_id=card.id,
             source_card_name=card.name,
-            callback_action="apply_power_until_next_turn",
-            callback_data={
-                "player_id": player.player_id,
-                "power_amount": 2000,
-                "target_cards": [{"id": player.leader.id, "name": player.leader.name}],
-            }
+            callback=newgate_power_cb,
         )
         return True
     return True
@@ -451,6 +476,26 @@ def op02_018_marco_ko(game_state, player, card):
                     "card_id": hc.id,
                     "card_name": hc.name,
                 })
+            wb_snapshot = list(wb_cards)
+            marco_card = card
+
+            def marco_ko_cb(selected: list) -> None:
+                if selected:
+                    idx = int(selected[0])
+                    if 0 <= idx < len(wb_snapshot):
+                        wb_card = wb_snapshot[idx]
+                        for hc in player.hand[:]:
+                            if hc is wb_card:
+                                player.hand.remove(hc)
+                                player.trash.append(hc)
+                                game_state._log(f"{player.name} trashed {hc.name} from hand")
+                                break
+                        if marco_card in player.trash:
+                            player.trash.remove(marco_card)
+                            player.cards_in_play.append(marco_card)
+                            marco_card.is_resting = True
+                            game_state._log(f"{marco_card.name} returns to play rested from trash")
+
             game_state.pending_choice = PendingChoice(
                 choice_id=f"marco_ko_{_uuid.uuid4().hex[:8]}",
                 choice_type="select_cards",
@@ -460,13 +505,7 @@ def op02_018_marco_ko(game_state, player, card):
                 max_selections=1,
                 source_card_id=card.id,
                 source_card_name=card.name,
-                callback_action="marco_trash_wb_then_revive",
-                callback_data={
-                    "player_id": player.player_id,
-                    "player_index": 0 if player is game_state.player1 else 1,
-                    "target_cards": [{"id": hc.id, "name": hc.name} for hc in wb_cards],
-                    "marco_card_id": card.id,
-                }
+                callback=marco_ko_cb,
             )
             return True
     return False
@@ -514,6 +553,17 @@ def op02_029_carrot(game_state, player, card):
         }
         for i, idx in enumerate(rested_don)
     ]
+    rested_don_snapshot = list(rested_don)
+
+    def carrot_don_cb(selected: list) -> None:
+        if selected:
+            pos = int(selected[0])
+            if 0 <= pos < len(rested_don_snapshot):
+                pool_idx = rested_don_snapshot[pos]
+                if 0 <= pool_idx < len(player.don_pool) and player.don_pool[pool_idx] == "rested":
+                    player.don_pool[pool_idx] = "active"
+                    game_state._log("Carrot: set 1 DON!! active")
+
     game_state.pending_choice = PendingChoice(
         choice_id=f"carrot_don_{_uuid.uuid4().hex[:8]}",
         choice_type="select_cards",
@@ -523,12 +573,7 @@ def op02_029_carrot(game_state, player, card):
         max_selections=1,
         source_card_id=card.id,
         source_card_name=card.name,
-        callback_action="op02_029_set_don_active",
-        callback_data={
-            "player_id": player.player_id,
-            "player_index": 0 if player is game_state.player1 else 1,
-            "rested_indices": rested_don,
-        }
+        callback=carrot_don_cb,
     )
     return True
 
@@ -571,6 +616,22 @@ def op02_030_oden_ko(game_state, player, card):
     options = [{"id": str(i), "label": f"{c.name} (Cost: {c.cost or 0})",
                 "card_id": c.id, "card_name": c.name}
                for i, c in enumerate(targets)]
+    targets_snapshot = list(targets)
+
+    def oden_ko_play_cb(selected: list) -> None:
+        if selected:
+            idx = int(selected[0])
+            if 0 <= idx < len(targets_snapshot):
+                chosen = targets_snapshot[idx]
+                if chosen in player.deck:
+                    player.deck.remove(chosen)
+                    player.cards_in_play.append(chosen)
+                    game_state._apply_keywords(chosen)
+                    game_state._log(f"Kouzuki Oden: {chosen.name} played from deck")
+        import random
+        random.shuffle(player.deck)
+        game_state._log("Deck shuffled")
+
     game_state.pending_choice = PendingChoice(
         choice_id=f"oden_ko_{_uuid.uuid4().hex[:8]}",
         choice_type="select_cards",
@@ -580,13 +641,7 @@ def op02_030_oden_ko(game_state, player, card):
         max_selections=1,
         source_card_id=card.id,
         source_card_name=card.name,
-        callback_action="search_play_to_field",
-        callback_data={
-            "player_id": player.player_id,
-            "player_index": 0 if player is game_state.player1 else 1,
-            "target_cards": [{"id": c.id, "name": c.name} for c in targets],
-            "shuffle_after": True,
-        }
+        callback=oden_ko_play_cb,
     )
     return True
 
@@ -630,6 +685,28 @@ def op02_032_shishilian(game_state, player, card):
          "card_id": c.id, "card_name": c.name}
         for i, c in enumerate(targets)
     ]
+    targets_snapshot = list(targets)
+
+    def shishilian_cb(selected: list) -> None:
+        if selected:
+            idx = int(selected[0])
+            if 0 <= idx < len(targets_snapshot):
+                # Rest 2 active DON
+                rested_count = 0
+                for i in range(len(player.don_pool)):
+                    if rested_count >= 2:
+                        break
+                    if player.don_pool[i] == "active":
+                        player.don_pool[i] = "rested"
+                        rested_count += 1
+                # Set target as active
+                target = targets_snapshot[idx]
+                for c in player.cards_in_play:
+                    if c is target:
+                        c.is_resting = False
+                        game_state._log(f"Shishilian: set {c.name} active")
+                        break
+
     game_state.pending_choice = PendingChoice(
         choice_id=f"shishilian_{_uuid.uuid4().hex[:8]}",
         choice_type="select_cards",
@@ -639,12 +716,7 @@ def op02_032_shishilian(game_state, player, card):
         max_selections=1,
         source_card_id=card.id,
         source_card_name=card.name,
-        callback_action="op02_032_pay_don_set_active",
-        callback_data={
-            "player_id": player.player_id,
-            "player_index": 0 if player is game_state.player1 else 1,
-            "target_cards": [{"id": c.id, "name": c.name} for c in targets],
-        }
+        callback=shishilian_cb,
     )
     return True
 
@@ -704,6 +776,20 @@ def op02_036_nami(game_state, player, card):
     if active_count < 1:
         return True  # No active DON available to pay cost
     # Prompt player to decide whether to rest 1 DON for the search effect
+    nami_card = card
+
+    def nami_don_cb(selected: list) -> None:
+        if selected and selected[0] == "yes":
+            for i in range(len(player.don_pool)):
+                if player.don_pool[i] == "active":
+                    player.don_pool[i] = "rested"
+                    break
+            def _nami_filter(c):
+                return ('FILM' in (c.card_origin or '')
+                        and getattr(c, 'name', '') != 'Nami')
+            search_top_cards(game_state, player, 3, add_count=1, filter_fn=_nami_filter,
+                             prompt="Look at top 3. Choose a FILM card (not Nami) to add to hand.")
+
     game_state.pending_choice = PendingChoice(
         choice_id=f"nami_don_{_uuid.uuid4().hex[:8]}",
         choice_type="select_mode",
@@ -716,11 +802,7 @@ def op02_036_nami(game_state, player, card):
         max_selections=1,
         source_card_id=card.id,
         source_card_name=card.name,
-        callback_action="nami_don_search",
-        callback_data={
-            "player_id": player.player_id,
-            "player_index": 0 if player is game_state.player1 else 1,
-        }
+        callback=nami_don_cb,
     )
     return True
 
@@ -927,35 +1009,53 @@ def op02_059_hancock(game_state, player, card):
     if not player.hand:
         return True
 
+    def _hancock_optional_trash(selected: list) -> None:
+        """Trash selected 0-3 cards from hand."""
+        indices = sorted([int(s) for s in selected], reverse=True) if selected else []
+        for idx in indices:
+            if 0 <= idx < len(player.hand):
+                hc = player.hand.pop(idx)
+                player.trash.append(hc)
+                game_state._log(f"{player.name} trashed {hc.name}")
+
+    def _create_hancock_optional_choice() -> None:
+        if not player.hand:
+            return
+        opts = []
+        for i, hc in enumerate(player.hand):
+            opts.append({
+                "id": str(i),
+                "label": f"{hc.name} (Cost: {hc.cost or 0})",
+                "card_id": hc.id,
+                "card_name": hc.name,
+            })
+        game_state.pending_choice = PendingChoice(
+            choice_id=f"hancock_opt_{_uuid.uuid4().hex[:8]}",
+            choice_type="select_cards",
+            prompt="You may trash up to 3 more cards from hand (select 0 to skip)",
+            options=opts,
+            min_selections=0,
+            max_selections=min(3, len(player.hand)),
+            source_card_id=card.id,
+            source_card_name=card.name,
+            callback=_hancock_optional_trash,
+        )
+
     if len(player.hand) == 1:
         trashed = player.hand.pop()
         player.trash.append(trashed)
         game_state._log(f"{player.name} trashed {trashed.name}")
-        if player.hand:
-            options = []
-            for i, hc in enumerate(player.hand):
-                options.append({
-                    "id": str(i),
-                    "label": f"{hc.name} (Cost: {hc.cost or 0})",
-                    "card_id": hc.id,
-                    "card_name": hc.name,
-                })
-            game_state.pending_choice = PendingChoice(
-                choice_id=f"hancock_trash_{_uuid.uuid4().hex[:8]}",
-                choice_type="select_cards",
-                prompt="You may trash up to 3 more cards from hand (select 0 to skip)",
-                options=options,
-                min_selections=0,
-                max_selections=min(3, len(player.hand)),
-                source_card_id=card.id,
-                source_card_name=card.name,
-                callback_action="op02_059_optional_trash",
-                callback_data={
-                    "player_id": player.player_id,
-                    "player_index": 0 if player is game_state.player1 else 1,
-                }
-            )
+        _create_hancock_optional_choice()
         return True
+
+    def hancock_req_cb(selected: list) -> None:
+        indices = sorted([int(s) for s in selected], reverse=True) if selected else []
+        for idx in indices:
+            if 0 <= idx < len(player.hand):
+                hc = player.hand.pop(idx)
+                player.trash.append(hc)
+                game_state._log(f"{player.name} trashed {hc.name}")
+        _create_hancock_optional_choice()
 
     options = []
     for i, hc in enumerate(player.hand):
@@ -974,13 +1074,7 @@ def op02_059_hancock(game_state, player, card):
         max_selections=1,
         source_card_id=card.id,
         source_card_name=card.name,
-        callback_action="op02_059_required_then_optional",
-        callback_data={
-            "player_id": player.player_id,
-            "player_index": 0 if player is game_state.player1 else 1,
-            "source_card_id": card.id,
-            "source_card_name": card.name,
-        }
+        callback=hancock_req_cb,
     )
     return True
 
@@ -1003,6 +1097,52 @@ def op02_062_luffy(game_state, player, card):
     from ...game_engine import PendingChoice
     import uuid as _uuid
     if len(player.hand) >= 2:
+        luffy_card = card
+
+        def luffy_trash_cb(selected: list) -> None:
+            """Step 2: trash 2 selected cards, grant Double Attack, chain to return."""
+            indices = sorted([int(s) for s in selected], reverse=True) if selected else []
+            for idx in indices:
+                if 0 <= idx < len(player.hand):
+                    hc = player.hand.pop(idx)
+                    player.trash.append(hc)
+                    game_state._log(f"{player.name} trashed {hc.name}")
+            if len(indices) >= 2:
+                # Grant Double Attack to Luffy
+                for c in player.cards_in_play:
+                    if c is luffy_card:
+                        c.has_doubleattack = True
+                        c.has_double_attack = True
+                        break
+                opponent = get_opponent(game_state, player)
+                targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 4]
+                if targets:
+                    create_return_to_hand_choice(game_state, player, targets,
+                                                 prompt="Choose opponent's cost 4 or less to return to hand")
+
+        def luffy_yesno_cb(selected: list) -> None:
+            """Step 1: yes/no decision; if yes, prompt for 2 cards to trash."""
+            if selected and selected[0] == "yes" and len(player.hand) >= 2:
+                opts = []
+                for i, hc in enumerate(player.hand):
+                    opts.append({
+                        "id": str(i),
+                        "label": f"{hc.name} (Cost: {hc.cost or 0})",
+                        "card_id": hc.id,
+                        "card_name": hc.name,
+                    })
+                game_state.pending_choice = PendingChoice(
+                    choice_id=f"luffy_trash_{_uuid.uuid4().hex[:8]}",
+                    choice_type="select_cards",
+                    prompt="Choose 2 cards from hand to trash",
+                    options=opts,
+                    min_selections=2,
+                    max_selections=2,
+                    source_card_id=luffy_card.id,
+                    source_card_name=luffy_card.name,
+                    callback=luffy_trash_cb,
+                )
+
         game_state.pending_choice = PendingChoice(
             choice_id=f"luffy_yesno_{_uuid.uuid4().hex[:8]}",
             choice_type="select_mode",
@@ -1015,13 +1155,7 @@ def op02_062_luffy(game_state, player, card):
             max_selections=1,
             source_card_id=card.id,
             source_card_name=card.name,
-            callback_action="op02_062_choose_trash",
-            callback_data={
-                "player_id": player.player_id,
-                "player_index": 0 if player is game_state.player1 else 1,
-                "source_card_id": card.id,
-                "source_card_name": card.name,
-            }
+            callback=luffy_yesno_cb,
         )
     return True
 
@@ -1055,6 +1189,27 @@ def op02_064_mr2(game_state, player, card):
                 "card_id": hc.id,
                 "card_name": hc.name,
             })
+        mr2_card = card
+
+        def mr2_trash_cb(selected: list) -> None:
+            if selected:
+                idx = int(selected[0])
+                if 0 <= idx < len(player.hand):
+                    hc = player.hand.pop(idx)
+                    player.trash.append(hc)
+                    game_state._log(f"{player.name} trashed {hc.name}")
+            # Set attacker to return to bottom after battle
+            for c in player.cards_in_play:
+                if c is mr2_card:
+                    c.return_to_bottom_after_battle = True
+                    break
+            # Prompt for opponent's cost 2 or less to place at bottom
+            opponent = get_opponent(game_state, player)
+            targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 2]
+            if targets:
+                create_bottom_deck_choice(game_state, player, targets,
+                                          prompt="Choose opponent's cost 2 or less to place at deck bottom")
+
         game_state.pending_choice = PendingChoice(
             choice_id=f"mr2_trash_{_uuid.uuid4().hex[:8]}",
             choice_type="select_cards",
@@ -1064,12 +1219,7 @@ def op02_064_mr2(game_state, player, card):
             max_selections=1,
             source_card_id=card.id,
             source_card_name=card.name,
-            callback_action="op02_064_trash_then_bottom",
-            callback_data={
-                "player_id": player.player_id,
-                "player_index": 0 if player is game_state.player1 else 1,
-                "attacker_card_id": card.id,
-            }
+            callback=mr2_trash_cb,
         )
         return True
     return False
@@ -1097,6 +1247,18 @@ def op02_065_mr3_eot(game_state, player, card):
                 "card_id": hc.id,
                 "card_name": hc.name,
             })
+        mr3_card = card
+
+        def mr3_eot_cb(selected: list) -> None:
+            if selected:
+                idx = int(selected[0])
+                if 0 <= idx < len(player.hand):
+                    hc = player.hand.pop(idx)
+                    player.trash.append(hc)
+                    game_state._log(f"{player.name} trashed {hc.name}")
+                    mr3_card.is_resting = False
+                    game_state._log(f"{mr3_card.name} set active")
+
         game_state.pending_choice = PendingChoice(
             choice_id=f"mr3_eot_{_uuid.uuid4().hex[:8]}",
             choice_type="select_cards",
@@ -1106,12 +1268,7 @@ def op02_065_mr3_eot(game_state, player, card):
             max_selections=1,
             source_card_id=card.id,
             source_card_name=card.name,
-            callback_action="op02_065_optional_trash_set_active",
-            callback_data={
-                "player_id": player.player_id,
-                "player_index": 0 if player is game_state.player1 else 1,
-                "mr3_card_id": card.id,
-            }
+            callback=mr3_eot_cb,
         )
         return True
     return False
@@ -1132,6 +1289,18 @@ def op02_066_impel_down_all_stars(game_state, player, card):
                 "card_id": hc.id,
                 "card_name": hc.name,
             })
+        def idas_trash_cb(selected: list) -> None:
+            indices = sorted([int(s) for s in selected], reverse=True) if selected else []
+            for idx in indices:
+                if 0 <= idx < len(player.hand):
+                    hc = player.hand.pop(idx)
+                    player.trash.append(hc)
+                    game_state._log(f"{player.name} trashed {hc.name}")
+            if len(indices) >= 2:
+                if player.leader and 'impel down' in (player.leader.card_origin or '').lower():
+                    draw_cards(player, 2)
+                    game_state._log("Impel Down All Stars: drew 2 cards")
+
         game_state.pending_choice = PendingChoice(
             choice_id=f"idas_trash_{_uuid.uuid4().hex[:8]}",
             choice_type="select_cards",
@@ -1141,11 +1310,7 @@ def op02_066_impel_down_all_stars(game_state, player, card):
             max_selections=2,
             source_card_id=card.id,
             source_card_name=card.name,
-            callback_action="op02_066_trash_then_draw",
-            callback_data={
-                "player_id": player.player_id,
-                "player_index": 0 if player is game_state.player1 else 1,
-            }
+            callback=idas_trash_cb,
         )
         return True
     return False
@@ -1287,6 +1452,12 @@ def op02_086_minokoala_ko(game_state, player, card):
     if player.leader and 'Impel Down' in (player.leader.card_origin or ''):
         from ...game_engine import PendingChoice
         import uuid as _uuid
+        def minokoala_don_cb(selected: list) -> None:
+            if selected and selected[0] == "yes":
+                if len(player.don_pool) < 10:
+                    player.don_pool.append("rested")
+                    game_state._log("Minokoala: added 1 rested DON!! from DON!! deck")
+
         game_state.pending_choice = PendingChoice(
             choice_id=f"minokoala_don_{_uuid.uuid4().hex[:8]}",
             choice_type="select_mode",
@@ -1299,8 +1470,7 @@ def op02_086_minokoala_ko(game_state, player, card):
             max_selections=1,
             source_card_id=card.id,
             source_card_name=card.name,
-            callback_action="op02_086_optional_add_don",
-            callback_data={"player_id": player.player_id},
+            callback=minokoala_don_cb,
         )
     return True
 
@@ -1320,6 +1490,12 @@ def op02_087_minotaur_ko(game_state, player, card):
     if player.leader and 'Impel Down' in (player.leader.card_origin or ''):
         from ...game_engine import PendingChoice
         import uuid as _uuid
+        def minotaur_don_cb(selected: list) -> None:
+            if selected and selected[0] == "yes":
+                if len(player.don_pool) < 10:
+                    player.don_pool.append("rested")
+                    game_state._log("Minotaur: added 1 rested DON!! from DON!! deck")
+
         game_state.pending_choice = PendingChoice(
             choice_id=f"minotaur_don_{_uuid.uuid4().hex[:8]}",
             choice_type="select_mode",
@@ -1332,8 +1508,7 @@ def op02_087_minotaur_ko(game_state, player, card):
             max_selections=1,
             source_card_id=card.id,
             source_card_name=card.name,
-            callback_action="op02_087_optional_add_don",
-            callback_data={"player_id": player.player_id},
+            callback=minotaur_don_cb,
         )
     return True
 
@@ -1384,6 +1559,42 @@ def op02_098_koby(game_state, player, card):
     from ...game_engine import PendingChoice
     import uuid as _uuid
     if player.hand:
+        koby_card = card
+
+        def koby_trash_cb(selected: list) -> None:
+            if selected:
+                idx = int(selected[0])
+                if 0 <= idx < len(player.hand):
+                    hc = player.hand.pop(idx)
+                    player.trash.append(hc)
+                    game_state._log(f"{player.name} trashed {hc.name}")
+                    opponent = get_opponent(game_state, player)
+                    targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 3]
+                    if targets:
+                        create_ko_choice(game_state, player, targets, source_card=koby_card,
+                                         prompt="Choose opponent's cost 3 or less to KO")
+
+        def koby_yesno_cb(selected: list) -> None:
+            if selected and selected[0] == "yes" and player.hand:
+                opts = []
+                for i, hc in enumerate(player.hand):
+                    opts.append({
+                        "id": str(i),
+                        "label": f"{hc.name} (Cost: {hc.cost or 0})",
+                        "card_id": hc.id,
+                        "card_name": hc.name,
+                    })
+                game_state.pending_choice = PendingChoice(
+                    choice_id=f"koby_trash_{_uuid.uuid4().hex[:8]}",
+                    choice_type="select_cards",
+                    prompt="Choose 1 card from hand to trash for Koby",
+                    options=opts,
+                    min_selections=1,
+                    max_selections=1,
+                    source_card_id=koby_card.id,
+                    callback=koby_trash_cb,
+                )
+
         game_state.pending_choice = PendingChoice(
             choice_id=f"koby_yesno_{_uuid.uuid4().hex[:8]}",
             choice_type="select_mode",
@@ -1396,8 +1607,7 @@ def op02_098_koby(game_state, player, card):
             max_selections=1,
             source_card_id=card.id,
             source_card_name=card.name,
-            callback_action="op02_098_optional_trash_then_ko",
-            callback_data={"player_id": player.player_id, "source_card_id": card.id},
+            callback=koby_yesno_cb,
         )
     return True
 
@@ -1409,6 +1619,42 @@ def op02_099_sakazuki(game_state, player, card):
     from ...game_engine import PendingChoice
     import uuid as _uuid
     if player.hand:
+        sakazuki_card = card
+
+        def sakazuki_trash_cb(selected: list) -> None:
+            if selected:
+                idx = int(selected[0])
+                if 0 <= idx < len(player.hand):
+                    hc = player.hand.pop(idx)
+                    player.trash.append(hc)
+                    game_state._log(f"{player.name} trashed {hc.name}")
+                    opponent = get_opponent(game_state, player)
+                    targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 5]
+                    if targets:
+                        create_ko_choice(game_state, player, targets, source_card=sakazuki_card,
+                                         prompt="Choose opponent's cost 5 or less to KO")
+
+        def sakazuki_yesno_cb(selected: list) -> None:
+            if selected and selected[0] == "yes" and player.hand:
+                opts = []
+                for i, hc in enumerate(player.hand):
+                    opts.append({
+                        "id": str(i),
+                        "label": f"{hc.name} (Cost: {hc.cost or 0})",
+                        "card_id": hc.id,
+                        "card_name": hc.name,
+                    })
+                game_state.pending_choice = PendingChoice(
+                    choice_id=f"sakazuki_trash_{_uuid.uuid4().hex[:8]}",
+                    choice_type="select_cards",
+                    prompt="Choose 1 card from hand to trash for Sakazuki",
+                    options=opts,
+                    min_selections=1,
+                    max_selections=1,
+                    source_card_id=sakazuki_card.id,
+                    callback=sakazuki_trash_cb,
+                )
+
         game_state.pending_choice = PendingChoice(
             choice_id=f"sakazuki_yesno_{_uuid.uuid4().hex[:8]}",
             choice_type="select_mode",
@@ -1421,8 +1667,7 @@ def op02_099_sakazuki(game_state, player, card):
             max_selections=1,
             source_card_id=card.id,
             source_card_name=card.name,
-            callback_action="op02_099_optional_trash_then_ko",
-            callback_data={"player_id": player.player_id, "source_card_id": card.id},
+            callback=sakazuki_yesno_cb,
         )
     return True
 
@@ -1534,11 +1779,21 @@ def op02_110_hina_block(game_state, player, card):
     opponent = get_opponent(game_state, player)
     targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 6]
     if targets:
+        targets_snapshot = list(targets)
+
+        def hina_block_cb(selected: list) -> None:
+            target_idx = int(selected[0]) if selected else -1
+            if 0 <= target_idx < len(targets_snapshot):
+                target = targets_snapshot[target_idx]
+                target.cannot_attack = True
+                target.cannot_attack_until_turn = game_state.turn_count + 1
+                game_state._log(f"{target.name} cannot attack this turn")
+
         return create_target_choice(
             game_state, player, targets,
-            callback_action="cannot_attack_target",
             source_card=card,
-            prompt="Choose opponent's cost 6 or less that can't attack this turn"
+            prompt="Choose opponent's cost 6 or less that can't attack this turn",
+            callback=hina_block_cb,
         )
     return True
 
@@ -1561,16 +1816,52 @@ def op02_112_bellmere(game_state, player, card):
         opponent = get_opponent(game_state, player)
         if opponent.cards_in_play:
             buff_targets = ([player.leader] if player.leader else []) + player.cards_in_play
+            opp_snap = list(opponent.cards_in_play)
+            buff_snap = list(buff_targets)
+
+            def bellmere_cost_cb(selected: list) -> None:
+                if selected:
+                    target_idx = int(selected[0])
+                    if 0 <= target_idx < len(opp_snap):
+                        target = opp_snap[target_idx]
+                        target.cost_modifier = getattr(target, 'cost_modifier', 0) - 1
+                        game_state._log(f"{target.name} gets -1 cost this turn")
+                # Chain to power buff selection
+                if buff_snap:
+                    opts = []
+                    for i, t in enumerate(buff_snap):
+                        opts.append({
+                            "id": str(i),
+                            "label": t.name,
+                            "card_id": t.id,
+                            "card_name": t.name,
+                        })
+
+                    def bellmere_power_cb(sel: list) -> None:
+                        sidx = int(sel[0]) if sel else -1
+                        if 0 <= sidx < len(buff_snap):
+                            t = buff_snap[sidx]
+                            t.power_modifier = getattr(t, 'power_modifier', 0) + 1000
+                            t._sticky_power_modifier = getattr(t, '_sticky_power_modifier', 0) + 1000
+                            game_state._log(f"{t.name} gets +1000 power")
+
+                    from ...game_engine import PendingChoice
+                    import uuid as _uuid2
+                    game_state.pending_choice = PendingChoice(
+                        choice_id=f"bellmere_buff_{_uuid2.uuid4().hex[:8]}",
+                        choice_type="select_target",
+                        prompt="Choose your Leader or Character to give +1000 power",
+                        options=opts,
+                        min_selections=1,
+                        max_selections=1,
+                        callback=bellmere_power_cb,
+                    )
+
             return create_target_choice(
-                game_state, player, opponent.cards_in_play,
+                game_state, player, opp_snap,
                 prompt="Choose opponent's Character to give -1 cost",
                 source_card=card,
-                callback_action="op02_112_cost_then_power",
-                callback_data={
-                    "player_id": player.player_id,
-                    "target_cards": [{"id": c.id, "name": c.name} for c in opponent.cards_in_play],
-                    "buff_targets": [{"id": c.id, "name": c.name} for c in buff_targets],
-                }
+                callback=bellmere_cost_cb,
             )
         return True
     return False
@@ -1582,16 +1873,27 @@ def op02_113_helmeppo(game_state, player, card):
     """When Attacking: Give opponent -2 cost. If cost 0 exists, gain +2000."""
     opponent = get_opponent(game_state, player)
     if opponent.cards_in_play:
+        opp_snap = list(opponent.cards_in_play)
+        helmeppo_card = card
+
+        def helmeppo_cost_cb(selected: list) -> None:
+            if selected:
+                target_idx = int(selected[0])
+                if 0 <= target_idx < len(opp_snap):
+                    target = opp_snap[target_idx]
+                    target.cost_modifier = getattr(target, 'cost_modifier', 0) - 2
+                    game_state._log(f"{target.name} gets -2 cost this turn")
+            all_chars = player.cards_in_play + opponent.cards_in_play
+            if any((getattr(c, 'cost', 0) or 0) + getattr(c, 'cost_modifier', 0) <= 0 for c in all_chars):
+                helmeppo_card.power_modifier = getattr(helmeppo_card, 'power_modifier', 0) + 2000
+                helmeppo_card._sticky_power_modifier = getattr(helmeppo_card, '_sticky_power_modifier', 0) + 2000
+                game_state._log(f"{helmeppo_card.name} gets +2000 power")
+
         return create_target_choice(
-            game_state, player, opponent.cards_in_play,
+            game_state, player, opp_snap,
             prompt="Choose opponent's Character to give -2 cost",
             source_card=card,
-            callback_action="op02_113_cost_then_power",
-            callback_data={
-                "player_id": player.player_id,
-                "target_cards": [{"id": c.id, "name": c.name} for c in opponent.cards_in_play],
-                "source_card_id": card.id,
-            }
+            callback=helmeppo_cost_cb,
         )
     all_chars = player.cards_in_play + opponent.cards_in_play
     if any((getattr(c, 'cost', 0) or 0) + getattr(c, 'cost_modifier', 0) == 0 for c in all_chars):
@@ -1712,10 +2014,25 @@ def op02_092_impel_down(game_state, player, card):
     card.main_activated_this_turn = True
 
     # Create trash-from-hand choice, then chain to search
-    from ..hardcoded import create_hand_discard_choice
+    hand_snapshot = list(player.hand)
+
+    def impel_down_trash_cb(selected: list) -> None:
+        target_idx = int(selected[0]) if selected else -1
+        if 0 <= target_idx < len(hand_snapshot):
+            target = hand_snapshot[target_idx]
+            if target in player.hand:
+                player.hand.remove(target)
+                player.trash.append(target)
+                game_state._log(f"{player.name} trashed {target.name} for Impel Down")
+        search_top_cards(
+            game_state, player, look_count=3, add_count=1,
+            filter_fn=lambda c: 'impel down' in (c.card_origin or '').lower(),
+            source_card=None,
+            prompt="Look at top 3: choose 1 Impel Down card to add to hand")
+
     return create_hand_discard_choice(
-        game_state, player, list(player.hand),
-        callback_action="impel_down_trash_then_search",
+        game_state, player, hand_snapshot,
+        callback=impel_down_trash_cb,
         source_card=card,
         prompt="Choose 1 card from hand to trash (cost for Impel Down search)")
 
@@ -1819,6 +2136,27 @@ def op02_048_land_of_wano_stage(game_state, player, card):
             "card_id": hc.id,
             "card_name": hc.name,
         })
+    wano_snapshot = list(wano_cards)
+    stage_card = card
+
+    def wano_stage_cb(selected: list) -> None:
+        if selected:
+            idx = int(selected[0])
+            if 0 <= idx < len(wano_snapshot):
+                wano_card = wano_snapshot[idx]
+                if wano_card in player.hand:
+                    player.hand.remove(wano_card)
+                    player.trash.append(wano_card)
+                    game_state._log(f"Land of Wano Stage: trashed {wano_card.name}")
+                # Rest the stage and set 1 DON active
+                stage_card.is_resting = True
+                stage_card.main_activated_this_turn = True
+                for i, d in enumerate(player.don_pool):
+                    if d == "rested":
+                        player.don_pool[i] = "active"
+                        game_state._log("Land of Wano Stage: set 1 DON active")
+                        break
+
     game_state.pending_choice = PendingChoice(
         choice_id=f"wano_stage_{_uuid.uuid4().hex[:8]}",
         choice_type="select_cards",
@@ -1828,13 +2166,7 @@ def op02_048_land_of_wano_stage(game_state, player, card):
         max_selections=1,
         source_card_id=card.id,
         source_card_name=card.name,
-        callback_action="op02_048_trash_wano",
-        callback_data={
-            "player_id": player.player_id,
-            "player_index": 0 if player is game_state.player1 else 1,
-            "target_cards": [{"id": hc.id, "name": hc.name} for hc in wano_cards],
-            "stage_card_id": card.id,
-        }
+        callback=wano_stage_cb,
     )
     return True
 
@@ -1869,6 +2201,21 @@ def op02_068_gum_gum_rain(game_state, player, card):
             "card_id": hc.id,
             "card_name": hc.name,
         })
+    def ggrain_trash_cb(selected: list) -> None:
+        if selected:
+            idx = int(selected[0])
+            if 0 <= idx < len(player.hand):
+                hc = player.hand.pop(idx)
+                player.trash.append(hc)
+                game_state._log(f"{player.name} trashed {hc.name}")
+            # Give +3000 to Leader or Character
+            targets = ([player.leader] if player.leader else []) + player.cards_in_play
+            if targets:
+                create_power_effect_choice(
+                    game_state, player, targets, 3000,
+                    prompt="Gum-Gum Rain: Choose Leader or Character to give +3000 power"
+                )
+
     game_state.pending_choice = PendingChoice(
         choice_id=f"ggrain_trash_{_uuid.uuid4().hex[:8]}",
         choice_type="select_cards",
@@ -1878,11 +2225,7 @@ def op02_068_gum_gum_rain(game_state, player, card):
         max_selections=1,
         source_card_id=card.id,
         source_card_name=card.name,
-        callback_action="op02_068_trash_then_power",
-        callback_data={
-            "player_id": player.player_id,
-            "player_index": 0 if player is game_state.player1 else 1,
-        }
+        callback=ggrain_trash_cb,
     )
     return True
 
@@ -1940,6 +2283,44 @@ def op02_070_new_kama_land(game_state, player, card):
             "card_id": hc.id,
             "card_name": hc.name,
         })
+    def _new_kama_optional_trash(sel: list) -> None:
+        idxs = sorted([int(s) for s in sel], reverse=True) if sel else []
+        for idx in idxs:
+            if 0 <= idx < len(player.hand):
+                hc = player.hand.pop(idx)
+                player.trash.append(hc)
+                game_state._log(f"{player.name} trashed {hc.name}")
+
+    def new_kama_req_cb(selected: list) -> None:
+        indices = sorted([int(s) for s in selected], reverse=True) if selected else []
+        for idx in indices:
+            if 0 <= idx < len(player.hand):
+                hc = player.hand.pop(idx)
+                player.trash.append(hc)
+                game_state._log(f"{player.name} trashed {hc.name}")
+        if player.hand:
+            opts = []
+            for i, hc in enumerate(player.hand):
+                opts.append({
+                    "id": str(i),
+                    "label": f"{hc.name} (Cost: {hc.cost or 0})",
+                    "card_id": hc.id,
+                    "card_name": hc.name,
+                })
+            game_state.pending_choice = PendingChoice(
+                choice_id=f"new_kama_opt_{_uuid.uuid4().hex[:8]}",
+                choice_type="select_cards",
+                prompt="You may trash up to 3 more cards from hand (select 0 to skip)",
+                options=opts,
+                min_selections=0,
+                max_selections=min(3, len(player.hand)),
+                source_card_id=card.id,
+                source_card_name=card.name,
+                callback=_new_kama_optional_trash,
+            )
+        else:
+            game_state._log("New Kama Land: finished draw 1, trash 1")
+
     game_state.pending_choice = PendingChoice(
         choice_id=f"new_kama_{_uuid.uuid4().hex[:8]}",
         choice_type="select_cards",
@@ -1949,13 +2330,7 @@ def op02_070_new_kama_land(game_state, player, card):
         max_selections=1,
         source_card_id=card.id,
         source_card_name=card.name,
-        callback_action="op02_070_required_then_optional",
-        callback_data={
-            "player_id": player.player_id,
-            "player_index": 0 if player is game_state.player1 else 1,
-            "source_card_id": card.id,
-            "source_card_name": card.name,
-        }
+        callback=new_kama_req_cb,
     )
     return True
 
@@ -2021,10 +2396,20 @@ def op02_118_yasakani(game_state, player, card):
     if player.hand:
         trash_from_hand(player, 1, game_state, card)
     # Create choice for which own character to protect
+    snapshot = list(player.cards_in_play)
+
+    def yasakani_protect_cb(selected: list) -> None:
+        target_idx = int(selected[0]) if selected else -1
+        if 0 <= target_idx < len(snapshot):
+            target = snapshot[target_idx]
+            target.cannot_be_ko_in_battle = True
+            target._ko_protected_for_attack = True
+            game_state._log(f"{target.name} cannot be K.O.'d in battle this turn")
+
     return create_set_active_choice(
-        game_state, player, player.cards_in_play[:],
+        game_state, player, snapshot,
         source_card=card,
-        callback_action="protect_from_ko_in_battle",
+        callback=yasakani_protect_cb,
         prompt="Yasakani Sacred Jewel: Choose your Character that cannot be K.O.'d this battle"
     )
 

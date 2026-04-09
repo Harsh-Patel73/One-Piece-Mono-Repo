@@ -112,10 +112,27 @@ def op09_030_law(game_state, player, card):
     """On Play: Return char to hand, play ODYSSEY cost 3 or less from hand."""
     chars = [c for c in player.cards_in_play if c != card]
     if chars:
+        chars_snap = list(chars)
+        def law_cb(selected: list) -> None:
+            target_idx = int(selected[0]) if selected else -1
+            if 0 <= target_idx < len(chars_snap):
+                target = chars_snap[target_idx]
+                if target in player.cards_in_play:
+                    player.cards_in_play.remove(target)
+                    player.hand.append(target)
+                    game_state._log(f"{target.name} returned to hand")
+            odyssey = [c for c in player.hand
+                       if 'odyssey' in (getattr(c, 'card_types', '') or '').lower()
+                       and (getattr(c, 'cost', 0) or 0) <= 3
+                       and getattr(c, 'card_type', '') == 'CHARACTER'
+                       and 'Trafalgar Law' not in getattr(c, 'name', '')]
+            if odyssey:
+                create_play_from_hand_choice(game_state, player, odyssey, source_card=None,
+                                             prompt="Choose ODYSSEY cost 3 or less Character to play")
         return create_own_character_choice(
             game_state, player, chars,
             source_card=card,
-            callback_action="law_return_then_play_odyssey",
+            callback=law_cb,
             prompt="Choose your Character to return to hand (then play ODYSSEY cost 3 or less)"
         )
     return False

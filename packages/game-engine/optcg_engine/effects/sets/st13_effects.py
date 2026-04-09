@@ -68,10 +68,28 @@ def st13_001_sabo_leader(game_state, player, card):
                    and (getattr(c, 'power', 0) or 0) >= 7000]
         if targets:
             card.st13_001_used = True
+            targets_snap = list(targets)
+            def sabo_cb(selected: list) -> None:
+                target_idx = int(selected[0]) if selected else -1
+                if 0 <= target_idx < len(targets_snap):
+                    target = targets_snap[target_idx]
+                    if target in player.cards_in_play:
+                        player.cards_in_play.remove(target)
+                        player.life_cards.append(target)
+                        game_state._log(f"{target.name} was added to Life face-up")
+                all_chars = list(player.cards_in_play)
+                if player.leader:
+                    all_chars.append(player.leader)
+                if all_chars:
+                    from ..hardcoded import create_power_effect_choice
+                    create_power_effect_choice(game_state, player, all_chars, 2000,
+                                               source_card=None,
+                                               prompt="Choose a Character or Leader to give +2000 power until next turn",
+                                               min_selections=1, max_selections=1)
             return create_own_character_choice(
                 game_state, player, targets,
                 source_card=card,
-                callback_action="sabo_leader_add_to_life",
+                callback=sabo_cb,
                 prompt="Choose cost 3+ 7000+ Character to add to Life (then +2000 to a Character)"
             )
     return False

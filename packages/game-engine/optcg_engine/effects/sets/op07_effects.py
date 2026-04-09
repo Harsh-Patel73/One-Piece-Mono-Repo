@@ -274,10 +274,22 @@ def op07_056_slave_arrow(game_state, player, card):
     """Counter: Return cost 2+ char to hand, +4000 power."""
     targets = [c for c in player.cards_in_play if (getattr(c, 'cost', 0) or 0) >= 2]
     if targets:
+        targets_snap = list(targets)
+        def slave_arrow_cb(selected: list) -> None:
+            target_idx = int(selected[0]) if selected else -1
+            if 0 <= target_idx < len(targets_snap):
+                target = targets_snap[target_idx]
+                if target in player.cards_in_play:
+                    player.cards_in_play.remove(target)
+                    player.hand.append(target)
+                    game_state._log(f"{target.name} returned to hand")
+                    if player.leader:
+                        player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 4000
+                        game_state._log(f"Leader gained +4000 power")
         return create_own_character_choice(
             game_state, player, targets,
             source_card=card,
-            callback_action="slave_arrow_return",
+            callback=slave_arrow_cb,
             prompt="Choose your cost 2+ Character to return to hand (Leader gains +4000 power)"
         )
     return False
@@ -291,10 +303,24 @@ def op07_085_stussy(game_state, player, card):
     chars = [c for c in player.cards_in_play if c != card]
     opponent = get_opponent(game_state, player)
     if chars and opponent.cards_in_play:
+        chars_snap = list(chars)
+        def stussy_cb(selected: list) -> None:
+            target_idx = int(selected[0]) if selected else -1
+            if 0 <= target_idx < len(chars_snap):
+                target = chars_snap[target_idx]
+                if target in player.cards_in_play:
+                    player.cards_in_play.remove(target)
+                    player.trash.append(target)
+                    game_state._log(f"{target.name} was trashed")
+            opp_ref = get_opponent(game_state, player)
+            if opp_ref.cards_in_play:
+                create_ko_choice(game_state, player, list(opp_ref.cards_in_play),
+                                 source_card=card,
+                                 prompt="Choose opponent's Character to KO")
         return create_own_character_choice(
             game_state, player, chars,
             source_card=card,
-            callback_action="stussy_trash_then_ko",
+            callback=stussy_cb,
             prompt="Choose your Character to trash (then KO opponent's Character)"
         )
     return False

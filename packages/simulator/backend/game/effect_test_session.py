@@ -443,17 +443,23 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
                         5, 6000, ["Purple"], "Water Seven/Straw Hat Crew")
         p1.hand.insert(0, cost5)
 
-    # OP03-036: Need a Kuro character on field (rested) and East Blue chars
+    # OP03-036: Leader must be Kuro (East Blue) and resting; add East Blue chars and a resting Kuro char
     if card_id == "OP03-036":
-        kuro_char = _card("KURO-001", "Kuro", "CHARACTER",
-                           3, 4000, ["Green"], "East Blue/Black Cat Pirates")
+        p1.leader = _eb_leader(4)
+        p1.leader.is_resting = True  # Kuro leader is resting — can be chosen to activate
+        for i in range(2):
+            eb = _card(f"EB-036-{i}", f"East Blue Char {i+1}", "CHARACTER",
+                       3, 4000, ["Green"], "East Blue")
+            eb.is_resting = False
+            p1.cards_in_play.append(eb)
+        # Add a resting Kuro character so the player can choose between char and leader
+        kuro_char = _card("KURO-C01", "Kuro", "CHARACTER", 4, 5000, ["Green"], "East Blue/Black Cat Pirates")
         kuro_char.is_resting = True
-        kuro_char.attached_don = 0
-        kuro_char.power_modifier = 0
         p1.cards_in_play.append(kuro_char)
 
     if card_id == "OP03-021":
-        for i in range(2):
+        # Add 3 EB chars so the player has a real choice of WHICH 2 to rest
+        for i in range(3):
             east_blue = _card(f"EB-{i}", f"East Blue Test {i+1}", "CHARACTER",
                                3, 4000, ["Green"], "East Blue")
             east_blue.is_resting = False
@@ -469,9 +475,20 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
     if card_id in ("OP03-064", "OP03-067"):
         p1.leader = _iceburg_leader(4)
 
+    if card_id == "OP03-075":
+        # Reduce DON pool below max so the +1 rested DON effect can be demonstrated
+        p1.don_pool = ["active"] * 9
+
     if card_id == "OP03-094":
-        cp_top = _card("CP-T05", "CP9 Topdeck", "CHARACTER", 5, 6000, ["Black"], "CP9")
-        p1.deck.insert(0, cp_top)
+        # Seed 3 CP cards at top of deck to guarantee coverage in top 5
+        cp_seeds = [
+            ("OP03-093", "Wanze", 3, 3000),
+            ("CP-S001", "CP9 Spy", 4, 4000),
+            ("CP-S002", "CP9 Agent", 2, 3000),
+        ]
+        for i, (cid, cname, cost, power) in enumerate(cp_seeds):
+            c = _card(cid, cname, "CHARACTER", cost, power, ["Black"], "CP9")
+            p1.deck.insert(i, c)
 
     return gs, p1, tc
 

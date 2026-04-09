@@ -3,7 +3,8 @@ Hardcoded effects for OP10 cards.
 """
 
 from ..hardcoded import (
-    add_don_from_deck, create_bottom_deck_choice, create_ko_choice, create_own_character_choice,
+    add_don_from_deck, add_power_modifier,
+    create_bottom_deck_choice, create_ko_choice, create_own_character_choice,
     create_play_from_hand_choice, create_rest_choice, create_return_to_hand_choice,
     create_target_choice, draw_cards, get_opponent, register_effect, search_top_cards,
     trash_from_hand,
@@ -161,7 +162,7 @@ def op10_117_room(game_state, player, card):
 @register_effect("OP10-085", "CONTINUOUS", "If DONx1 and 8+ trash, gain Rush")
 def op10_085_burgess(game_state, player, card):
     """Continuous: If DONx1 and 8+ trash, this gains Rush."""
-    if getattr(card, 'attached_don', 0) >= 1 and check_trash_count(player, 8):
+    if getattr(card, 'attached_don', 0) >= 1 and len(player.trash) >= 8:
         card.has_rush = True
         return True
     return False
@@ -174,12 +175,21 @@ def op10_097_rhino_schneider(game_state, player, card):
     dressrosa = [c for c in player.cards_in_play
                  if 'dressrosa' in (c.card_origin or '').lower()]
     if dressrosa:
-        banish = check_trash_count(player, 10)
+        banish = len(player.trash) >= 10
+        dressrosa_snap = list(dressrosa)
+        def rhino_cb(selected: list) -> None:
+            target_idx = int(selected[0]) if selected else -1
+            if 0 <= target_idx < len(dressrosa_snap):
+                target = dressrosa_snap[target_idx]
+                target.power_modifier = getattr(target, 'power_modifier', 0) + 2000
+                game_state._log(f"{target.name} gains +2000 power")
+                if banish:
+                    target.has_banish = True
+                    game_state._log(f"{target.name} gains Banish this turn")
         return create_target_choice(
             game_state, player, dressrosa,
-            callback_action="dressrosa_power_banish" if banish else "apply_power_modifier",
+            callback=rhino_cb,
             source_card=card,
-            extra_data={"power": 2000, "banish": banish},
             prompt="Choose your Dressrosa Character to give +2000 power" + (" and Banish" if banish else "")
         )
     return False
@@ -194,10 +204,25 @@ def op10_002_caesar(game_state, player, card):
                       if 'punk hazard' in (c.card_origin or '').lower()
                       and (getattr(c, 'cost', 0) or 0) >= 2]
         if punk_hazard:
+            ph_snap = list(punk_hazard)
+            def caesar_cb(selected: list) -> None:
+                target_idx = int(selected[0]) if selected else -1
+                if 0 <= target_idx < len(ph_snap):
+                    target = ph_snap[target_idx]
+                    if target in player.cards_in_play:
+                        player.cards_in_play.remove(target)
+                        player.hand.append(target)
+                        game_state._log(f"{target.name} returned to hand")
+                opponent = get_opponent(game_state, player)
+                ko_targets = [c for c in opponent.cards_in_play
+                              if (getattr(c, 'power', 0) or 0) + getattr(c, 'power_modifier', 0) <= 4000]
+                if ko_targets:
+                    create_ko_choice(game_state, player, ko_targets, source_card=None,
+                                     prompt="Choose opponent's 4000 power or less Character to KO")
             return create_own_character_choice(
                 game_state, player, punk_hazard,
                 source_card=card,
-                callback_action="caesar_return_then_ko",
+                callback=caesar_cb,
                 prompt="Choose Punk Hazard cost 2+ to return to hand (then KO 4000 power or less)"
             )
     return False

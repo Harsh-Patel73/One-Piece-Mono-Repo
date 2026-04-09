@@ -6,8 +6,8 @@ import random
 
 from ..hardcoded import (
     create_add_to_life_choice, create_bottom_deck_choice, create_don_assignment_choice, create_ko_choice,
-    create_mode_choice, create_power_effect_choice, create_rest_choice, create_target_choice,
-    draw_cards, get_opponent, register_effect, search_top_cards, trash_from_hand,
+    create_mode_choice, create_play_from_trash_choice, create_power_effect_choice, create_rest_choice,
+    create_target_choice, draw_cards, get_opponent, register_effect, search_top_cards, trash_from_hand,
 )
 
 
@@ -487,9 +487,19 @@ def op06_011_tot_musica(game_state, player, card):
         uta = [c for c in player.cards_in_play if 'Uta' in getattr(c, 'name', '') and not getattr(c, 'is_resting', False)]
         if uta:
             card.op06_011_used = True
+            tot_ref = card
+            uta_snap = list(uta)
+            def tot_musica_cb(selected: list) -> None:
+                target_idx = int(selected[0]) if selected else -1
+                if 0 <= target_idx < len(uta_snap):
+                    target = uta_snap[target_idx]
+                    target.is_resting = True
+                    game_state._log(f"{target.name} was rested")
+                tot_ref.power_modifier = getattr(tot_ref, 'power_modifier', 0) + 5000
+                game_state._log(f"{tot_ref.name} gains +5000 power")
             return create_rest_choice(game_state, player, uta, source_card=card,
                                      prompt="Choose Uta to rest (this gains +5000)",
-                                     callback_action="tot_musica_power_boost")
+                                     callback=tot_musica_cb)
     return False
 
 
@@ -552,9 +562,27 @@ def op06_015_lily_carnation(game_state, player, card):
         big_chars = [c for c in player.cards_in_play if (getattr(c, 'power', 0) or 0) >= 6000 and c != card]
         if big_chars:
             card.op06_015_used = True
+            big_snap = list(big_chars)
+            def lily_carnation_cb(selected: list) -> None:
+                target_idx = int(selected[0]) if selected else -1
+                if 0 <= target_idx < len(big_snap):
+                    target = big_snap[target_idx]
+                    if target in player.cards_in_play:
+                        player.cards_in_play.remove(target)
+                        player.trash.append(target)
+                        game_state._log(f"{target.name} was trashed")
+                film_targets = [c for c in player.trash
+                               if 'film' in (c.card_origin or '').lower()
+                               and getattr(c, 'card_type', '') == 'CHARACTER'
+                               and 2000 <= (getattr(c, 'power', 0) or 0) <= 5000]
+                if film_targets:
+                    create_play_from_trash_choice(game_state, player, film_targets,
+                                                  source_card=None,
+                                                  rest_on_play=True,
+                                                  prompt="Choose FILM Character (2000-5000 power) from trash to play rested")
             return create_ko_choice(game_state, player, big_chars, source_card=card,
                                    prompt="Choose your 6000+ power Character to trash",
-                                   callback_action="lily_carnation_play_film")
+                                   callback=lily_carnation_cb)
     return False
 
 

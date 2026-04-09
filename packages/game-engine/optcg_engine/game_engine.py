@@ -38,8 +38,9 @@ class PendingChoice:
     max_selections: int = 1
     source_card_id: Optional[str] = None  # Card that triggered this choice
     source_card_name: Optional[str] = None  # Name for display
-    callback_action: Optional[str] = None  # Action to perform: "trash", "play", "return_to_hand", etc.
-    callback_data: Dict[str, Any] = field(default_factory=dict)  # Additional data for the callback
+    callback: Optional[Callable[['List[str]'], None]] = None  # Callable closure — preferred over string dispatch
+    callback_action: Optional[str] = None  # DEPRECATED: use callback instead
+    callback_data: Dict[str, Any] = field(default_factory=dict)  # DEPRECATED: use closure captures instead
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize for sending to frontend."""
@@ -525,6 +526,20 @@ class GameState:
         # Some leaders have special abilities to draw more than 1 card
         self.phase = GamePhase.DRAW
         if not (self.turn_count == 2 and self.current_player is self.player1):
+            # Deck-out check: if deck is empty when a draw is required, game ends
+            if not self.current_player.deck:
+                if getattr(self.current_player, 'win_on_deck_out', False):
+                    # Nami-style: player with empty deck wins
+                    self._log(f"{self.current_player.name}'s deck is empty — {self.current_player.name} wins!")
+                    self.game_over = True
+                    self.winner = self.current_player
+                else:
+                    # Standard rule: player who can't draw loses
+                    self._log(f"{self.current_player.name} cannot draw — {self.opponent_player.name} wins!")
+                    self.game_over = True
+                    self.winner = self.opponent_player
+                self.phase = GamePhase.GAME_OVER
+                return
             # Check if leader has a special draw count (e.g., some leaders draw 2)
             draw_count = getattr(self.current_player.leader, 'draw_phase_count', 1)
             for _ in range(draw_count):
@@ -637,6 +652,10 @@ class GameState:
                     has_innate = ('[Double Attack]' in effect_text
                                   and not _re.search(r'gains?\s+\[Double Attack\]', effect_text, _re.IGNORECASE))
                     card.has_doubleattack = has_innate
+            # Clear cost_modifier on cards in play (e.g. Issho OP03-078 -3 cost)
+            for card in player.cards_in_play:
+                if hasattr(card, 'cost_modifier'):
+                    card.cost_modifier = 0
             # Clear hand cost modifiers (e.g. Crocodile -1 cost for blue events)
             for card in player.hand:
                 if hasattr(card, 'cost_modifier'):
@@ -1946,12 +1965,24 @@ class GameState:
             from .effects.hardcoded import create_ko_choice
             targets_3 = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 3]
             if targets_3:
-                create_ko_choice(
-                    self, player, targets_3, source_card=None,
-                    prompt="Choose opponent's cost 3 or less Character to K.O.",
-                    callback_action="king_ko_then_2",
-                    callback_data={"player_id": player.player_id},
-                )
+                t3_snap = list(targets_3)
+                def _king_ko_then_2(selected: list) -> None:
+                    target_idx = int(selected[0]) if selected else -1
+                    if 0 <= target_idx < len(t3_snap):
+                        target = t3_snap[target_idx]
+                        for p in [player, opponent]:
+                            if target in p.cards_in_play:
+                                p.cards_in_play.remove(target)
+                                p.trash.append(target)
+                                self._log(f"{target.name} was KO'd")
+                                break
+                    targets_2 = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 2]
+                    if targets_2:
+                        create_ko_choice(self, player, targets_2, source_card=None,
+                                        prompt="Choose opponent's cost 2 or less Character to K.O.")
+                create_ko_choice(self, player, targets_3, source_card=None,
+                                prompt="Choose opponent's cost 3 or less Character to K.O.",
+                                callback=_king_ko_then_2)
 
         elif after == "op01_097_queen_rush_power":
             src_id = after_data.get("source_card_id")
@@ -2173,6 +2204,18 @@ class GameState:
                      if getattr(c, 'card_type', '') == 'CHARACTER'
                      and (getattr(c, 'cost', 0) or 0) == 5]
             if cost5 and src:
+                cost5_snap = list(cost5)
+                src_ref = src
+                def _op03_070_cb(selected: list) -> None:
+                    target_idx = int(selected[0]) if selected else -1
+                    if 0 <= target_idx < len(cost5_snap):
+                        target = cost5_snap[target_idx]
+                        if target in player.hand:
+                            player.hand.remove(target)
+                            player.trash.append(target)
+                            self._log(f"Luffy: Trashed {target.name}")
+                    src_ref.has_rush = True
+                    self._log(f"  {src_ref.name} gained [Rush]")
                 import uuid as _uuid
                 self.pending_choice = PendingChoice(
                     choice_id=f"op03_070_{_uuid.uuid4().hex[:8]}",
@@ -2188,12 +2231,7 @@ class GameState:
                     max_selections=1,
                     source_card_id=src.id,
                     source_card_name=src.name,
-                    callback_action="op03_070_grant_rush",
-                    callback_data={
-                        "player_id": player.player_id,
-                        "source_card_id": src.id,
-                        "target_cards": [{"id": c.id, "name": c.name} for c in cost5],
-                    },
+                    callback=_op03_070_cb,
                 )
 
         elif after == "op03_071_rest":
@@ -2232,9 +2270,21 @@ class GameState:
             # OP03-077 Charlotte Linlin: If 1 or less life, trash 1 from hand, then add deck card to life
             if len(player.life_cards) <= 1 and player.deck and player.hand:
                 from .effects.hardcoded import create_hand_discard_choice
+                hand_snap = list(player.hand)
+                def _op03_077_cb(selected: list) -> None:
+                    target_idx = int(selected[0]) if selected else -1
+                    if 0 <= target_idx < len(hand_snap):
+                        target = hand_snap[target_idx]
+                        if target in player.hand:
+                            player.hand.remove(target)
+                            player.trash.append(target)
+                            self._log(f"Charlotte Linlin: Trashed {target.name}")
+                    if player.deck:
+                        player.life_cards.append(player.deck.pop(0))
+                        self._log(f"Charlotte Linlin: Added top deck card to Life")
                 create_hand_discard_choice(
                     self, player, list(player.hand), source_card=None,
-                    callback_action="op03_077_trash_then_life",
+                    callback=_op03_077_cb,
                     prompt="Charlotte Linlin: Choose 1 card from hand to trash to add the top card of your deck to Life"
                 )
 
@@ -2353,7 +2403,10 @@ class GameState:
             player = self.player1 if self.player1.player_id == player_id else self.player2
 
         try:
-            if action == "trash_from_hand":
+            # Preferred path: callable closure — avoids string dispatch entirely
+            if choice.callback is not None:
+                choice.callback(selected)
+            elif action == "trash_from_hand":
                 # selected contains indices of cards to trash
                 indices = [int(s) for s in selected]
                 # Sort in reverse so we remove from end first
@@ -2536,28 +2589,6 @@ class GameState:
                                 self._log(f"{c.name} was KO'd")
                                 break
 
-            elif action == "op03_001_trash_for_power":
-                # OP03-001 Ace Leader: Trash selected Event/Stage cards, gain +1000 per card
-                target_cards = data.get("target_cards", [])
-                src_id = data.get("source_card_id", "")
-                src_card = (player.leader if player.leader and player.leader.id == src_id
-                            else next((c for c in player.cards_in_play if c.id == src_id), None))
-                power_gained = 0
-                for sel in selected:
-                    target_idx = int(sel)
-                    if 0 <= target_idx < len(target_cards):
-                        target_info = target_cards[target_idx]
-                        for c in player.hand[:]:
-                            if c.id == target_info["id"]:
-                                player.hand.remove(c)
-                                player.trash.append(c)
-                                power_gained += 1000
-                                self._log(f"{player.name} trashed {c.name} for +1000 power")
-                                break
-                if src_card and power_gained > 0:
-                    src_card.power_modifier = getattr(src_card, 'power_modifier', 0) + power_gained
-                    src_card._sticky_power_modifier = getattr(src_card, '_sticky_power_modifier', 0) + power_gained
-                    self._log(f"{src_card.name} gains +{power_gained} power this turn")
 
             elif action == "trash_own_character":
                 # Trash a selected character from hand or field (e.g. OP03-012 Blackbeard)
@@ -2599,148 +2630,11 @@ class GameState:
                             boost_card._sticky_power_modifier = getattr(boost_card, '_sticky_power_modifier', 0) + power_boost_amount
                             self._log(f"{boost_card.name} gains +{power_boost_amount} power")
 
-            elif action == "op03_013_ko_after_trash":
-                # OP03-013 Marco on_play: Player trashed an Event from hand, now KO opponent's 3000 or less
-                indices = sorted([int(s) for s in selected], reverse=True) if selected else []
-                target_cards = data.get("target_cards", [])
-                for idx in indices:
-                    if 0 <= idx < len(target_cards):
-                        target_info = target_cards[idx]
-                        for c in player.hand[:]:
-                            if c.id == target_info["id"]:
-                                player.hand.remove(c)
-                                player.trash.append(c)
-                                self._log(f"{player.name} trashed {c.name} from hand")
-                                break
-                opponent = self.player2 if player == self.player1 else self.player1
-                ko_targets = [c for c in opponent.cards_in_play
-                              if (getattr(c, 'power', 0) or 0) + getattr(c, 'power_modifier', 0) <= 3000]
-                if ko_targets:
-                    from .effects.hardcoded import create_ko_choice
-                    create_ko_choice(self, player, ko_targets, source_card=None,
-                                    prompt="Marco: Choose opponent's 3000 power or less Character to K.O.")
 
-            elif action == "op03_013_return_after_trash":
-                # OP03-013 Marco on_ko: Player trashed an Event, now return Marco to play rested
-                target_cards = data.get("target_cards", [])
-                marco_id = data.get("marco_id", "")
-                indices = sorted([int(s) for s in selected], reverse=True) if selected else []
-                for idx in indices:
-                    if 0 <= idx < len(target_cards):
-                        target_info = target_cards[idx]
-                        for c in player.hand[:]:
-                            if c.id == target_info["id"]:
-                                player.hand.remove(c)
-                                player.trash.append(c)
-                                self._log(f"{player.name} trashed {c.name} from hand")
-                                break
-                # Find and return Marco from trash to field
-                for c in player.trash[:]:
-                    if c.id == marco_id:
-                        player.trash.remove(c)
-                        player.cards_in_play.append(c)
-                        c.is_resting = True
-                        self._log(f"{c.name} returns to field rested")
-                        break
 
-            elif action == "op03_027_rest_then_optional_buchi":
-                # OP03-027 Sham: rest chosen target, then optionally play 1 Buchi from hand if none is in play
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                opponent = self.player2 if player == self.player1 else self.player1
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    for c in opponent.cards_in_play:
-                        if c.id == target_info["id"]:
-                            c.is_resting = True
-                            self._log(f"{c.name} was rested")
-                            break
-                has_buchi = any(getattr(c, 'name', '') == 'Buchi' for c in player.cards_in_play)
-                hand_buchi = [c for c in player.hand if getattr(c, 'name', '') == 'Buchi']
-                if hand_buchi and not has_buchi:
-                    from .effects.hardcoded import create_play_from_hand_choice
-                    create_play_from_hand_choice(
-                        self, player, hand_buchi, source_card=None,
-                        prompt="Sham: You may play 1 Buchi from your hand"
-                    )
 
-            elif action == "op03_016_ko_then_boost":
-                # OP03-016 Flame Emperor: KO target then boost leader +3000 and double attack
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    for c in opponent.cards_in_play[:]:
-                        if c.id == target_info["id"]:
-                            opponent.cards_in_play.remove(c)
-                            opponent.trash.append(c)
-                            self._log(f"{c.name} was K.O.'d by Flame Emperor")
-                            break
-                # Give leader +3000 and Double Attack for this turn
-                if player.leader:
-                    player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 3000
-                    player.leader._sticky_power_modifier = getattr(player.leader, '_sticky_power_modifier', 0) + 3000
-                    player.leader.has_doubleattack = True
-                    player.leader.has_double_attack = True
-                    player.leader._temp_doubleattack = True
-                    self._log(f"{player.leader.name} gains +3000 power and [Double Attack] this turn")
 
-            elif action == "op03_018_ko_4000_after":
-                # OP03-018 Fire Fist: After KO'ing 5000 or less, now prompt to KO 4000 or less
-                # First do the KO of the selected 5000-or-less target
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    for c in opponent.cards_in_play[:]:
-                        if c.id == target_info["id"]:
-                            opponent.cards_in_play.remove(c)
-                            opponent.trash.append(c)
-                            self._log(f"{c.name} was K.O.'d by Fire Fist (5000 or less)")
-                            break
-                # Now prompt for 4000 or less
-                opponent = self.player2 if player == self.player1 else self.player1
-                ko_targets2 = [c for c in opponent.cards_in_play
-                               if (getattr(c, 'power', 0) or 0) + getattr(c, 'power_modifier', 0) <= 4000]
-                if ko_targets2:
-                    from .effects.hardcoded import create_ko_choice
-                    create_ko_choice(self, player, ko_targets2, source_card=None,
-                                    prompt="Fire Fist: Choose opponent's 4000 power or less Character to K.O.")
 
-            elif action == "op03_025_ko_after_trash":
-                # OP03-025 Krieg: Player trashed a card, now KO up to 2 rested cost 4 or less
-                indices = sorted([int(s) for s in selected], reverse=True) if selected else []
-                target_cards = data.get("target_cards", [])
-                for idx in indices:
-                    if 0 <= idx < len(target_cards):
-                        target_info = target_cards[idx]
-                        for c in player.hand[:]:
-                            if c.id == target_info["id"]:
-                                player.hand.remove(c)
-                                player.trash.append(c)
-                                self._log(f"{player.name} trashed {c.name} from hand")
-                                break
-                opponent = self.player2 if player == self.player1 else self.player1
-                ko_targets = [c for c in opponent.cards_in_play
-                              if (getattr(c, 'cost', 0) or 0) <= 4 and getattr(c, 'is_resting', False)]
-                if ko_targets:
-                    from .effects.hardcoded import create_ko_choice
-                    import uuid as _uuid
-                    opts = []
-                    for i, c in enumerate(ko_targets):
-                        opts.append({"id": str(i), "label": f"{c.name} (Cost {c.cost or 0})",
-                                     "card_id": c.id, "card_name": c.name})
-                    self.pending_choice = PendingChoice(
-                        choice_id=f"krieg_ko_{_uuid.uuid4().hex[:8]}",
-                        choice_type="select_target",
-                        prompt="Krieg: Choose up to 2 rested cost 4 or less Characters to K.O.",
-                        options=opts, min_selections=0, max_selections=2,
-                        callback_action="ko_multi_targets",
-                        callback_data={"player_id": player.player_id,
-                                       "target_cards": [{"id": c.id, "name": c.name} for c in ko_targets]},
-                    )
 
             elif action == "ko_multi_targets":
                 # KO multiple selected targets (e.g. OP03-025 Krieg)
@@ -2760,24 +2654,6 @@ class GameState:
                                 self._log(f"{c.name} was K.O.'d")
                                 break
 
-            elif action == "op03_037_ko_after_rest":
-                # OP03-037 Tooth Attack: rest chosen East Blue character, then KO a rested cost 4 or less
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    for c in player.cards_in_play:
-                        if c.id == target_info["id"]:
-                            c.is_resting = True
-                            self._log(f"{c.name} was rested")
-                            break
-                opponent = self.player2 if player == self.player1 else self.player1
-                rested_targets = [c for c in opponent.cards_in_play
-                                  if (getattr(c, 'cost', 0) or 0) <= 4 and getattr(c, 'is_resting', False)]
-                if rested_targets:
-                    from .effects.hardcoded import create_ko_choice
-                    create_ko_choice(self, player, rested_targets, source_card=None,
-                                     prompt="Tooth Attack: Choose opponent's rested cost 4 or less Character to K.O.")
 
             elif action == "rest_targets_multi":
                 # Rest multiple selected targets (e.g. OP03-024 Gin, OP03-038 MH5)
@@ -2794,408 +2670,39 @@ class GameState:
                                     self._log(f"{c.name} was rested")
                                     break
 
-            elif action == "op03_039_power_after_rest":
-                # OP03-039 One Two Jango: After resting opponent's cost 1 or less, give own char +1000
-                target_cards = data.get("target_cards", [])
-                opponent = self.player2 if player == self.player1 else self.player1
-                for sel in selected:
-                    target_idx = int(sel)
-                    if 0 <= target_idx < len(target_cards):
-                        target_info = target_cards[target_idx]
-                        for c in opponent.cards_in_play:
-                            if c.id == target_info["id"]:
-                                c.is_resting = True
-                                self._log(f"{c.name} was rested")
-                                break
-                # Now prompt to give +1000 to an own character
-                own_chars = list(player.cards_in_play)
-                if player.leader:
-                    own_chars.append(player.leader)
-                if own_chars:
-                    from .effects.hardcoded import create_power_effect_choice
-                    create_power_effect_choice(game_state=self, player=player, targets=own_chars, power_amount=1000,
-                                              source_card=None, prompt="One, Two, Jango: Choose 1 of your cards to give +1000 power",
-                                              min_selections=0, max_selections=1)
 
-            elif action == "op03_047_return_then_optional_trash":
-                # OP03-047 Zeff: return chosen cost 3 or less, then optionally trash 2 from deck
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    for p_ in [player, self.player2 if player == self.player1 else self.player1]:
-                        for c in p_.cards_in_play[:]:
-                            if c.id == target_info["id"]:
-                                p_.cards_in_play.remove(c)
-                                p_.hand.append(c)
-                                self._log(f"{c.name} was returned to hand")
-                                break
-                import uuid as _uuid
-                self.pending_choice = PendingChoice(
-                    choice_id=f"op03_047_trash_{_uuid.uuid4().hex[:8]}",
-                    choice_type="yes_no",
-                    prompt="Zeff: Trash 2 cards from the top of your deck?",
-                    options=[
-                        {"id": "yes", "label": "Yes", "card_id": "op03_047", "card_name": "Zeff"},
-                        {"id": "no", "label": "No", "card_id": "op03_047", "card_name": "Zeff"},
-                    ],
-                    min_selections=1,
-                    max_selections=1,
-                    source_card_id=data.get("source_card_id"),
-                    source_card_name="Zeff",
-                    callback_action="optional_trash_from_deck",
-                    callback_data={"player_id": player.player_id, "count": 2},
-                )
 
-            elif action == "op03_047_damage_trash":
-                if "yes" in selected:
-                    count = min(7, len(player.deck))
-                    for _ in range(count):
-                        if player.deck:
-                            player.trash.append(player.deck.pop(0))
-                    self._log(f"Zeff: Trashed {count} card(s) from top of deck")
 
-            elif action == "op03_054_power_then_optional_trash":
-                # OP03-054 Rubber Band: give selected own target +2000, then optionally trash 1 from deck
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    target = None
-                    for c in player.cards_in_play:
-                        if c.id == target_info["id"]:
-                            target = c
-                            break
-                    if not target and player.leader and player.leader.id == target_info["id"]:
-                        target = player.leader
-                    if target:
-                        target.power_modifier = getattr(target, 'power_modifier', 0) + 2000
-                        target._sticky_power_modifier = getattr(target, '_sticky_power_modifier', 0) + 2000
-                        self._log(f"{target.name} gets +2000 power")
-                import uuid as _uuid
-                self.pending_choice = PendingChoice(
-                    choice_id=f"op03_054_trash_{_uuid.uuid4().hex[:8]}",
-                    choice_type="yes_no",
-                    prompt="Usopp's Rubber Band of Doom!!!: Trash 1 card from the top of your deck?",
-                    options=[
-                        {"id": "yes", "label": "Yes", "card_id": "op03_054", "card_name": "Usopp's Rubber Band of Doom!!!"},
-                        {"id": "no", "label": "No", "card_id": "op03_054", "card_name": "Usopp's Rubber Band of Doom!!!"},
-                    ],
-                    min_selections=1,
-                    max_selections=1,
-                    source_card_id=data.get("source_card_id"),
-                    source_card_name="Usopp's Rubber Band of Doom!!!",
-                    callback_action="optional_trash_from_deck",
-                    callback_data={"player_id": player.player_id, "count": 1},
-                )
 
-            elif action == "op03_064_add_don":
-                if "yes" in selected:
-                    from .effects.hardcoded import add_don_from_deck
-                    add_don_from_deck(player, 1)
-                    self._log(f"{player.name} added 1 rested DON!! from DON deck")
 
-            elif action == "op03_066_rest_don":
-                if "yes" in selected:
-                    rested = 0
-                    for i in range(len(player.don_pool)):
-                        if player.don_pool[i] == "active" and rested < 2:
-                            player.don_pool[i] = "rested"
-                            rested += 1
-                    from .effects.hardcoded import add_don_from_deck
-                    add_don_from_deck(player, 1, set_active=True)
-                    self._log(f"{player.name} rested 2 DON!! and added 1 active DON!! from DON deck")
-                    total_don = len(player.don_pool)
-                    if total_don >= 8:
-                        import uuid as _uuid
-                        self.pending_choice = PendingChoice(
-                            choice_id=f"op03_066_follow_{_uuid.uuid4().hex[:8]}",
-                            choice_type="yes_no",
-                            prompt="Paulie: K.O. an opponent's cost 4 or less Character?",
-                            options=[
-                                {"id": "yes", "label": "Yes", "card_id": "op03_066", "card_name": "Paulie"},
-                                {"id": "no", "label": "No", "card_id": "op03_066", "card_name": "Paulie"},
-                            ],
-                            min_selections=1,
-                            max_selections=1,
-                            callback_action="op03_066_add_don_then_ko",
-                            callback_data={"player_id": player.player_id},
-                        )
 
-            elif action == "op03_066_add_don_then_ko":
-                if "yes" in selected:
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 4]
-                    if targets:
-                        from .effects.hardcoded import create_ko_choice
-                        create_ko_choice(self, player, targets, source_card=None,
-                                         prompt="Paulie: Choose opponent's cost 4 or less Character to K.O.")
 
-            elif action == "op03_076_trash_for_active":
-                target_cards = data.get("target_cards", [])
-                source_card_id = data.get("source_card_id", "")
-                for idx in sorted([int(s) for s in selected], reverse=True):
-                    if 0 <= idx < len(target_cards):
-                        target_info = target_cards[idx]
-                        for c in player.hand[:]:
-                            if c.id == target_info["id"]:
-                                player.hand.remove(c)
-                                player.trash.append(c)
-                                self._log(f"{player.name} trashed {c.name} from hand")
-                                break
-                src = player.leader if player.leader and player.leader.id == source_card_id else None
-                if src:
-                    src.is_resting = False
-                    src.has_attacked = False
-                    src.op03_076_used = True
-                    self._log(f"{src.name} was set active")
 
-            elif action == "op03_077_trash_then_life":
-                target_cards = data.get("target_cards", [])
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    for c in player.hand[:]:
-                        if c.id == target_info["id"]:
-                            player.hand.remove(c)
-                            player.trash.append(c)
-                            self._log(f"{player.name} trashed {c.name} from hand")
-                            break
-                    if len(player.life_cards) <= 1 and player.deck:
-                        deck_card = player.deck.pop(0)
-                        player.life_cards.append(deck_card)
-                        self._log("Charlotte Linlin: Added 1 card from deck to Life")
 
-            elif action == "op03_078_trash_opponent_hand":
-                opponent = self.player2 if player == self.player1 else self.player1
-                for idx in sorted([int(s) for s in selected], reverse=True):
-                    if 0 <= idx < len(opponent.hand):
-                        trashed = opponent.hand.pop(idx)
-                        opponent.trash.append(trashed)
-                        self._log(f"Issho: {opponent.name} trashed 1 card from hand")
 
-            elif action == "op03_080_return_then_ko":
-                target_cards = data.get("target_cards", [])
-                chosen_infos = []
-                for sel in selected:
-                    idx = int(sel)
-                    if 0 <= idx < len(target_cards):
-                        chosen_infos.append(target_cards[idx])
-                for info in chosen_infos:
-                    for c in player.trash[:]:
-                        if c.id == info["id"]:
-                            player.trash.remove(c)
-                            player.deck.append(c)
-                            self._log(f"{c.name} was returned to the bottom of the deck")
-                            break
-                opponent = self.player2 if player == self.player1 else self.player1
-                ko_targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 3]
-                if ko_targets:
-                    from .effects.hardcoded import create_ko_choice
-                    create_ko_choice(self, player, ko_targets, source_card=None,
-                                     prompt="Kaku: Choose opponent's cost 3 or less Character to K.O.")
 
-            elif action == "op03_081_cost_after_trash":
-                target_cards = data.get("target_cards", [])
-                for idx in sorted([int(s) for s in selected], reverse=True):
-                    if 0 <= idx < len(target_cards):
-                        target_info = target_cards[idx]
-                        for c in player.hand[:]:
-                            if c.id == target_info["id"]:
-                                player.hand.remove(c)
-                                player.trash.append(c)
-                                self._log(f"{player.name} trashed {c.name} from hand")
-                                break
-                opponent = self.player2 if player == self.player1 else self.player1
-                if opponent.cards_in_play:
-                    from .effects.hardcoded import create_cost_reduction_choice
-                    create_cost_reduction_choice(
-                        self, player, list(opponent.cards_in_play), -2, source_card=None,
-                        prompt="Kalifa: Choose opponent's Character to give -2 cost"
-                    )
 
-            elif action == "op03_092_return_then_rush":
-                target_cards = data.get("target_cards", [])
-                source_card_id = data.get("source_card_id", "")
-                for sel in selected:
-                    idx = int(sel)
-                    if 0 <= idx < len(target_cards):
-                        info = target_cards[idx]
-                        for c in player.trash[:]:
-                            if c.id == info["id"]:
-                                player.trash.remove(c)
-                                player.deck.append(c)
-                                self._log(f"{c.name} was returned to the bottom of the deck")
-                                break
-                src = next((c for c in player.cards_in_play if c.id == source_card_id), None)
-                if src:
-                    src.has_rush = True
-                    self._log(f"{src.name} gained [Rush]")
 
-            elif action == "op03_093_ko_after_trash":
-                target_cards = data.get("target_cards", [])
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    for c in player.hand[:]:
-                        if c.id == target_info["id"]:
-                            player.hand.remove(c)
-                            player.trash.append(c)
-                            self._log(f"{player.name} trashed {c.name} from hand")
-                            break
-                if player.leader and 'CP' in (player.leader.card_origin or ''):
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 1]
-                    if targets:
-                        from .effects.hardcoded import create_ko_choice
-                        create_ko_choice(self, player, targets, source_card=None,
-                                         prompt="Wanze: Choose opponent's cost 1 or less Character to K.O.")
 
-            elif action == "op03_100_play_after_life_trash":
-                choice_pick = selected[0] if selected else None
-                source_card_id = data.get("source_card_id", "")
-                if player.life_cards:
-                    life_card = player.life_cards.pop(0) if choice_pick == "top" else player.life_cards.pop()
-                    player.trash.append(life_card)
-                    self._log(f"{player.name} trashed 1 Life card")
-                for c in player.trash[:]:
-                    if c.id == source_card_id:
-                        player.trash.remove(c)
-                        player.cards_in_play.append(c)
-                        self._log(f"{player.name} played {c.name}")
-                        break
 
-            elif action == "op03_105_power_after_trash":
-                target_cards = data.get("target_cards", [])
-                source_card_id = data.get("source_card_id", "")
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    for c in player.hand[:]:
-                        if c.id == target_info["id"]:
-                            player.hand.remove(c)
-                            player.trash.append(c)
-                            self._log(f"{player.name} trashed {c.name} from hand")
-                            break
-                src = next((c for c in player.cards_in_play if c.id == source_card_id), None)
-                if src:
-                    src.power_modifier = getattr(src, 'power_modifier', 0) + 3000
-                    src._sticky_power_modifier = getattr(src, '_sticky_power_modifier', 0) + 3000
-                    self._log(f"{src.name} gains +3000 power")
 
-            elif action == "op03_108_play_after_trash":
-                target_cards = data.get("target_cards", [])
-                source_card_id = data.get("source_card_id", "")
-                if selected:
-                    target_idx = int(selected[0])
-                    if 0 <= target_idx < len(target_cards):
-                        target_info = target_cards[target_idx]
-                        for c in player.hand[:]:
-                            if c.id == target_info["id"]:
-                                player.hand.remove(c)
-                                player.trash.append(c)
-                                self._log(f"{player.name} trashed {c.name} from hand")
-                                break
-                for c in player.trash[:]:
-                    if c.id == source_card_id:
-                        player.trash.remove(c)
-                        player.cards_in_play.append(c)
-                        self._apply_keywords(c)
-                        self._log(f"{player.name} played {c.name}")
-                        break
 
-            elif action == "op03_110_life_to_hand":
-                choice_pick = selected[0] if selected else "none"
-                source_card_id = data.get("source_card_id", "")
-                src = next((c for c in player.cards_in_play if c.id == source_card_id), None)
-                if choice_pick != "none" and player.life_cards:
-                    life_card = player.life_cards.pop(0) if choice_pick == "top" else player.life_cards.pop()
-                    player.hand.append(life_card)
-                    self._log(f"{player.name} added 1 Life card to hand")
-                    if src:
-                        src.power_modifier = getattr(src, 'power_modifier', 0) + 2000
-                        src._sticky_power_modifier = getattr(src, '_sticky_power_modifier', 0) + 2000
-                        self._log(f"{src.name} gains +2000 power")
 
-            elif action == "op03_115_ko_after_trash":
-                target_cards = data.get("target_cards", [])
-                if selected:
-                    target_idx = int(selected[0])
-                    if 0 <= target_idx < len(target_cards):
-                        target_info = target_cards[target_idx]
-                        for c in player.hand[:]:
-                            if c.id == target_info["id"]:
-                                player.hand.remove(c)
-                                player.trash.append(c)
-                                self._log(f"{player.name} trashed {c.name} from hand")
-                                break
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 1]
-                    if targets:
-                        from .effects.hardcoded import create_ko_choice
-                        create_ko_choice(self, player, targets, source_card=None,
-                                         prompt="Streusen: Choose opponent's cost 1 or less Character to K.O.")
 
-            elif action == "op03_117_power_to_target":
-                target_cards = data.get("target_cards", [])
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    target = next((c for c in player.cards_in_play if c.id == target_info["id"]), None)
-                    if not target and player.leader and player.leader.id == target_info["id"]:
-                        target = player.leader
-                    if target:
-                        target.power_modifier = getattr(target, 'power_modifier', 0) + 1000
-                        target._sticky_power_modifier = getattr(target, '_sticky_power_modifier', 0) + 1000
-                        target.power_modifier_expires_on_turn = self.turn_count + 1
-                        target._sticky_power_modifier_expires_on_turn = self.turn_count + 1
-                        self._log(f"{target.name} gets +1000 power until end of your next turn")
 
-            elif action == "op03_122_return_after_trash":
-                target_cards = data.get("target_cards", [])
-                for idx in sorted([int(s) for s in selected], reverse=True):
-                    if 0 <= idx < len(target_cards):
-                        target_info = target_cards[idx]
-                        for c in player.hand[:]:
-                            if c.id == target_info["id"]:
-                                player.hand.remove(c)
-                                player.trash.append(c)
-                                self._log(f"{player.name} trashed {c.name} from hand")
-                                break
-                opponent = self.player2 if player == self.player1 else self.player1
-                all_chars = [c for c in player.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 6]
-                all_chars.extend([c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 6])
-                if all_chars:
-                    from .effects.hardcoded import create_return_to_hand_choice
-                    create_return_to_hand_choice(
-                        self, player, all_chars, source_card=None,
-                        prompt="Sogeking: Choose a cost 6 or less Character to return to hand",
-                        optional=True
-                    )
 
-            elif action == "king_ko_then_2":
-                # OP01-096 King: KO the selected cost-3-or-less target, then prompt for cost 2 or less
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    for p in [player, opponent]:
-                        for c in p.cards_in_play[:]:
-                            if c.id == target_info["id"]:
-                                p.cards_in_play.remove(c)
-                                p.trash.append(c)
-                                self._log(f"{c.name} was KO'd")
-                                break
-                # Now prompt for cost 2 or less
-                opponent = self.player2 if player == self.player1 else self.player1
-                targets_2 = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 2]
-                if targets_2:
-                    from .effects.hardcoded import create_ko_choice
-                    create_ko_choice(
-                        self, player, targets_2, source_card=None,
-                        prompt="Choose opponent's cost 2 or less Character to K.O.",
-                    )
+
+
+
+
+
+
+
+
+
+
+
+
 
             elif action == "return_from_trash_to_hand":
                 # Move selected card from player's trash to hand (e.g. Uta)
@@ -3375,87 +2882,8 @@ class GameState:
                     # Skip the optional effect
                     self._log(f"{player.name} chose not to add a life card to hand")
 
-                elif selected_mode == "set_active" and card_id == "OP03-028":
-                    from .effects.hardcoded import create_set_active_choice
-                    east_blue = [c for c in player.cards_in_play
-                                 if 'East Blue' in (c.card_origin or '')
-                                 and (getattr(c, 'cost', 0) or 0) <= 6
-                                 and getattr(c, 'is_resting', False)]
-                    if east_blue:
-                        create_set_active_choice(
-                            self, player, east_blue, source_card=source_card,
-                            prompt="Jango: Choose an East Blue cost 6 or less Character to set active"
-                        )
 
-                elif selected_mode == "rest_this" and card_id == "OP03-028":
-                    if source_card:
-                        source_card.is_resting = True
-                        self._log(f"{source_card.name} was rested")
-                    from .effects.hardcoded import create_rest_choice
-                    targets = [c for c in opponent.cards_in_play if not getattr(c, 'is_resting', False)]
-                    if targets:
-                        create_rest_choice(
-                            self, player, targets, source_card=source_card,
-                            prompt="Jango: Choose an opponent's Character to rest"
-                        )
 
-            elif action == "jozu_return_own":
-                # Jozu: You may return own character, then return up to 1 cost 6 or less
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                jozu_card_id = choice.source_card_id  # Track Jozu to exclude from step 2
-
-                if not selected or target_idx < 0:
-                    # Player chose to skip - no cost paid, no second effect
-                    self._log(f"{player.name} chose not to use Jozu's effect")
-                elif 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    # Find and return the character
-                    for c in player.cards_in_play[:]:
-                        if c.id == target_info["id"]:
-                            player.cards_in_play.remove(c)
-                            player.hand.append(c)
-                            self._log(f"{player.name} returned {c.name} to hand")
-                            break
-
-                    # Now trigger the second part: return up to 1 cost 6 or less to owner's hand
-                    from .effects.hardcoded import create_return_to_hand_choice
-                    self.pending_choice = None
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    # Combine both players' characters (cost 6 or less), exclude Jozu
-                    all_targets = []
-                    for c in player.cards_in_play:
-                        if (getattr(c, 'cost', 0) or 0) <= 6 and c.id != jozu_card_id:
-                            all_targets.append(c)
-                    for c in opponent.cards_in_play:
-                        if (getattr(c, 'cost', 0) or 0) <= 6:
-                            all_targets.append(c)
-                    if all_targets:
-                        return create_return_to_hand_choice(
-                            self, player, all_targets, source_card=None,
-                            prompt="Return up to 1 cost 6 or less Character to owner's hand",
-                            optional=True
-                        )
-
-            elif action == "brilliant_punk_return":
-                # Brilliant Punk: Return own character, then return opponent's cost 6 or less
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    # Find and return the character
-                    for c in player.cards_in_play[:]:
-                        if c.id == target_info["id"]:
-                            player.cards_in_play.remove(c)
-                            player.hand.append(c)
-                            self._log(f"{player.name} returned {c.name} to hand")
-                            break
-
-                    # Now trigger the second part: return opponent's cost 6 or less
-                    from .effects.hardcoded import return_opponent_to_hand
-                    self.pending_choice = None
-                    return return_opponent_to_hand(self, player, max_cost=6, source_card=None)
 
             elif action == "return_own_to_hand":
                 # Generic return own character to hand
@@ -3471,28 +2899,6 @@ class GameState:
                             self._log(f"{player.name} returned {c.name} to hand")
                             break
 
-            elif action == "law_return_then_play_cost3":
-                # Law OP01-047: return a character to hand, then play cost 3 or less
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    for c in player.cards_in_play[:]:
-                        if c.id == target_info["id"]:
-                            player.cards_in_play.remove(c)
-                            player.hand.append(c)
-                            self._log(f"Law: {player.name} returned {c.name} to hand")
-                            break
-                # Now offer to play a cost 3 or less Character from hand
-                from .effects.hardcoded import create_play_from_hand_choice
-                playable = [c for c in player.hand
-                            if getattr(c, 'card_type', '') == 'CHARACTER'
-                            and (getattr(c, 'cost', 0) or 0) <= 3]
-                if playable:
-                    create_play_from_hand_choice(
-                        self, player, playable,
-                        prompt="Law: Choose a cost 3 or less Character to play from hand"
-                    )
 
             elif action == "apply_cost_reduction":
                 # Apply cost reduction to selected character
@@ -3506,8 +2912,14 @@ class GameState:
                         for p in [opponent, player]:
                             for c in p.cards_in_play:
                                 if c.id == target_info["id"]:
-                                    c.cost_modifier = getattr(c, 'cost_modifier', 0) + cost_reduction
-                                    self._log(f"{c.name} gets {cost_reduction} cost this turn")
+                                    if cost_reduction == "zero":
+                                        # Set cost to 0 by applying enough negative modifier
+                                        current_cost = max(0, (c.cost or 0) + getattr(c, 'cost_modifier', 0))
+                                        c.cost_modifier = getattr(c, 'cost_modifier', 0) - current_cost
+                                        self._log(f"{c.name}'s cost set to 0 this turn")
+                                    else:
+                                        c.cost_modifier = getattr(c, 'cost_modifier', 0) + cost_reduction
+                                        self._log(f"{c.name} gets {cost_reduction} cost this turn")
                                     break
 
             elif action == "play_from_hand":
@@ -3552,100 +2964,9 @@ class GameState:
                                 self._log(f"{c.name} was placed at the bottom of deck")
                                 break
 
-            elif action == "bottom_deck_then_draw":
-                # Move selected card from player's hand to bottom of deck, then draw 1.
-                # If player skipped (empty selection), neither placement nor draw occurs.
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                placed = False
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    for c in player.hand[:]:
-                        if c.id == target_info["id"]:
-                            player.hand.remove(c)
-                            player.deck.append(c)
-                            self._log(f"{player.name} placed {c.name} at bottom of deck")
-                            placed = True
-                            break
-                if placed and player.deck:
-                    drawn = player.deck.pop(0)
-                    player.hand.append(drawn)
-                    self._log(f"{player.name} drew a card")
 
-            elif action == "chopper_trash_then_pick_shc":
-                # Step 1: trash chosen hand card (optional — empty selected = skip)
-                hand_cards = data.get("hand_cards", [])
-                if selected:
-                    target_idx = int(selected[0]) if selected[0].isdigit() else -1
-                    if 0 <= target_idx < len(hand_cards):
-                        target_info = hand_cards[target_idx]
-                        for c in player.hand[:]:
-                            if c.id == target_info["id"]:
-                                player.hand.remove(c)
-                                player.trash.append(c)
-                                self._log(f"{player.name} trashed {c.name}")
-                                break
-                # Step 2: offer SHC cost 4 or less from trash (excluding Chopper itself)
-                shc = [c for c in player.trash
-                       if c.card_type == 'CHARACTER'
-                       and 'straw hat crew' in (c.card_origin or '').lower()
-                       and (c.cost or 0) <= 4
-                       and 'tony tony.chopper' not in (c.name or '').lower()]
-                if shc:
-                    options = [{"id": str(i), "label": f"{c.name} (Cost: {c.cost or 0})",
-                                "card_id": c.id, "card_name": c.name} for i, c in enumerate(shc)]
-                    self.pending_choice = PendingChoice(
-                        choice_id=f"chopper_shc_{__import__('uuid').uuid4().hex[:8]}",
-                        choice_type="select_target",
-                        prompt="Choose a Straw Hat Crew Character (cost 4 or less) from trash to add to hand",
-                        options=options,
-                        min_selections=0,
-                        max_selections=1,
-                        source_card_id=None,
-                        source_card_name="Tony Tony.Chopper",
-                        callback_action="return_from_trash_to_hand",
-                        callback_data={"player_id": player.player_id,
-                                       "target_cards": [{"id": c.id, "name": c.name} for c in shc]},
-                    )
-                else:
-                    self._log("No Straw Hat Crew characters (cost 4 or less) in trash")
 
-            elif action == "nami_pick_shc":
-                # Legacy handler — redirect to nami_shc_add logic for backward compat
-                pass
 
-            elif action == "nami_shc_add":
-                # Nami on-play: top5_count cards are at the top of the deck.
-                # Move chosen valid card (if any) to hand; then let player order remaining to bottom.
-                top5_count = data.get("top5_count", 5)
-                valid_indices = data.get("valid_indices", [])
-
-                chosen_idx = int(selected[0]) if selected else -1
-
-                # Remove chosen card from deck to hand (by position, avoids duplicate-id issues)
-                chosen_card = None
-                if chosen_idx >= 0 and chosen_idx in valid_indices and chosen_idx < len(player.deck):
-                    chosen_card = player.deck.pop(chosen_idx)
-                    player.hand.append(chosen_card)
-                    self._log(f"Nami: Added {chosen_card.name} to hand")
-
-                # Pull remaining top cards out of deck for ordering
-                remaining_count = top5_count - (1 if chosen_card else 0)
-                remaining = player.deck[:remaining_count]
-                for _ in range(remaining_count):
-                    player.deck.pop(0)
-
-                # If 0-1 cards, just place directly; otherwise let player choose order
-                if len(remaining) <= 1:
-                    player.deck.extend(remaining)
-                    self._log("Nami: Remaining cards placed at bottom of deck")
-                else:
-                    # Start sequential ordering choice
-                    self._create_deck_order_choice(
-                        player, remaining, [],
-                        source_name="Nami",
-                        source_id="OP01-016",
-                    )
 
             elif action == "nami_deck_order":
                 # Sequential deck ordering: player picks one card at a time
@@ -3715,41 +3036,7 @@ class GameState:
                         placement=placement,
                     )
 
-            elif action == "two_years_pick_shc":
-                # Same deck manipulation pattern as nami_pick_shc.
-                # Top-5 cards were appended to END of deck; move chosen SHC Character to hand.
-                top5_ids = data.get("top5_ids", [])
-                chosen_id = selected[0] if selected else None
-                if chosen_id:
-                    for c in player.deck[::-1]:
-                        if c.id == chosen_id and c.id in top5_ids:
-                            player.deck.remove(c)
-                            player.hand.append(c)
-                            self._log(f"In Two Years!!: Added {c.name} to hand")
-                            break
-                self._log("In Two Years!!: Remaining cards placed at bottom of deck")
 
-            elif action == "oden_trash_wano":
-                # Trash the selected Land of Wano card, then set up to 2 rested DON active.
-                wano_cards_data = data.get("wano_cards", [])
-                chosen_idx = int(selected[0]) if selected else -1
-                if 0 <= chosen_idx < len(wano_cards_data):
-                    chosen_info = wano_cards_data[chosen_idx]
-                    # Find card in hand by ID
-                    for c in player.hand:
-                        if c.id == chosen_info["id"]:
-                            player.hand.remove(c)
-                            player.trash.append(c)
-                            self._log(f"Kouzuki Oden: Trashed {c.name}")
-                            break
-                # Set up to 2 rested DON as active
-                activated = 0
-                for i, don_status in enumerate(player.don_pool):
-                    if don_status == "rested" and activated < 2:
-                        player.don_pool[i] = "active"
-                        activated += 1
-                if activated:
-                    self._log(f"Kouzuki Oden: Set {activated} DON!! as active")
 
             elif action == "cannot_attack_target":
                 # Target cannot attack until end of phase
@@ -3936,522 +3223,30 @@ class GameState:
                             self._log(f"{c.name}'s effects were negated")
                             break
 
-            elif action == "set_active_with_power":
-                # Set active and give power boost
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                power = data.get("power", 1000)
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    for c in player.cards_in_play:
-                        if c.id == target_info["id"]:
-                            c.is_resting = False
-                            c.has_attacked = False  # Reset so card can attack again this turn
-                            c.power_modifier = getattr(c, 'power_modifier', 0) + power
-                            self._log(f"{c.name} was set active and gained +{power} power")
-                            break
 
-            elif action == "protect_from_ko_in_battle":
-                # Set cannot_be_ko_in_battle on selected own character (Yasakani Sacred Jewel)
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    for c in player.cards_in_play:
-                        if c.id == target_info["id"]:
-                            c.cannot_be_ko_in_battle = True
-                            c._ko_protected_for_attack = True
-                            self._log(f"{c.name} cannot be K.O.'d in battle this turn")
-                            break
 
-            elif action == "slave_arrow_return":
-                # Return own character to hand, then give leader +4000 power
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    for c in player.cards_in_play[:]:
-                        if c.id == target_info["id"]:
-                            player.cards_in_play.remove(c)
-                            player.hand.append(c)
-                            self._log(f"{c.name} returned to hand")
-                            if player.leader:
-                                player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 4000
-                                self._log(f"Leader gained +4000 power")
-                            break
 
-            elif action == "stussy_trash_then_ko":
-                # Trash own character, then KO opponent's character
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    for c in player.cards_in_play[:]:
-                        if c.id == target_info["id"]:
-                            player.cards_in_play.remove(c)
-                            player.trash.append(c)
-                            self._log(f"{c.name} was trashed")
-                            break
-                    # Now trigger KO choice for opponent
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    if opponent.cards_in_play:
-                        from .effects.hardcoded import create_ko_choice
-                        source_card_id = data.get("source_card_id")
-                        source = None
-                        for c in player.cards_in_play:
-                            if c.id == source_card_id:
-                                source = c
-                                break
-                        create_ko_choice(
-                            self, player, opponent.cards_in_play, source_card=source,
-                            prompt="Choose opponent's Character to KO"
-                        )
 
-            elif action == "ace_trash_for_power":
-                # OP13-002 Ace Leader: Trash from hand, then give -2000 to opponent's Leader or Character
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    # Trash the selected card from hand
-                    for c in player.hand[:]:
-                        if c.id == target_info["id"]:
-                            player.hand.remove(c)
-                            player.trash.append(c)
-                            self._log(f"{c.name} was trashed from hand")
-                            break
-                    # Mark Ace effect as used this turn
-                    source_card_id = data.get("source_card_id")
-                    if source_card_id and player.leader and player.leader.id == source_card_id:
-                        player.leader.op13_002_used = True
-                    # Now create choice for -2000 power target (Leader or Characters)
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    power_targets = []
-                    if opponent.leader:
-                        power_targets.append(opponent.leader)
-                    power_targets.extend(opponent.cards_in_play)
-                    if power_targets:
-                        from .effects.hardcoded import create_power_effect_choice
-                        self.pending_choice = None
-                        create_power_effect_choice(
-                            self, player, power_targets, -2000,
-                            source_card=None,
-                            prompt="Choose opponent's Leader or Character to give -2000 power"
-                        )
 
-            elif action == "law_return_then_play_odyssey":
-                # Return own character, then play ODYSSEY cost 3 or less
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    for c in player.cards_in_play[:]:
-                        if c.id == target_info["id"]:
-                            player.cards_in_play.remove(c)
-                            player.hand.append(c)
-                            self._log(f"{c.name} returned to hand")
-                            break
-                    # Now trigger play ODYSSEY choice
-                    odyssey = [c for c in player.hand
-                               if 'odyssey' in (getattr(c, 'card_types', '') or '').lower()
-                               and (getattr(c, 'cost', 0) or 0) <= 3
-                               and getattr(c, 'card_type', '') == 'CHARACTER'
-                               and 'Trafalgar Law' not in getattr(c, 'name', '')]
-                    if odyssey:
-                        from .effects.hardcoded import create_play_from_hand_choice
-                        create_play_from_hand_choice(
-                            self, player, odyssey, source_card=None,
-                            prompt="Choose ODYSSEY cost 3 or less Character to play"
-                        )
 
-            elif action == "law_leader_return_then_play":
-                # Return own character, then play different color cost 5 or less
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    returned_colors: set = set()
-                    for c in player.cards_in_play[:]:
-                        if c.id == target_info["id"]:
-                            returned_colors = {col.lower() for col in (getattr(c, 'colors', []) or [])}
-                            player.cards_in_play.remove(c)
-                            player.hand.append(c)
-                            self._log(f"{c.name} returned to hand")
-                            break
-                    # Now trigger play different color choice
-                    playable = [c for c in player.hand
-                                if getattr(c, 'card_type', '') == 'CHARACTER'
-                                and (getattr(c, 'cost', 0) or 0) <= 5
-                                and not any(col.lower() in returned_colors
-                                            for col in (getattr(c, 'colors', []) or []))]
-                    if playable:
-                        from .effects.hardcoded import create_play_from_hand_choice
-                        create_play_from_hand_choice(
-                            self, player, playable, source_card=None,
-                            prompt="Choose cost 5 or less Character (different color) to play"
-                        )
 
-            elif action == "perona_rest_then_play":
-                # Rest own character, then play green cost 5 or less from hand
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    for c in player.cards_in_play:
-                        if c.id == target_info["id"]:
-                            c.is_resting = True
-                            self._log(f"{c.name} was rested")
-                            break
-                    # Now trigger play green cost 5 or less
-                    green_chars = [c for c in player.hand
-                                  if 'green' in (getattr(c, 'colors', '') or '').lower()
-                                  and (getattr(c, 'cost', 0) or 0) <= 5
-                                  and getattr(c, 'card_type', '') == 'CHARACTER']
-                    if green_chars:
-                        from .effects.hardcoded import create_play_from_hand_choice
-                        create_play_from_hand_choice(
-                            self, player, green_chars, source_card=None,
-                            prompt="Choose green cost 5 or less Character to play"
-                        )
 
-            elif action == "arlong_remove_life":
-                # Opponent is whichever player is NOT the Arlong owner
-                opponent = self.player2 if player is self.player1 else self.player1
-                if selected and selected[0] == "yes" and opponent.life_cards:
-                    life = opponent.life_cards.pop()
-                    opponent.deck.append(life)
-                    self._log(f"Arlong: Placed 1 of {opponent.name}'s Life at bottom of deck")
-                else:
-                    self._log(f"Arlong: Player chose not to remove Life")
 
-            elif action == "kanjuro_opponent_trash":
-                # Opponent chose which card to trash from player's hand
-                target_player_id = data.get("target_player_id")
-                target_player = self.player1 if self.player1.player_id == target_player_id else self.player2
-                hand_cards = data.get("hand_cards", [])
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(hand_cards):
-                    target_info = hand_cards[target_idx]
-                    for c in target_player.hand[:]:
-                        if c.id == target_info["id"]:
-                            target_player.hand.remove(c)
-                            target_player.trash.append(c)
-                            self._log(f"Kanjuro: {player.name} chose to trash {c.name} from {target_player.name}'s hand")
-                            break
 
-            elif action == "samurai_rest_and_draw":
-                # Rest selected characters, then draw 2
-                active_cards = data.get("active_cards", [])
-                for sel in selected:
-                    idx = int(sel)
-                    if 0 <= idx < len(active_cards):
-                        card_info = active_cards[idx]
-                        for c in player.cards_in_play:
-                            if c.id == card_info["id"]:
-                                c.is_resting = True
-                                self._log(f"{c.name} was rested")
-                                break
-                if selected:
-                    from .effects.hardcoded import draw_cards
-                    draw_cards(player, 2)
-                    self._log(f"{player.name} drew 2 cards")
 
-            elif action == "ko_multiple_targets":
-                # KO multiple selected targets
-                target_cards = data.get("target_cards", [])
-                opponent = self.player2 if player == self.player1 else self.player1
-                for sel in selected:
-                    idx = int(sel)
-                    if 0 <= idx < len(target_cards):
-                        target_info = target_cards[idx]
-                        for p in [player, opponent]:
-                            for c in p.cards_in_play[:]:
-                                if c.id == target_info["id"]:
-                                    p.cards_in_play.remove(c)
-                                    p.trash.append(c)
-                                    self._log(f"{c.name} was K.O.'d")
-                                    break
 
-            elif action == "bebeng_trash_then_activate":
-                # Trash chosen Wano card, then prompt to set a Wano char active
-                wano_hand = data.get("wano_hand", [])
-                wano_field = data.get("wano_field", [])
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(wano_hand):
-                    card_info = wano_hand[target_idx]
-                    for c in player.hand[:]:
-                        if c.id == card_info["id"]:
-                            player.hand.remove(c)
-                            player.trash.append(c)
-                            self._log(f"BE-BENG!!: {player.name} trashed {c.name}")
-                            break
-                # Now prompt to set a Wano field char active
-                if wano_field:
-                    field_options = [{"id": str(i), "label": f"{info['name']}",
-                                      "card_id": info["id"], "card_name": info["name"]}
-                                     for i, info in enumerate(wano_field)]
-                    self.pending_choice = PendingChoice(
-                        choice_id=f"bebeng_act_{uuid.uuid4().hex[:8]}",
-                        choice_type="select_target",
-                        prompt="Choose a Land of Wano cost 3 or less Character to set as active",
-                        options=field_options,
-                        min_selections=0,
-                        max_selections=1,
-                        callback_action="bebeng_set_active",
-                        callback_data={"player_id": player.player_id,
-                                       "wano_field": wano_field},
-                    )
 
-            elif action == "bebeng_set_active":
-                # Set chosen Wano char as active
-                wano_field = data.get("wano_field", [])
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(wano_field):
-                    card_info = wano_field[target_idx]
-                    for c in player.cards_in_play:
-                        if c.id == card_info["id"]:
-                            c.is_resting = False
-                            self._log(f"BE-BENG!!: {c.name} set as active")
-                            break
 
-            elif action == "alvida_trash_then_return":
-                # Trash chosen card, then prompt to return opponent's char to hand
-                hand_cards = data.get("hand_cards", [])
-                return_targets = data.get("return_targets", [])
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(hand_cards):
-                    card_info = hand_cards[target_idx]
-                    for c in player.hand[:]:
-                        if c.id == card_info["id"]:
-                            player.hand.remove(c)
-                            player.trash.append(c)
-                            self._log(f"Alvida: {player.name} trashed {c.name}")
-                            break
-                # Now prompt to return opponent's char
-                if return_targets:
-                    rt_options = [{"id": str(i), "label": f"{info['name']}",
-                                   "card_id": info["id"], "card_name": info["name"]}
-                                  for i, info in enumerate(return_targets)]
-                    self.pending_choice = PendingChoice(
-                        choice_id=f"alvida_ret_{uuid.uuid4().hex[:8]}",
-                        choice_type="select_target",
-                        prompt="Choose opponent's cost 3 or less Character to return to hand",
-                        options=rt_options,
-                        min_selections=0,
-                        max_selections=1,
-                        callback_action="return_to_hand",
-                        callback_data={"player_id": player.player_id,
-                                       "target_cards": return_targets},
-                    )
 
-            elif action == "sasaki_optional_trash_then_don":
-                # Optionally trash a card, then add 1 rested DON
-                hand_cards = data.get("hand_cards", [])
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(hand_cards):
-                    card_info = hand_cards[target_idx]
-                    for c in player.hand[:]:
-                        if c.id == card_info["id"]:
-                            player.hand.remove(c)
-                            player.trash.append(c)
-                            self._log(f"Sasaki: {player.name} trashed {c.name}")
-                            # Add 1 rested DON
-                            from .effects.hardcoded import add_don_from_deck
-                            add_don_from_deck(player, 1, set_active=False)
-                            self._log(f"{player.name} added 1 rested DON!! from DON deck")
-                            break
 
-            elif action == "search_play_to_field":
-                # Pick from candidates in deck, move to field, optionally shuffle
-                target_cards = data.get("target_cards", [])
-                shuffle_after = data.get("shuffle_after", False)
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    for c in player.deck[:]:
-                        if c.id == target_info["id"]:
-                            player.deck.remove(c)
-                            player.cards_in_play.append(c)
-                            self._log(f"{player.name} played {c.name} from deck to field")
-                            break
-                if shuffle_after:
-                    import random
-                    random.shuffle(player.deck)
 
-            elif action == "smile_play_to_field":
-                # Pick from top-5 SMILE chars, move to field, rest of top5 go to bottom
-                top5_ids = data.get("top5_ids", [])
-                smile_cards = data.get("smile_cards", [])
-                chosen_id = selected[0] if selected else None
-                for c in player.deck[::-1]:
-                    if c.id in top5_ids and c not in player.cards_in_play:
-                        pass  # will handle below
-                # Move top5 from bottom of deck to field or stay at bottom
-                if chosen_id:
-                    for c in player.deck[::-1]:
-                        if c.id == chosen_id:
-                            player.deck.remove(c)
-                            player.cards_in_play.append(c)
-                            self._log(f"{player.name} played {c.name} to field from SMILE effect")
-                            break
 
-            elif action == "red_hawk_power_then_ko":
-                # Apply +4000 to selected card, then create KO choice
-                power_targets = data.get("power_targets", [])
-                ko_targets_data = data.get("ko_targets", [])
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(power_targets):
-                    target_info = power_targets[target_idx]
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    all_cards = player.cards_in_play + ([player.leader] if player.leader else []) + \
-                                opponent.cards_in_play + ([opponent.leader] if opponent.leader else [])
-                    for c in all_cards:
-                        if c and c.id == target_info["id"]:
-                            c.power_modifier = getattr(c, 'power_modifier', 0) + 4000
-                            self._log(f"Red Hawk: {c.name} gains +4000 power")
-                            break
-                # Now create KO choice if there are targets
-                if ko_targets_data:
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    # Refresh targets with updated power
-                    live_ko_targets = [c for c in opponent.cards_in_play
-                                       if (getattr(c, 'power', 0) or 0) + getattr(c, 'power_modifier', 0) <= 4000]
-                    if live_ko_targets:
-                        from .effects.hardcoded import create_ko_choice
-                        create_ko_choice(self, player, live_ko_targets, source_card=None,
-                                         prompt="Choose opponent's 4000 power or less Character to K.O.")
 
-            elif action == "paradise_power_then_set_active":
-                # Apply +2000 to selected card, then prompt to set a rested char active
-                power_targets = data.get("power_targets", [])
-                rested_chars = data.get("rested_chars", [])
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(power_targets):
-                    target_info = power_targets[target_idx]
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    for c in player.cards_in_play + ([player.leader] if player.leader else []) + \
-                             opponent.cards_in_play + ([opponent.leader] if opponent.leader else []):
-                        if c and c.id == target_info["id"]:
-                            c.power_modifier = getattr(c, 'power_modifier', 0) + 2000
-                            self._log(f"Paradise Waterfall: {c.name} gains +2000 power")
-                            break
-                if rested_chars:
-                    rc_options = [{"id": str(i), "label": info["name"],
-                                   "card_id": info["id"], "card_name": info["name"]}
-                                  for i, info in enumerate(rested_chars)]
-                    self.pending_choice = PendingChoice(
-                        choice_id=f"paradise_act_{uuid.uuid4().hex[:8]}",
-                        choice_type="select_target",
-                        prompt="Choose 1 of your Characters to set as active",
-                        options=rc_options,
-                        min_selections=0,
-                        max_selections=1,
-                        callback_action="set_active",
-                        callback_data={"player_id": player.player_id,
-                                       "target_cards": rested_chars},
-                    )
 
-            elif action == "desert_spada_power_then_reorder":
-                # OP01-088: Apply +2000 power, then reorder top 3 cards of deck
-                target_cards = data.get("target_cards", [])
-                target_idx = int(selected[0]) if selected else -1
-                opponent = self.player2 if player == self.player1 else self.player1
-                all_cards = player.cards_in_play + opponent.cards_in_play + \
-                            ([player.leader] if player.leader else []) + \
-                            ([opponent.leader] if opponent.leader else [])
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    for c in all_cards:
-                        if c and c.id == target_info["id"]:
-                            c.power_modifier = getattr(c, 'power_modifier', 0) + 2000
-                            self._log(f"Desert Spada: {c.name} gets +2000 power")
-                            break
-                # Chain: reorder top 3 of deck (top or bottom choice)
-                from .effects.hardcoded import reorder_top_cards
-                reorder_top_cards(self, player, 3, allow_top=True)
 
-            elif action == "buggy_top_or_bottom":
-                # OP01-077 Buggy: keep top card on top or move to bottom
-                pick = selected[0] if selected else "top"
-                if player.deck:
-                    if pick == "bottom":
-                        top_card = player.deck.pop(0)
-                        player.deck.append(top_card)
-                        self._log(f"Buggy: Placed {top_card.name} at bottom of deck")
-                    else:
-                        self._log(f"Buggy: Kept {player.deck[0].name} on top of deck")
 
-            elif action == "doffy_reveal_play":
-                # Doflamingo leader: player chose to play or skip revealed card
-                player_choice = selected[0] if selected else "skip"
-                if player.deck and player_choice == "play":
-                    revealed = player.deck.pop(0)
-                    revealed.is_resting = True
-                    player.cards_in_play.append(revealed)
-                    self._apply_keywords(revealed)
-                    self._log(f"Doflamingo: {revealed.name} played to field rested")
-                else:
-                    self._log(f"Doflamingo: Card left on top of deck")
 
-            elif action == "punk_gibson_power_then_rest":
-                # Apply +4000 to selected card, then prompt to rest opponent's cost 4 or less
-                power_targets = data.get("power_targets", [])
-                rest_targets = data.get("rest_targets", [])
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(power_targets):
-                    target_info = power_targets[target_idx]
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    for c in player.cards_in_play + ([player.leader] if player.leader else []) + \
-                             opponent.cards_in_play + ([opponent.leader] if opponent.leader else []):
-                        if c and c.id == target_info["id"]:
-                            c.power_modifier = getattr(c, 'power_modifier', 0) + 4000
-                            self._log(f"Punk Gibson: {c.name} gains +4000 power")
-                            break
-                if rest_targets:
-                    rt_options = [{"id": str(i), "label": info["name"],
-                                   "card_id": info["id"], "card_name": info["name"]}
-                                  for i, info in enumerate(rest_targets)]
-                    self.pending_choice = PendingChoice(
-                        choice_id=f"punk_rest_{uuid.uuid4().hex[:8]}",
-                        choice_type="select_target",
-                        prompt="Choose opponent's cost 4 or less Character to rest",
-                        options=rt_options,
-                        min_selections=0,
-                        max_selections=1,
-                        callback_action="rest_target",
-                        callback_data={"player_id": player.player_id,
-                                       "target_cards": rest_targets},
-                    )
 
-            elif action == "overheat_power_then_return":
-                # Apply +4000 to selected card, then prompt to return opponent's cost 3 or less active
-                power_targets = data.get("power_targets", [])
-                return_targets = data.get("return_targets", [])
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(power_targets):
-                    target_info = power_targets[target_idx]
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    for c in player.cards_in_play + ([player.leader] if player.leader else []) + \
-                             opponent.cards_in_play + ([opponent.leader] if opponent.leader else []):
-                        if c and c.id == target_info["id"]:
-                            c.power_modifier = getattr(c, 'power_modifier', 0) + 4000
-                            self._log(f"Overheat: {c.name} gains +4000 power")
-                            break
-                if return_targets:
-                    rt_options = [{"id": str(i), "label": info["name"],
-                                   "card_id": info["id"], "card_name": info["name"]}
-                                  for i, info in enumerate(return_targets)]
-                    self.pending_choice = PendingChoice(
-                        choice_id=f"overheat_ret_{uuid.uuid4().hex[:8]}",
-                        choice_type="select_target",
-                        prompt="Choose opponent's active cost 3 or less Character to return to hand",
-                        options=rt_options,
-                        min_selections=0,
-                        max_selections=1,
-                        callback_action="return_to_hand",
-                        callback_data={"player_id": player.player_id,
-                                       "target_cards": return_targets},
-                    )
 
             elif action == "don_return":
                 # Generic DON return callback — player chose which DON to return.
@@ -4488,49 +3283,9 @@ class GameState:
                 after_data = data.get("after_callback_data", {})
                 self._dispatch_don_after_callback(player, after, after_data)
 
-            elif action == "optional_trash_from_deck":
-                # Optional: trash N cards from top of deck (e.g. OP03-050 Boodle, OP03-054)
-                if "yes" in selected:
-                    count = data.get("count", 1)
-                    for _ in range(min(count, len(player.deck))):
-                        if player.deck:
-                            player.trash.append(player.deck.pop(0))
-                    self._log(f"{player.name} trashed {count} card(s) from top of deck")
 
-            elif action == "op03_041_damage_trash":
-                # OP03-041 Usopp: When dealing damage with DON, trash 7 from top of deck
-                if "yes" in selected:
-                    count = min(7, len(player.deck))
-                    for _ in range(count):
-                        if player.deck:
-                            player.trash.append(player.deck.pop(0))
-                    self._log(f"Usopp: Trashed {count} card(s) from top of deck")
 
-            elif action == "op03_043_damage_trash":
-                # OP03-043 Gaimon: When dealing damage, trash 3 from deck then trash Gaimon
-                if "yes" in selected:
-                    count = min(3, len(player.deck))
-                    for _ in range(count):
-                        if player.deck:
-                            player.trash.append(player.deck.pop(0))
-                    self._log(f"Gaimon: Trashed {count} card(s) from top of deck")
-                    # Find and trash Gaimon from field
-                    src_id = data.get("source_card_id", "")
-                    for c in player.cards_in_play[:]:
-                        if c.id == src_id or (getattr(c, 'name', '') == 'Gaimon'):
-                            player.cards_in_play.remove(c)
-                            player.trash.append(c)
-                            self._log(f"{c.name} is trashed")
-                            break
 
-            elif action == "op03_051_damage_trash":
-                # OP03-051 Bell-mère: When dealing damage with DON, trash 7 from top of deck
-                if "yes" in selected:
-                    count = min(7, len(player.deck))
-                    for _ in range(count):
-                        if player.deck:
-                            player.trash.append(player.deck.pop(0))
-                    self._log(f"Bell-mère: Trashed {count} card(s) from top of deck")
 
             elif action == "don_optional":
                 # Player was asked whether to pay an optional DON!! -X cost.
@@ -4560,780 +3315,42 @@ class GameState:
                 else:
                     self._log(f"Player chose not to return DON!!")
 
-            elif action == "ko_for_op14_079":
-                # OP14-079 Crocodile: K.O. own character, then K.O. opponent's with same or less cost
-                target_idx = int(selected[0]) if selected else -1
-                target_cards = data.get("target_cards", [])
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    ko_cost = 0
-                    for c in player.cards_in_play[:]:
-                        if c.id == target_info["id"]:
-                            ko_cost = getattr(c, 'cost', 0) or 0
-                            player.cards_in_play.remove(c)
-                            player.trash.append(c)
-                            self._log(f"{c.name} was K.O.'d (cost {ko_cost})")
-                            break
-                    # Now trigger K.O. choice for opponent's character with same or less cost
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= ko_cost]
-                    if targets:
-                        from .effects.hardcoded import create_ko_choice
-                        create_ko_choice(
-                            self, player, targets, source_card=None,
-                            prompt=f"Choose opponent's cost {ko_cost} or less Character to K.O."
-                        )
 
-            elif action == "impel_down_trash_then_search":
-                # OP02-092 Impel Down: Trash chosen hand card, then search top 3 for Impel Down type
-                target_cards = data.get("target_cards", [])
-                if selected:
-                    target_idx = int(selected[0]) if selected[0].isdigit() else -1
-                    if 0 <= target_idx < len(target_cards):
-                        target_info = target_cards[target_idx]
-                        for c in player.hand[:]:
-                            if c.id == target_info["id"]:
-                                player.hand.remove(c)
-                                player.trash.append(c)
-                                self._log(f"{player.name} trashed {c.name} for Impel Down")
-                                break
-                # Now search top 3 for Impel Down type
-                from .effects.hardcoded import search_top_cards
-                search_top_cards(
-                    self, player, look_count=3, add_count=1,
-                    filter_fn=lambda c: 'impel down' in (c.card_origin or '').lower(),
-                    source_card=None,
-                    prompt="Look at top 3: choose 1 Impel Down card to add to hand")
 
-            elif action == "rev_army_hq_trash_then_search":
-                # OP05-021 Revolutionary Army HQ: Trash chosen hand card, then search top 3
-                target_cards = data.get("target_cards", [])
-                if selected:
-                    target_idx = int(selected[0]) if selected[0].isdigit() else -1
-                    if 0 <= target_idx < len(target_cards):
-                        target_info = target_cards[target_idx]
-                        for c in player.hand[:]:
-                            if c.id == target_info["id"]:
-                                player.hand.remove(c)
-                                player.trash.append(c)
-                                self._log(f"{player.name} trashed {c.name} for Revolutionary Army HQ")
-                                break
-                # Now search top 3 for Revolutionary Army type
-                from .effects.hardcoded import search_top_cards
-                search_top_cards(
-                    self, player, look_count=3, add_count=1,
-                    filter_fn=lambda c: 'revolutionary army' in (c.card_origin or '').lower(),
-                    source_card=None,
-                    prompt="Look at top 3: choose 1 Revolutionary Army card to add to hand")
 
-            elif action == "search_trash_from_top":
-                # OP03-083 Corgy: Trash selected cards from top, place rest at bottom
-                look_count = data.get("look_count", 0)
-                source_name = data.get("source_name", "")
-                source_id = data.get("source_id", "")
 
-                chosen_indices = sorted([int(s) for s in selected], reverse=True) if selected else []
 
-                # Pop chosen cards from deck by position (descending to preserve indices)
-                trashed_cards = []
-                for idx in chosen_indices:
-                    if 0 <= idx < len(player.deck):
-                        trashed_card = player.deck.pop(idx)
-                        trashed_cards.append(trashed_card)
-                        player.trash.append(trashed_card)
 
-                if trashed_cards:
-                    names = ", ".join(c.name for c in trashed_cards)
-                    self._log(f"{source_name}: Trashed {names}")
 
-                # Pull remaining top cards out of deck and place at bottom
-                remaining_count = look_count - len(trashed_cards)
-                remaining = player.deck[:remaining_count]
-                for _ in range(remaining_count):
-                    if player.deck:
-                        player.deck.pop(0)
 
-                if len(remaining) <= 1:
-                    player.deck.extend(remaining)
-                    if remaining:
-                        self._log(f"{source_name}: Remaining card placed at bottom of deck")
-                elif remaining:
-                    self._create_deck_order_choice(
-                        player, remaining, [],
-                        source_name=source_name,
-                        source_id=source_id,
-                    )
 
-            elif action == "blackmaria_optional_don":
-                # OP01-111: Player chose whether to pay DON!! -1 for +1000 power
-                if selected and selected[0] == "yes":
-                    pi = data.get("player_index", 0)
-                    bm_player = self.player1 if pi == 0 else self.player2
-                    src_id = data.get("source_card_id")
-                    from .effects.hardcoded import return_don_to_deck
-                    auto = return_don_to_deck(self, bm_player, 1, source_card=None,
-                                              after_callback="op01_111_blackmaria_power",
-                                              after_callback_data={"source_card_id": src_id,
-                                                                   "player_index": pi})
-                    if auto:
-                        src = next((c for c in bm_player.cards_in_play if c.id == src_id), None)
-                        if src:
-                            src.power_modifier = getattr(src, 'power_modifier', 0) + 1000
-                            self._log(f"  {src.name} gained +1000 power")
-                else:
-                    self._log("Black Maria: Declined to use DON!! -1 effect")
 
-            elif action == "mr3_cannot_attack":
-                # Mr.3: Set selected opponent's character to cannot_attack
-                # Persists until end of opponent's next turn (turn_count + 1)
-                target_cards = data.get("target_cards", [])
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    for c in opponent.cards_in_play:
-                        if c.id == target_info["id"]:
-                            c.cannot_attack = True
-                            c.cannot_attack_until_turn = self.turn_count + 1
-                            self._log(f"Mr.3: {c.name} cannot attack until end of opponent's next turn")
-                            break
 
-            elif action == "ulti_rest_don_add":
-                # Ulti: If yes, rest 1 DON and add 1 rested DON from deck
-                if selected and selected[0] == "yes":
-                    active_idx = next((i for i, s in enumerate(player.don_pool) if s == "active"), None)
-                    if active_idx is not None:
-                        player.don_pool[active_idx] = "rested"
-                        if len(player.don_pool) < 10:
-                            player.don_pool.append("rested")
-                            self._log(f"Ulti: {player.name} rested 1 DON, gained 1 rested DON")
-                        else:
-                            self._log(f"Ulti: {player.name} rested 1 DON but DON pool is full")
 
-            elif action == "king_ko_then_ko2":
-                # King: KO first target (cost 3), then prompt for second KO (cost 2)
-                target_cards = data.get("target_cards", [])
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    for c in opponent.cards_in_play[:]:
-                        if c.id == target_info["id"]:
-                            opponent.cards_in_play.remove(c)
-                            opponent.trash.append(c)
-                            self._log(f"King: K.O.'d {c.name}")
-                            break
-                # Now prompt for cost 2 or less KO
-                opponent = self.player2 if player == self.player1 else self.player1
-                targets_2 = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 2]
-                if targets_2:
-                    from .effects.hardcoded import create_ko_choice
-                    create_ko_choice(self, player, targets_2,
-                                    prompt="King: Choose opponent's cost 2 or less Character to K.O.")
 
-            elif action == "jack_don_then_trash":
-                # Jack: Pay DON-1, opponent trashes 1 from hand
-                if selected and selected[0] == "yes":
-                    if player.don_pool:
-                        player.don_pool.pop()
-                        opponent = self.player2 if player == self.player1 else self.player1
-                        if opponent.hand:
-                            import random
-                            trashed = random.choice(opponent.hand)
-                            opponent.hand.remove(trashed)
-                            opponent.trash.append(trashed)
-                            self._log(f"Jack: {opponent.name} trashed {trashed.name}")
-                        else:
-                            self._log(f"Jack: {opponent.name} has no cards to trash")
 
-            elif action == "xdrake_don_then_trash":
-                # X.Drake: Pay DON-1, opponent trashes 1 from hand
-                if selected and selected[0] == "yes":
-                    if player.don_pool:
-                        player.don_pool.pop()
-                        opponent = self.player2 if player == self.player1 else self.player1
-                        if opponent.hand:
-                            import random
-                            trashed = random.choice(opponent.hand)
-                            opponent.hand.remove(trashed)
-                            opponent.trash.append(trashed)
-                            self._log(f"X.Drake: {opponent.name} trashed {trashed.name}")
-                        else:
-                            self._log(f"X.Drake: {opponent.name} has no cards to trash")
 
-            elif action == "bao_huang_reveal":
-                # Bao Huang: Reveal selected cards from opponent's hand
-                pi = data.get("player_index", 0)
-                opponent = self.player2 if pi == 0 else self.player1
-                indices = sorted([int(s) for s in selected]) if selected else []
-                for idx in indices:
-                    if 0 <= idx < len(opponent.hand):
-                        c = opponent.hand[idx]
-                        self._log(f"Bao Huang reveals: {c.name} (Cost: {c.cost or 0}, Type: {c.card_type})")
 
-            elif action == "marco_trash_wb_then_revive":
-                # OP02-018: Player selected a WB card to trash; now revive Marco from trash
-                wb_targets = data.get("target_cards", [])
-                marco_card_id = data.get("marco_card_id")
-                if selected:
-                    idx = int(selected[0])
-                    if 0 <= idx < len(wb_targets):
-                        wb_info = wb_targets[idx]
-                        # Find and trash the WB card from hand
-                        for hc in player.hand[:]:
-                            if hc.id == wb_info["id"]:
-                                player.hand.remove(hc)
-                                player.trash.append(hc)
-                                self._log(f"{player.name} trashed {hc.name} from hand")
-                                break
-                        # Revive Marco from trash
-                        for tc in player.trash[:]:
-                            if tc.id == marco_card_id:
-                                player.trash.remove(tc)
-                                player.cards_in_play.append(tc)
-                                tc.is_resting = True
-                                self._log(f"{tc.name} returns to play rested from trash")
-                                break
 
-            elif action == "op02_062_choose_trash":
-                # OP02-062: Optional yes/no before paying the trash-2 cost
-                if selected and selected[0] == "yes" and len(player.hand) >= 2:
-                    options = []
-                    for i, hc in enumerate(player.hand):
-                        options.append({
-                            "id": str(i),
-                            "label": f"{hc.name} (Cost: {hc.cost or 0})",
-                            "card_id": hc.id,
-                            "card_name": hc.name,
-                        })
-                    self.pending_choice = PendingChoice(
-                        choice_id=f"luffy_trash_{uuid.uuid4().hex[:8]}",
-                        choice_type="select_cards",
-                        prompt="Choose 2 cards from hand to trash",
-                        options=options,
-                        min_selections=2,
-                        max_selections=2,
-                        source_card_id=data.get("source_card_id"),
-                        source_card_name=data.get("source_card_name"),
-                        callback_action="op02_062_trash_then_return",
-                        callback_data={
-                            "player_id": player.player_id,
-                            "player_index": 0 if player is self.player1 else 1,
-                            "source_card_id": data.get("source_card_id"),
-                            "source_card_name": data.get("source_card_name"),
-                        }
-                    )
 
-            elif action == "op02_062_trash_then_return":
-                # OP02-062: Player selected 2 cards to trash; then optionally return cost 4 or less and gain Double Attack
-                indices = sorted([int(s) for s in selected], reverse=True) if selected else []
-                for idx in indices:
-                    if 0 <= idx < len(player.hand):
-                        card = player.hand.pop(idx)
-                        player.trash.append(card)
-                        self._log(f"{player.name} trashed {card.name}")
-                if indices:
-                    source_id = data.get("source_card_id")
-                    for c in player.cards_in_play:
-                        if c.id == source_id:
-                            c.has_doubleattack = True
-                            c.has_double_attack = True
-                            break
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 4]
-                    if targets:
-                        from .effects.hardcoded import create_return_to_hand_choice
-                        create_return_to_hand_choice(self, player, targets,
-                                                     prompt="Choose opponent's cost 4 or less to return to hand")
 
-            elif action == "op02_065_optional_trash_set_active":
-                # OP02-065: Player optionally trashes 1 card to set Mr.3 active
-                card_id = data.get("mr3_card_id")
-                if selected:
-                    idx = int(selected[0])
-                    if 0 <= idx < len(player.hand):
-                        card = player.hand.pop(idx)
-                        player.trash.append(card)
-                        self._log(f"{player.name} trashed {card.name}")
-                        # Set Mr.3 active
-                        for c in player.cards_in_play:
-                            if c.id == card_id:
-                                c.is_resting = False
-                                self._log(f"{c.name} set active")
-                                break
 
-            elif action == "op02_066_trash_then_draw":
-                # OP02-066: Player selected 2 cards to trash; if Impel Down leader, draw 2
-                indices = sorted([int(s) for s in selected], reverse=True) if selected else []
-                for idx in indices:
-                    if 0 <= idx < len(player.hand):
-                        card = player.hand.pop(idx)
-                        player.trash.append(card)
-                        self._log(f"{player.name} trashed {card.name}")
-                if len(indices) >= 2:
-                    if player.leader and 'impel down' in (player.leader.card_origin or '').lower():
-                        from .effects.hardcoded import draw_cards
-                        draw_cards(player, 2)
-                        self._log("Impel Down All Stars: drew 2 cards")
 
-            elif action == "op02_068_trash_then_power":
-                # OP02-068: Player selected 1 card to trash; now give +3000 power
-                if selected:
-                    idx = int(selected[0])
-                    if 0 <= idx < len(player.hand):
-                        card = player.hand.pop(idx)
-                        player.trash.append(card)
-                        self._log(f"{player.name} trashed {card.name}")
-                    # Now prompt for power target
-                    targets = ([player.leader] if player.leader else []) + player.cards_in_play
-                    if targets:
-                        from .effects.hardcoded import create_power_effect_choice
-                        create_power_effect_choice(
-                            self, player, targets, 3000,
-                            prompt="Gum-Gum Rain: Choose Leader or Character to give +3000 power"
-                        )
 
-            elif action == "op02_064_trash_then_bottom":
-                # OP02-064: Player selected 1 card to trash; now place cost 2 or less at bottom
-                if selected:
-                    idx = int(selected[0])
-                    if 0 <= idx < len(player.hand):
-                        card = player.hand.pop(idx)
-                        player.trash.append(card)
-                        self._log(f"{player.name} trashed {card.name}")
-                # Set return_to_bottom_after_battle on attacker
-                attacker_id = data.get("attacker_card_id")
-                for c in player.cards_in_play:
-                    if c.id == attacker_id:
-                        c.return_to_bottom_after_battle = True
-                        break
-                # Prompt for opponent's cost 2 or less
-                opponent = self.player2 if player == self.player1 else self.player1
-                targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 2]
-                if targets:
-                    from .effects.hardcoded import create_bottom_deck_choice
-                    create_bottom_deck_choice(self, player, targets,
-                                              prompt="Choose opponent's cost 2 or less to place at deck bottom")
 
-            elif action == "op02_059_optional_trash":
-                # OP02-059: Player selected 0-3 cards to trash
-                indices = sorted([int(s) for s in selected], reverse=True) if selected else []
-                for idx in indices:
-                    if 0 <= idx < len(player.hand):
-                        card = player.hand.pop(idx)
-                        player.trash.append(card)
-                        self._log(f"{player.name} trashed {card.name}")
 
-            elif action == "op02_059_required_then_optional":
-                # OP02-059: Trash 1 required, then optionally trash up to 3 more
-                indices = sorted([int(s) for s in selected], reverse=True) if selected else []
-                for idx in indices:
-                    if 0 <= idx < len(player.hand):
-                        card = player.hand.pop(idx)
-                        player.trash.append(card)
-                        self._log(f"{player.name} trashed {card.name}")
-                if player.hand:
-                    options = []
-                    for i, hc in enumerate(player.hand):
-                        options.append({
-                            "id": str(i),
-                            "label": f"{hc.name} (Cost: {hc.cost or 0})",
-                            "card_id": hc.id,
-                            "card_name": hc.name,
-                        })
-                    self.pending_choice = PendingChoice(
-                        choice_id=f"hancock_trash_{uuid.uuid4().hex[:8]}",
-                        choice_type="select_cards",
-                        prompt="You may trash up to 3 more cards from hand (select 0 to skip)",
-                        options=options,
-                        min_selections=0,
-                        max_selections=min(3, len(player.hand)),
-                        source_card_id=data.get("source_card_id"),
-                        source_card_name=data.get("source_card_name"),
-                        callback_action="op02_059_optional_trash",
-                        callback_data={
-                            "player_id": player.player_id,
-                            "player_index": 0 if player is self.player1 else 1,
-                        }
-                    )
 
-            elif action == "op02_032_pay_don_set_active":
-                # OP02-032: Player selected a Minks target; rest 2 DON and set it active
-                target_cards = data.get("target_cards", [])
-                if selected:
-                    idx = int(selected[0])
-                    if 0 <= idx < len(target_cards):
-                        # Rest 2 active DON
-                        rested_count = 0
-                        for i in range(len(player.don_pool)):
-                            if rested_count >= 2:
-                                break
-                            if player.don_pool[i] == "active":
-                                player.don_pool[i] = "rested"
-                                rested_count += 1
-                        # Set target as active
-                        target_info = target_cards[idx]
-                        for c in player.cards_in_play:
-                            if c.id == target_info["id"]:
-                                c.is_resting = False
-                                self._log(f"Shishilian: set {c.name} active")
-                                break
 
-            elif action == "op02_026_set_don_active":
-                # OP02-026: Set up to 2 rested DON active
-                rested_indices = data.get("rested_indices", [])
-                chosen_positions = sorted({int(s) for s in selected}, reverse=True) if selected else []
-                for pos in chosen_positions:
-                    if 0 <= pos < len(rested_indices):
-                        pool_idx = rested_indices[pos]
-                        if 0 <= pool_idx < len(player.don_pool) and player.don_pool[pool_idx] == "rested":
-                            player.don_pool[pool_idx] = "active"
-                if chosen_positions:
-                    self._log(f"Sanji: set {len(chosen_positions)} DON!! card(s) as active")
 
-            elif action == "op02_029_set_don_active":
-                # OP02-029: Set up to 1 rested DON active
-                rested_indices = data.get("rested_indices", [])
-                if selected:
-                    pos = int(selected[0])
-                    if 0 <= pos < len(rested_indices):
-                        pool_idx = rested_indices[pos]
-                        if 0 <= pool_idx < len(player.don_pool) and player.don_pool[pool_idx] == "rested":
-                            player.don_pool[pool_idx] = "active"
-                            self._log("Carrot: set 1 DON!! active")
 
-            elif action == "op02_086_optional_add_don":
-                if selected and selected[0] == "yes":
-                    if len(player.don_pool) < 10:
-                        player.don_pool.append("rested")
-                        self._log("Minokoala: added 1 rested DON!! from DON!! deck")
 
-            elif action == "op02_087_optional_add_don":
-                if selected and selected[0] == "yes":
-                    if len(player.don_pool) < 10:
-                        player.don_pool.append("rested")
-                        self._log("Minotaur: added 1 rested DON!! from DON!! deck")
 
-            elif action == "op02_093_cost_then_power":
-                target_cards = data.get("target_cards", [])
-                if selected:
-                    target_idx = int(selected[0])
-                    if 0 <= target_idx < len(target_cards):
-                        target_info = target_cards[target_idx]
-                        opponent = self.player2 if player == self.player1 else self.player1
-                        for p in [opponent, player]:
-                            for c in p.cards_in_play:
-                                if c.id == target_info["id"]:
-                                    c.cost_modifier = getattr(c, 'cost_modifier', 0) - 1
-                                    self._log(f"{c.name} gets -1 cost this turn")
-                                    break
-                all_chars = player.cards_in_play + (self.player2 if player == self.player1 else self.player1).cards_in_play
-                if any((getattr(c, 'cost', 0) or 0) + getattr(c, 'cost_modifier', 0) == 0 for c in all_chars):
-                    if player.leader:
-                        player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 1000
-                        player.leader._sticky_power_modifier = getattr(player.leader, '_sticky_power_modifier', 0) + 1000
-                        self._log(f"{player.leader.name} gets +1000 power")
 
-            elif action == "op02_098_optional_trash_then_ko":
-                if selected and selected[0] == "yes" and player.hand:
-                    options = []
-                    for i, hc in enumerate(player.hand):
-                        options.append({
-                            "id": str(i),
-                            "label": f"{hc.name} (Cost: {hc.cost or 0})",
-                            "card_id": hc.id,
-                            "card_name": hc.name,
-                        })
-                    self.pending_choice = PendingChoice(
-                        choice_id=f"koby_trash_{uuid.uuid4().hex[:8]}",
-                        choice_type="select_cards",
-                        prompt="Choose 1 card from hand to trash for Koby",
-                        options=options,
-                        min_selections=1,
-                        max_selections=1,
-                        source_card_id=data.get("source_card_id"),
-                        callback_action="op02_098_pay_trash_then_ko",
-                        callback_data={"player_id": player.player_id, "source_card_id": data.get("source_card_id")}
-                    )
 
-            elif action == "op02_098_pay_trash_then_ko":
-                if selected:
-                    idx = int(selected[0])
-                    if 0 <= idx < len(player.hand):
-                        trashed = player.hand.pop(idx)
-                        player.trash.append(trashed)
-                        self._log(f"{player.name} trashed {trashed.name}")
-                        opponent = self.player2 if player == self.player1 else self.player1
-                        targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 3]
-                        if targets:
-                            from .effects.hardcoded import create_ko_choice
-                            create_ko_choice(self, player, targets, prompt="Choose opponent's cost 3 or less to KO")
-
-            elif action == "op02_099_optional_trash_then_ko":
-                if selected and selected[0] == "yes" and player.hand:
-                    options = []
-                    for i, hc in enumerate(player.hand):
-                        options.append({
-                            "id": str(i),
-                            "label": f"{hc.name} (Cost: {hc.cost or 0})",
-                            "card_id": hc.id,
-                            "card_name": hc.name,
-                        })
-                    self.pending_choice = PendingChoice(
-                        choice_id=f"sakazuki_trash_{uuid.uuid4().hex[:8]}",
-                        choice_type="select_cards",
-                        prompt="Choose 1 card from hand to trash for Sakazuki",
-                        options=options,
-                        min_selections=1,
-                        max_selections=1,
-                        source_card_id=data.get("source_card_id"),
-                        callback_action="op02_099_pay_trash_then_ko",
-                        callback_data={"player_id": player.player_id, "source_card_id": data.get("source_card_id")}
-                    )
-
-            elif action == "op02_099_pay_trash_then_ko":
-                if selected:
-                    idx = int(selected[0])
-                    if 0 <= idx < len(player.hand):
-                        trashed = player.hand.pop(idx)
-                        player.trash.append(trashed)
-                        self._log(f"{player.name} trashed {trashed.name}")
-                        opponent = self.player2 if player == self.player1 else self.player1
-                        targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 5]
-                        if targets:
-                            from .effects.hardcoded import create_ko_choice
-                            create_ko_choice(self, player, targets, prompt="Choose opponent's cost 5 or less to KO")
-
-            elif action == "op02_112_cost_then_power":
-                target_cards = data.get("target_cards", [])
-                buff_targets = data.get("buff_targets", [])
-                if selected:
-                    target_idx = int(selected[0])
-                    if 0 <= target_idx < len(target_cards):
-                        target_info = target_cards[target_idx]
-                        opponent = self.player2 if player == self.player1 else self.player1
-                        for c in opponent.cards_in_play:
-                            if c.id == target_info["id"]:
-                                c.cost_modifier = getattr(c, 'cost_modifier', 0) - 1
-                                self._log(f"{c.name} gets -1 cost this turn")
-                                break
-                if buff_targets:
-                    options = []
-                    for i, t in enumerate(buff_targets):
-                        options.append({
-                            "id": str(i),
-                            "label": t["name"],
-                            "card_id": t["id"],
-                            "card_name": t["name"],
-                        })
-                    self.pending_choice = PendingChoice(
-                        choice_id=f"bellmere_buff_{uuid.uuid4().hex[:8]}",
-                        choice_type="select_target",
-                        prompt="Choose your Leader or Character to give +1000 power",
-                        options=options,
-                        min_selections=1,
-                        max_selections=1,
-                        callback_action="op02_112_apply_power",
-                        callback_data={"player_id": player.player_id, "target_cards": buff_targets}
-                    )
-
-            elif action == "op02_112_apply_power":
-                target_cards = data.get("target_cards", [])
-                all_cards = player.cards_in_play + [player.leader]
-                if selected:
-                    target_idx = int(selected[0])
-                    if 0 <= target_idx < len(target_cards):
-                        target_info = target_cards[target_idx]
-                        for c in all_cards:
-                            if c and c.id == target_info["id"]:
-                                c.power_modifier = getattr(c, 'power_modifier', 0) + 1000
-                                c._sticky_power_modifier = getattr(c, '_sticky_power_modifier', 0) + 1000
-                                self._log(f"{c.name} gets +1000 power")
-                                break
-
-            elif action == "op02_113_cost_then_power":
-                target_cards = data.get("target_cards", [])
-                if selected:
-                    target_idx = int(selected[0])
-                    if 0 <= target_idx < len(target_cards):
-                        target_info = target_cards[target_idx]
-                        opponent = self.player2 if player == self.player1 else self.player1
-                        for c in opponent.cards_in_play:
-                            if c.id == target_info["id"]:
-                                c.cost_modifier = getattr(c, 'cost_modifier', 0) - 2
-                                self._log(f"{c.name} gets -2 cost this turn")
-                                break
-                opponent = self.player2 if player == self.player1 else self.player1
-                all_chars = player.cards_in_play + opponent.cards_in_play
-                source_id = data.get("source_card_id")
-                if any((getattr(c, 'cost', 0) or 0) + getattr(c, 'cost_modifier', 0) <= 0 for c in all_chars):
-                    for c in player.cards_in_play:
-                        if c.id == source_id:
-                            c.power_modifier = getattr(c, 'power_modifier', 0) + 2000
-                            c._sticky_power_modifier = getattr(c, '_sticky_power_modifier', 0) + 2000
-                            self._log(f"{c.name} gets +2000 power")
-                            break
-
-            elif action == "op02_048_trash_wano":
-                # OP02-048: Player selected a Land of Wano card to trash; rest stage, set 1 DON active
-                stage_card_id = data.get("stage_card_id")
-                wano_targets = data.get("target_cards", [])
-                if selected:
-                    idx = int(selected[0])
-                    if 0 <= idx < len(wano_targets):
-                        wano_info = wano_targets[idx]
-                        for hc in player.hand[:]:
-                            if hc.id == wano_info["id"]:
-                                player.hand.remove(hc)
-                                player.trash.append(hc)
-                                self._log(f"Land of Wano Stage: trashed {hc.name}")
-                                break
-                        # Rest the stage
-                        for c in player.cards_in_play:
-                            if c.id == stage_card_id:
-                                c.is_resting = True
-                                c.main_activated_this_turn = True
-                                break
-                        # Set 1 rested DON active
-                        for i, d in enumerate(player.don_pool):
-                            if d == "rested":
-                                player.don_pool[i] = "active"
-                                self._log("Land of Wano Stage: set 1 DON active")
-                                break
-
-            elif action == "op02_070_required_then_optional":
-                # OP02-070: Trash 1 required, then optionally trash up to 3 more
-                indices = sorted([int(s) for s in selected], reverse=True) if selected else []
-                for idx in indices:
-                    if 0 <= idx < len(player.hand):
-                        card = player.hand.pop(idx)
-                        player.trash.append(card)
-                        self._log(f"{player.name} trashed {card.name}")
-                if player.hand:
-                    options = []
-                    for i, hc in enumerate(player.hand):
-                        options.append({
-                            "id": str(i),
-                            "label": f"{hc.name} (Cost: {hc.cost or 0})",
-                            "card_id": hc.id,
-                            "card_name": hc.name,
-                        })
-                    self.pending_choice = PendingChoice(
-                        choice_id=f"new_kama_opt_{uuid.uuid4().hex[:8]}",
-                        choice_type="select_cards",
-                        prompt="You may trash up to 3 more cards from hand (select 0 to skip)",
-                        options=options,
-                        min_selections=0,
-                        max_selections=min(3, len(player.hand)),
-                        source_card_id=data.get("source_card_id"),
-                        source_card_name=data.get("source_card_name"),
-                        callback_action="op02_059_optional_trash",
-                        callback_data={
-                            "player_id": player.player_id,
-                            "player_index": 0 if player is self.player1 else 1,
-                        }
-                    )
-                else:
-                    self._log("New Kama Land: finished draw 1, trash 1")
-
-            elif action == "nami_don_search":
-                # OP02-036 Nami: player chose yes/no to rest 1 DON and search top 3 for FILM card
-                chosen = selected[0] if selected else "no"
-                if chosen == "yes":
-                    # Rest 1 active DON
-                    for i in range(len(player.don_pool)):
-                        if player.don_pool[i] == "active":
-                            player.don_pool[i] = "rested"
-                            break
-                    # Search top 3 for FILM card (not Nami)
-                    from .effects.hardcoded import search_top_cards
-                    def _nami_filter(c):
-                        return ('FILM' in (c.card_origin or '')
-                                and getattr(c, 'name', '') != 'Nami')
-                    search_top_cards(self, player, 3, add_count=1, filter_fn=_nami_filter,
-                                     prompt="Look at top 3. Choose a FILM card (not Nami) to add to hand.")
 
             # --- OP03 custom callbacks ---
-            elif action == "op03_070_grant_rush":
-                # OP03-070 Luffy: Player chose a cost 5 char to trash, now grant Rush
-                src_id = data.get("source_card_id", "")
-                target_cards = data.get("target_cards", [])
-                indices = sorted([int(s) for s in selected], reverse=True) if selected else []
-                for idx in indices:
-                    if 0 <= idx < len(target_cards):
-                        target_info = target_cards[idx]
-                        for c in player.hand[:]:
-                            if c.id == target_info["id"]:
-                                player.hand.remove(c)
-                                player.trash.append(c)
-                                self._log(f"{player.name} trashed {c.name}")
-                                break
-                # Grant Rush to the source card
-                if src_id:
-                    src = next((c for c in player.cards_in_play if c.id == src_id), None)
-                    if src:
-                        src.has_rush = True
-                        self._log(f"  {src.name} gained [Rush]")
 
-            elif action == "op03_022_rest_don":
-                if "yes" in selected:
-                    active_idx = next((i for i, s in enumerate(player.don_pool) if s == "active"), None)
-                    if active_idx is not None:
-                        player.don_pool[active_idx] = "rested"
-                        self._log(f"{player.name} rested 1 DON!!")
-                        self._dispatch_don_after_callback(player, "op03_022_play_trigger",
-                                                          {"source_card_id": data.get("source_card_id")})
 
-            elif action == "op03_018_ko_after_trash":
-                # OP03-018 Fire Fist: Player trashed an Event, now KO opponent's 5000 or less
-                # (then chain to KO 4000 or less)
-                indices = sorted([int(s) for s in selected], reverse=True) if selected else []
-                target_cards = data.get("target_cards", [])
-                for idx in indices:
-                    if 0 <= idx < len(target_cards):
-                        target_info = target_cards[idx]
-                        for c in player.hand[:]:
-                            if c.id == target_info["id"]:
-                                player.hand.remove(c)
-                                player.trash.append(c)
-                                self._log(f"{player.name} trashed {c.name}")
-                                break
-                opponent = self.player2 if player == self.player1 else self.player1
-                targets = [c for c in opponent.cards_in_play
-                           if (getattr(c, 'power', 0) or 0) + getattr(c, 'power_modifier', 0) <= 5000]
-                if targets:
-                    from .effects.hardcoded import create_ko_choice
-                    create_ko_choice(self, player, targets, source_card=None,
-                                    callback_action="op03_018_ko_4000_after",
-                                    prompt="Fire Fist: Choose opponent's 5000 power or less Character to K.O.")
-                else:
-                    # No 5000-or-less targets, still offer 4000-or-less
-                    targets4 = [c for c in opponent.cards_in_play
-                                if (getattr(c, 'power', 0) or 0) + getattr(c, 'power_modifier', 0) <= 4000]
-                    if targets4:
-                        from .effects.hardcoded import create_ko_choice
-                        create_ko_choice(self, player, targets4, source_card=None,
-                                        prompt="Fire Fist: Choose opponent's 4000 power or less Character to K.O.")
-
-            elif action == "attach_don_to_target":
-                # OP03-009 Haruta: Attach 1 DON to chosen target
-                target_cards = data.get("target_cards", [])
-                target_idx = int(selected[0]) if selected else -1
-                if 0 <= target_idx < len(target_cards):
-                    target_info = target_cards[target_idx]
-                    tid = target_info.get("id", "")
-                    target = None
-                    for c in player.cards_in_play:
-                        if c.id == tid:
-                            target = c
-                            break
-                    if not target and player.leader and player.leader.id == tid:
-                        target = player.leader
-                    if target:
-                        target.attached_don = getattr(target, 'attached_don', 0) + 1
-                        self._log(f"  Attached 1 DON to {target.name}")
-                        # Recalculate continuous effects so DON-gated effects activate
-                        self._recalc_continuous_effects()
 
             # If a new pending choice was set during action processing (chained effects,
             # e.g. Law returns a character then immediately prompts to play one),

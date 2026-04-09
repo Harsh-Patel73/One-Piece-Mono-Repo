@@ -182,7 +182,8 @@ def trash_from_hand(player: 'Player', count: int, game_state: 'GameState' = None
 
 
 def create_trash_choice(game_state: 'GameState', player: 'Player', count: int,
-                        source_card: 'Card' = None, prompt: str = None) -> bool:
+                        source_card: 'Card' = None, prompt: str = None,
+                        callback: Callable = None) -> bool:
     """Create a pending choice for player to select cards to trash.
 
     Returns True if a choice was created, False if auto-trashed (no choices available).
@@ -207,7 +208,14 @@ def create_trash_choice(game_state: 'GameState', player: 'Player', count: int,
             "card_name": card.name,
         })
 
-    # Set up the pending choice
+    def default_callback(selected: List[str]) -> None:
+        indices = [int(s) for s in selected]
+        for idx in sorted(indices, reverse=True):
+            if 0 <= idx < len(player.hand):
+                c = player.hand.pop(idx)
+                player.trash.append(c)
+                game_state._log(f"{player.name} trashed {c.name}")
+
     game_state.pending_choice = PendingChoice(
         choice_id=f"trash_{uuid.uuid4().hex[:8]}",
         choice_type="select_cards",
@@ -217,6 +225,7 @@ def create_trash_choice(game_state: 'GameState', player: 'Player', count: int,
         max_selections=count,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
+        callback=callback if callback is not None else default_callback,
         callback_action="trash_from_hand",
         callback_data={"player_id": player.player_id, "count": count}
     )
@@ -228,7 +237,8 @@ def create_target_choice(game_state: 'GameState', player: 'Player',
                          source_card: 'Card' = None,
                          min_selections: int = 1, max_selections: int = 1,
                          callback_action: str = None,
-                         callback_data: dict = None) -> bool:
+                         callback_data: dict = None,
+                         callback: Callable = None) -> bool:
     """Create a pending choice for player to select a target.
 
     Returns True if a choice was created.
@@ -266,6 +276,7 @@ def create_target_choice(game_state: 'GameState', player: 'Player',
         max_selections=max_selections,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
+        callback=callback,
         callback_action=action,
         callback_data=data
     )
@@ -275,7 +286,8 @@ def create_target_choice(game_state: 'GameState', player: 'Player',
 def search_top_cards(game_state: 'GameState', player: 'Player', look_count: int,
                      add_count: int = 1, filter_fn=None, source_card: 'Card' = None,
                      prompt: str = None, trash_rest: bool = False,
-                     play_to_field: bool = False, play_rested: bool = False) -> bool:
+                     play_to_field: bool = False, play_rested: bool = False,
+                     callback: Callable = None) -> bool:
     """Look at top X cards, let player choose Y to add to hand (or play to field).
     Remaining cards go to bottom of deck in player-chosen order (or trash).
 
@@ -312,25 +324,101 @@ def search_top_cards(game_state: 'GameState', player: 'Player', look_count: int,
     # Valid selection indices
     valid_indices = [i for i, c in enumerate(top_cards) if c in selectable]
 
+    def _make_search_callback(vi: List[int], al: int) -> Callable:
+        """Build a search_add_to_hand closure capturing the resolved parameters."""
+        def default_cb(selected: List[str]) -> None:
+            chosen_indices = sorted([int(s) for s in selected], reverse=True) if selected else []
+            if vi is not None:
+                chosen_indices = [i for i in chosen_indices if i in vi]
+            chosen_cards = []
+            for idx in chosen_indices:
+                if 0 <= idx < len(player.deck):
+                    chosen_cards.append(player.deck.pop(idx))
+            for chosen_card in chosen_cards:
+                if play_to_field:
+                    player.cards_in_play.append(chosen_card)
+                    setattr(chosen_card, 'played_turn', game_state.turn_count)
+                    if play_rested:
+                        chosen_card.is_resting = True
+                    game_state._apply_keywords(chosen_card)
+                    game_state._log(f"{source_name}: Played {chosen_card.name} to field")
+                    if chosen_card.effect and '[On Play]' in chosen_card.effect:
+                        game_state._trigger_on_play_effects(chosen_card)
+                else:
+                    player.hand.append(chosen_card)
+                    game_state._log(f"{source_name}: Added {chosen_card.name} to hand")
+            remaining_count = al - len(chosen_cards)
+            remaining = player.deck[:remaining_count]
+            for _ in range(remaining_count):
+                if player.deck:
+                    player.deck.pop(0)
+            if trash_rest:
+                for c in remaining:
+                    player.trash.append(c)
+                if remaining:
+                    game_state._log(f"{source_name}: Trashed {len(remaining)} remaining cards")
+            elif len(remaining) <= 1:
+                player.deck.extend(remaining)
+                if remaining:
+                    game_state._log(f"{source_name}: Remaining card placed at bottom of deck")
+            else:
+                game_state._create_deck_order_choice(
+                    player, remaining, [],
+                    source_name=source_name,
+                    source_id=source_id,
+                )
+        return default_cb
+
     if not valid_indices:
-        # No valid targets — still need to order remaining to bottom (or trash)
-        remaining = player.deck[:actual_look]
-        for _ in range(actual_look):
-            player.deck.pop(0)
         if trash_rest:
-            for c in remaining:
-                player.trash.append(c)
-            game_state._log(f"{source_name}: No valid targets; trashed {len(remaining)} cards")
-        elif len(remaining) <= 1:
-            player.deck.extend(remaining)
-            game_state._log(f"{source_name}: No valid targets; remaining placed at bottom")
-        else:
-            game_state._log(f"{source_name}: No valid targets in top {actual_look}")
-            game_state._create_deck_order_choice(
-                player, remaining, [],
-                source_name=source_name,
-                source_id=source_id,
+            # Show cards for viewing — use multi-select UI so all names are visible with a Skip/Confirm button
+            view_options = []
+            for i, c in enumerate(top_cards):
+                view_options.append({
+                    "id": str(i),
+                    "label": f"{c.name} (Cost: {c.cost or 0}) — will be trashed",
+                    "card_id": c.id,
+                    "card_name": c.name,
+                    "selectable": False,
+                })
+            game_state.pending_choice = PendingChoice(
+                choice_id=f"search_{uuid.uuid4().hex[:8]}",
+                choice_type="select_cards",
+                prompt=prompt or f"Look at top {actual_look} cards (no valid targets — all will be trashed). Click Skip to confirm.",
+                options=view_options,
+                min_selections=0,
+                max_selections=len(view_options),  # Forces multi-select UI so all cards are visible
+                source_card_id=source_id or None,
+                source_card_name=source_name or None,
+                callback=callback if callback is not None else _make_search_callback([], actual_look),
+                callback_action="search_add_to_hand",
+                callback_data={
+                    "player_id": player.player_id,
+                    "player_index": _player_index(game_state, player),
+                    "look_count": actual_look,
+                    "valid_indices": [],
+                    "source_name": source_name,
+                    "source_id": source_id,
+                    "trash_rest": True,
+                    "play_to_field": False,
+                    "play_rested": False,
+                }
             )
+        else:
+            # No valid targets — still need to order remaining to bottom
+            remaining = player.deck[:actual_look]
+            for _ in range(actual_look):
+                player.deck.pop(0)
+            if len(remaining) <= 1:
+                player.deck.extend(remaining)
+                game_state._log(f"{source_name}: No valid targets; remaining placed at bottom")
+            else:
+                game_state._log(f"{source_name}: No valid targets in top {actual_look}")
+                game_state._create_deck_order_choice(
+                    player, remaining, [],
+                    source_name=source_name,
+                    source_id=source_id,
+                )
         return True
 
     # Build options showing all cards; non-valid marked [Cannot select]
@@ -356,6 +444,7 @@ def search_top_cards(game_state: 'GameState', player: 'Player', look_count: int,
         max_selections=max_sel,
         source_card_id=source_id or None,
         source_card_name=source_name or None,
+        callback=callback if callback is not None else _make_search_callback(valid_indices, actual_look),
         callback_action="search_add_to_hand",
         callback_data={
             "player_id": player.player_id,
@@ -449,11 +538,26 @@ def get_characters_by_cost(player: 'Player', max_cost: int = None, min_cost: int
 
 
 def add_don_from_deck(player: 'Player', count: int, set_active: bool = False) -> int:
-    """Add DON from DON deck (don_pool is a list of 'active'/'rested' strings, max 10)."""
+    """Add DON from DON deck (don_pool is a list of 'active'/'rested' strings, max 10).
+
+    Rested DON is inserted BEFORE existing rested entries so the frontend does not
+    mistake the new DON for an attached DON (the frontend assumes trailing rested
+    entries are the ones attached to cards).
+    """
     added = 0
     for _ in range(count):
         if len(player.don_pool) < 10:
-            player.don_pool.append("active" if set_active else "rested")
+            status = "active" if set_active else "rested"
+            if status == "rested":
+                # Insert before the first existing rested entry so it's clearly
+                # a free rested DON, not confused with trailing attached DON
+                insert_idx = next(
+                    (i for i, s in enumerate(player.don_pool) if s == "rested"),
+                    len(player.don_pool)
+                )
+                player.don_pool.insert(insert_idx, status)
+            else:
+                player.don_pool.append(status)
             added += 1
     return added
 
@@ -515,6 +619,31 @@ def return_don_to_deck(game_state: 'GameState', player: 'Player', count: int,
                 "card_name": c.name,
             })
 
+    def default_callback(selected: List[str]) -> None:
+        pool_removals = []
+        char_detach: Dict[int, int] = {}
+        leader_detach = 0
+        for sel_id in selected:
+            if sel_id.startswith("pool_"):
+                pool_removals.append(int(sel_id.split("_")[1]))
+            elif sel_id.startswith("leader_"):
+                leader_detach += 1
+            elif sel_id.startswith("char_"):
+                ci = int(sel_id.split("_")[1])
+                char_detach[ci] = char_detach.get(ci, 0) + 1
+        for idx in sorted(pool_removals, reverse=True):
+            if idx < len(player.don_pool):
+                player.don_pool.pop(idx)
+        if leader_detach > 0 and player.leader:
+            player.leader.attached_don = max(0, getattr(player.leader, 'attached_don', 0) - leader_detach)
+        for ci, cnt in char_detach.items():
+            if ci < len(player.cards_in_play):
+                c = player.cards_in_play[ci]
+                c.attached_don = max(0, getattr(c, 'attached_don', 0) - cnt)
+        game_state._log(f"Returned {len(selected)} DON!! to DON deck")
+        game_state._trigger_on_don_return_effects(player)
+        game_state._dispatch_don_after_callback(player, after_callback, after_callback_data or {})
+
     game_state.pending_choice = PendingChoice(
         choice_id=f"don_return_{uuid.uuid4().hex[:8]}",
         choice_type="select_cards",
@@ -524,6 +653,7 @@ def return_don_to_deck(game_state: 'GameState', player: 'Player', count: int,
         max_selections=count,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
+        callback=default_callback,
         callback_action="don_return",
         callback_data={
             "player_id": player.player_id,
@@ -558,6 +688,27 @@ def optional_don_return(game_state: 'GameState', player: 'Player', count: int,
     if total_don < count:
         return True  # Can't pay — fizzle silently
 
+    def default_callback(selected: List[str]) -> None:
+        if "yes" in selected:
+            src_id = (after_callback_data or {}).get("source_card_id")
+            src_card = None
+            if src_id:
+                src_card = next((c for c in player.cards_in_play if c.id == src_id), None)
+                if not src_card and player.leader and player.leader.id == src_id:
+                    src_card = player.leader
+            auto = return_don_to_deck(
+                game_state, player, count,
+                source_card=src_card,
+                after_callback=after_callback,
+                after_callback_data=after_callback_data or {},
+            )
+            if auto:
+                game_state._log(f"Returned {count} DON!! to DON deck")
+                game_state._trigger_on_don_return_effects(player)
+                game_state._dispatch_don_after_callback(player, after_callback, after_callback_data or {})
+        else:
+            game_state._log("Player chose not to return DON!!")
+
     game_state.pending_choice = PendingChoice(
         choice_id=f"don_opt_{uuid.uuid4().hex[:8]}",
         choice_type="yes_no",
@@ -570,6 +721,7 @@ def optional_don_return(game_state: 'GameState', player: 'Player', count: int,
         max_selections=1,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
+        callback=default_callback,
         callback_action="don_optional",
         callback_data={
             "player_id": player.player_id,
@@ -661,7 +813,8 @@ def create_power_effect_choice(game_state: 'GameState', player: 'Player',
                                 source_card: 'Card' = None,
                                 prompt: str = None,
                                 min_selections: int = 1,
-                                max_selections: int = 1) -> bool:
+                                max_selections: int = 1,
+                                callback: Callable = None) -> bool:
     """Create a pending choice for applying power modifier to one or more targets.
 
     Args:
@@ -673,6 +826,7 @@ def create_power_effect_choice(game_state: 'GameState', player: 'Player',
         prompt: Custom prompt text
         min_selections: Minimum number of targets to select (0 = optional)
         max_selections: Maximum number of targets to select
+        callback: Optional callable override; if None, default apply_power logic is used
 
     Returns True if choice was created.
     """
@@ -681,14 +835,25 @@ def create_power_effect_choice(game_state: 'GameState', player: 'Player',
     if not targets:
         return False
 
+    snapshot = list(targets)
     options = []
-    for i, card in enumerate(targets):
+    for i, card in enumerate(snapshot):
         options.append({
             "id": str(i),
             "label": f"{card.name} (Power: {card.power or 0})",
             "card_id": card.id,
             "card_name": card.name,
         })
+
+    def default_callback(selected: List[str]) -> None:
+        sign = "+" if power_amount >= 0 else ""
+        for sel in selected:
+            target_idx = int(sel) if sel is not None else -1
+            if 0 <= target_idx < len(snapshot):
+                target = snapshot[target_idx]
+                target.power_modifier = getattr(target, 'power_modifier', 0) + power_amount
+                target._sticky_power_modifier = getattr(target, '_sticky_power_modifier', 0) + power_amount
+                game_state._log(f"{target.name} gets {sign}{power_amount} power")
 
     sign = "+" if power_amount >= 0 else ""
     game_state.pending_choice = PendingChoice(
@@ -700,11 +865,12 @@ def create_power_effect_choice(game_state: 'GameState', player: 'Player',
         max_selections=max_selections,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
+        callback=callback if callback is not None else default_callback,
         callback_action="apply_power",
         callback_data={
             "player_id": player.player_id,
             "power_amount": power_amount,
-            "target_cards": [{"id": c.id, "name": c.name} for c in targets],
+            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
         }
     )
     return True
@@ -713,20 +879,23 @@ def create_power_effect_choice(game_state: 'GameState', player: 'Player',
 def create_ko_choice(game_state: 'GameState', player: 'Player',
                       targets: List['Card'], source_card: 'Card' = None,
                       prompt: str = None, callback_action: str = None,
-                      callback_data: dict = None) -> bool:
+                      callback_data: dict = None, callback: Callable = None) -> bool:
     """Create a pending choice for KO'ing a target.
 
     Returns True if choice was created.
-    If callback_action is provided, it overrides the default 'ko_target' action
-    so the KO happens inside that custom handler instead.
+    Pass callback= (callable) for custom post-KO logic.
+    Pass callback_action= (string) only for legacy compatibility; prefer callback=.
+    If neither is provided, the default ko_target logic (remove from field, send to trash) is used.
     """
     from ..game_engine import PendingChoice
 
     if not targets:
         return False
 
+    snapshot = list(targets)
+    opponent = get_opponent(game_state, player)
     options = []
-    for i, card in enumerate(targets):
+    for i, card in enumerate(snapshot):
         owner = "Your" if card in player.cards_in_play else "Opponent's"
         options.append({
             "id": str(i),
@@ -735,9 +904,26 @@ def create_ko_choice(game_state: 'GameState', player: 'Player',
             "card_name": card.name,
         })
 
+    def default_callback(selected: List[str]) -> None:
+        target_idx = int(selected[0]) if selected else -1
+        if 0 <= target_idx < len(snapshot):
+            target = snapshot[target_idx]
+            if getattr(target, 'cannot_be_ko_by_effects', False):
+                game_state._log(f"{target.name} cannot be K.O.'d by effects")
+                return
+            for p in [player, opponent]:
+                if target in p.cards_in_play:
+                    p.cards_in_play.remove(target)
+                    p.trash.append(target)
+                    game_state._log(f"{target.name} was KO'd")
+                    break
+
+    # Use provided callable; fall back to default; fall back to string dispatch if custom action given
+    final_callback = callback if callback is not None else (None if callback_action else default_callback)
+
     cb_data = {
         "player_id": player.player_id,
-        "target_cards": [{"id": c.id, "name": c.name} for c in targets],
+        "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
     }
     if callback_data:
         cb_data.update(callback_data)
@@ -751,6 +937,7 @@ def create_ko_choice(game_state: 'GameState', player: 'Player',
         max_selections=1,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
+        callback=final_callback,
         callback_action=callback_action or "ko_target",
         callback_data=cb_data,
     )
@@ -759,7 +946,8 @@ def create_ko_choice(game_state: 'GameState', player: 'Player',
 
 def create_return_to_hand_choice(game_state: 'GameState', player: 'Player',
                                   targets: List['Card'], source_card: 'Card' = None,
-                                  prompt: str = None, optional: bool = False) -> bool:
+                                  prompt: str = None, optional: bool = False,
+                                  callback: Callable = None) -> bool:
     """Create a pending choice for returning a card to hand.
 
     Returns True if choice was created.
@@ -769,14 +957,27 @@ def create_return_to_hand_choice(game_state: 'GameState', player: 'Player',
     if not targets:
         return False
 
+    snapshot = list(targets)
+    opponent = get_opponent(game_state, player)
     options = []
-    for i, card in enumerate(targets):
+    for i, card in enumerate(snapshot):
         options.append({
             "id": str(i),
             "label": f"{card.name} (Cost: {card.cost or 0})",
             "card_id": card.id,
             "card_name": card.name,
         })
+
+    def default_callback(selected: List[str]) -> None:
+        target_idx = int(selected[0]) if selected else -1
+        if 0 <= target_idx < len(snapshot):
+            target = snapshot[target_idx]
+            for p in [player, opponent]:
+                if target in p.cards_in_play:
+                    p.cards_in_play.remove(target)
+                    p.hand.append(target)
+                    game_state._log(f"{target.name} returned to hand")
+                    break
 
     game_state.pending_choice = PendingChoice(
         choice_id=f"return_{uuid.uuid4().hex[:8]}",
@@ -787,10 +988,11 @@ def create_return_to_hand_choice(game_state: 'GameState', player: 'Player',
         max_selections=1,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
+        callback=callback if callback is not None else default_callback,
         callback_action="return_to_hand",
         callback_data={
             "player_id": player.player_id,
-            "target_cards": [{"id": c.id, "name": c.name} for c in targets],
+            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
         }
     )
     return True
@@ -799,7 +1001,7 @@ def create_return_to_hand_choice(game_state: 'GameState', player: 'Player',
 def create_play_from_trash_choice(game_state: 'GameState', player: 'Player',
                                    targets: List['Card'], source_card: 'Card' = None,
                                    rest_on_play: bool = True,
-                                   prompt: str = None) -> bool:
+                                   prompt: str = None, callback: Callable = None) -> bool:
     """Create a pending choice for playing a card from trash.
 
     Returns True if choice was created.
@@ -809,14 +1011,27 @@ def create_play_from_trash_choice(game_state: 'GameState', player: 'Player',
     if not targets:
         return False
 
+    snapshot = list(targets)
     options = []
-    for i, card in enumerate(targets):
+    for i, card in enumerate(snapshot):
         options.append({
             "id": str(i),
             "label": f"{card.name} (Cost: {card.cost or 0})",
             "card_id": card.id,
             "card_name": card.name,
         })
+
+    def default_callback(selected: List[str]) -> None:
+        if not selected:
+            return
+        target_idx = int(selected[0])
+        if 0 <= target_idx < len(snapshot):
+            target = snapshot[target_idx]
+            if target in player.trash:
+                player.trash.remove(target)
+                target.is_resting = rest_on_play
+                player.cards_in_play.append(target)
+                game_state._log(f"{player.name} played {target.name} from trash")
 
     game_state.pending_choice = PendingChoice(
         choice_id=f"play_trash_{uuid.uuid4().hex[:8]}",
@@ -827,11 +1042,12 @@ def create_play_from_trash_choice(game_state: 'GameState', player: 'Player',
         max_selections=1,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
+        callback=callback if callback is not None else default_callback,
         callback_action="play_from_trash",
         callback_data={
             "player_id": player.player_id,
             "rest_on_play": rest_on_play,
-            "target_cards": [{"id": c.id, "name": c.name} for c in targets],
+            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
         }
     )
     return True
@@ -885,25 +1101,39 @@ def create_mode_choice(game_state: 'GameState', player: 'Player',
 
 def create_own_character_choice(game_state: 'GameState', player: 'Player',
                                  targets: List['Card'], source_card: 'Card' = None,
-                                 prompt: str = None, callback_action: str = "return_own_to_hand",
-                                 optional: bool = False) -> bool:
+                                 prompt: str = None, callback_action: str = None,
+                                 optional: bool = False,
+                                 callback: Callable = None) -> bool:
     """Create a pending choice for selecting own character (for return/trash costs).
 
     Returns True if choice was created.
+    Pass callback= (callable) for custom post-selection logic; replaces default return-to-hand behavior.
     """
     from ..game_engine import PendingChoice
 
     if not targets:
         return False
 
+    snapshot = list(targets)
     options = []
-    for i, card in enumerate(targets):
+    for i, card in enumerate(snapshot):
         options.append({
             "id": str(i),
             "label": f"{card.name} (Cost: {card.cost or 0})",
             "card_id": card.id,
             "card_name": card.name,
         })
+
+    def default_callback(selected: List[str]) -> None:
+        target_idx = int(selected[0]) if selected else -1
+        if 0 <= target_idx < len(snapshot):
+            target = snapshot[target_idx]
+            if target in player.cards_in_play:
+                player.cards_in_play.remove(target)
+                player.hand.append(target)
+                game_state._log(f"{target.name} returned to hand")
+
+    final_callback = callback if callback is not None else (None if callback_action else default_callback)
 
     game_state.pending_choice = PendingChoice(
         choice_id=f"own_char_{uuid.uuid4().hex[:8]}",
@@ -914,10 +1144,11 @@ def create_own_character_choice(game_state: 'GameState', player: 'Player',
         max_selections=1,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
-        callback_action=callback_action,
+        callback=final_callback,
+        callback_action=callback_action or "return_own_to_hand",
         callback_data={
             "player_id": player.player_id,
-            "target_cards": [{"id": c.id, "name": c.name} for c in targets],
+            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
         }
     )
     return True
@@ -927,7 +1158,8 @@ def create_cost_reduction_choice(game_state: 'GameState', player: 'Player',
                                   targets: List['Card'], cost_reduction: int,
                                   source_card: 'Card' = None,
                                   prompt: str = None,
-                                  max_selections: int = 1) -> bool:
+                                  max_selections: int = 1,
+                                  callback: Callable = None) -> bool:
     """Create a pending choice for applying cost reduction to opponent's character.
 
     Args:
@@ -937,6 +1169,7 @@ def create_cost_reduction_choice(game_state: 'GameState', player: 'Player',
         cost_reduction: Amount of cost reduction (negative number)
         source_card: Card that triggered this effect
         prompt: Custom prompt text
+        callback: Optional callable override; if None, default apply_cost_reduction logic is used
 
     Returns True if choice was created.
     """
@@ -945,8 +1178,9 @@ def create_cost_reduction_choice(game_state: 'GameState', player: 'Player',
     if not targets:
         return False
 
+    snapshot = list(targets)
     options = []
-    for i, card in enumerate(targets):
+    for i, card in enumerate(snapshot):
         current_cost = (getattr(card, 'cost', 0) or 0) + getattr(card, 'cost_modifier', 0)
         options.append({
             "id": str(i),
@@ -954,6 +1188,19 @@ def create_cost_reduction_choice(game_state: 'GameState', player: 'Player',
             "card_id": card.id,
             "card_name": card.name,
         })
+
+    def default_callback(selected: List[str]) -> None:
+        for sel in selected:
+            target_idx = int(sel)
+            if 0 <= target_idx < len(snapshot):
+                target = snapshot[target_idx]
+                if cost_reduction == "zero":
+                    current = max(0, (target.cost or 0) + getattr(target, 'cost_modifier', 0))
+                    target.cost_modifier = getattr(target, 'cost_modifier', 0) - current
+                    game_state._log(f"{target.name}'s cost set to 0 this turn")
+                else:
+                    target.cost_modifier = getattr(target, 'cost_modifier', 0) + cost_reduction
+                    game_state._log(f"{target.name} gets {cost_reduction} cost this turn")
 
     game_state.pending_choice = PendingChoice(
         choice_id=f"cost_reduce_{uuid.uuid4().hex[:8]}",
@@ -964,11 +1211,12 @@ def create_cost_reduction_choice(game_state: 'GameState', player: 'Player',
         max_selections=max_selections,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
+        callback=callback if callback is not None else default_callback,
         callback_action="apply_cost_reduction",
         callback_data={
             "player_id": player.player_id,
             "cost_reduction": cost_reduction,
-            "target_cards": [{"id": c.id, "name": c.name} for c in targets],
+            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
         }
     )
     return True
@@ -977,7 +1225,7 @@ def create_cost_reduction_choice(game_state: 'GameState', player: 'Player',
 def create_play_from_hand_choice(game_state: 'GameState', player: 'Player',
                                   targets: List['Card'], source_card: 'Card' = None,
                                   rest_on_play: bool = False,
-                                  prompt: str = None) -> bool:
+                                  prompt: str = None, callback: Callable = None) -> bool:
     """Create a pending choice for playing a card from hand.
 
     Returns True if choice was created.
@@ -987,14 +1235,31 @@ def create_play_from_hand_choice(game_state: 'GameState', player: 'Player',
     if not targets:
         return False
 
+    snapshot = list(targets)
     options = []
-    for i, card in enumerate(targets):
+    for i, card in enumerate(snapshot):
         options.append({
             "id": str(i),
             "label": f"{card.name} (Cost: {card.cost or 0})",
             "card_id": card.id,
             "card_name": card.name,
         })
+
+    def default_callback(selected: List[str]) -> None:
+        if not selected:
+            return
+        target_idx = int(selected[0])
+        if 0 <= target_idx < len(snapshot):
+            target = snapshot[target_idx]
+            if target in player.hand:
+                player.hand.remove(target)
+                target.is_resting = rest_on_play
+                setattr(target, 'played_turn', game_state.turn_count)
+                player.cards_in_play.append(target)
+                game_state._apply_keywords(target)
+                game_state._log(f"{player.name} played {target.name} from hand")
+                if target.effect and '[On Play]' in target.effect:
+                    game_state._trigger_on_play_effects(target)
 
     game_state.pending_choice = PendingChoice(
         choice_id=f"play_hand_{uuid.uuid4().hex[:8]}",
@@ -1005,11 +1270,12 @@ def create_play_from_hand_choice(game_state: 'GameState', player: 'Player',
         max_selections=1,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
+        callback=callback if callback is not None else default_callback,
         callback_action="play_from_hand",
         callback_data={
             "player_id": player.player_id,
             "rest_on_play": rest_on_play,
-            "target_cards": [{"id": c.id, "name": c.name} for c in targets],
+            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
         }
     )
     return True
@@ -1018,7 +1284,8 @@ def create_play_from_hand_choice(game_state: 'GameState', player: 'Player',
 def create_bottom_deck_choice(game_state: 'GameState', player: 'Player',
                                targets: List['Card'], source_card: 'Card' = None,
                                prompt: str = None, callback_action: str = None,
-                               min_selections: int = 1) -> bool:
+                               min_selections: int = 1,
+                               callback: Callable = None) -> bool:
     """Create a pending choice for placing a card at bottom of deck.
 
     Returns True if choice was created.
@@ -1028,14 +1295,29 @@ def create_bottom_deck_choice(game_state: 'GameState', player: 'Player',
     if not targets:
         return False
 
+    snapshot = list(targets)
+    opponent = get_opponent(game_state, player)
     options = []
-    for i, card in enumerate(targets):
+    for i, card in enumerate(snapshot):
         options.append({
             "id": str(i),
             "label": f"{card.name} (Cost: {card.cost or 0})",
             "card_id": card.id,
             "card_name": card.name,
         })
+
+    def default_callback(selected: List[str]) -> None:
+        target_idx = int(selected[0]) if selected else -1
+        if 0 <= target_idx < len(snapshot):
+            target = snapshot[target_idx]
+            for p in [player, opponent]:
+                if target in p.cards_in_play:
+                    p.cards_in_play.remove(target)
+                    p.deck.append(target)
+                    game_state._log(f"{target.name} was placed at the bottom of deck")
+                    break
+
+    final_callback = callback if callback is not None else (None if callback_action else default_callback)
 
     game_state.pending_choice = PendingChoice(
         choice_id=f"bottom_deck_{uuid.uuid4().hex[:8]}",
@@ -1046,10 +1328,11 @@ def create_bottom_deck_choice(game_state: 'GameState', player: 'Player',
         max_selections=1,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
+        callback=final_callback,
         callback_action=callback_action or "place_at_bottom",
         callback_data={
             "player_id": player.player_id,
-            "target_cards": [{"id": c.id, "name": c.name} for c in targets],
+            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
         }
     )
     return True
@@ -1059,19 +1342,22 @@ def create_rest_choice(game_state: 'GameState', player: 'Player',
                         targets: List['Card'], source_card: 'Card' = None,
                         prompt: str = None, max_selections: int = 1,
                         min_selections: int = 1,
-                        callback_action: str = None) -> bool:
+                        callback_action: str = None,
+                        callback: Callable = None) -> bool:
     """Create a pending choice for resting target(s).
 
     Returns True if choice was created.
     max_selections > 1 uses rest_targets_multi callback to handle multiple rests.
+    Pass callback= (callable) for custom post-rest logic; it replaces default rest behavior.
     """
     from ..game_engine import PendingChoice
 
     if not targets:
         return False
 
+    snapshot = list(targets)
     options = []
-    for i, card in enumerate(targets):
+    for i, card in enumerate(snapshot):
         owner = "Your" if card in player.cards_in_play else "Opponent's"
         options.append({
             "id": str(i),
@@ -1080,7 +1366,16 @@ def create_rest_choice(game_state: 'GameState', player: 'Player',
             "card_name": card.name,
         })
 
-    # Use multi-rest callback when selecting more than 1 target
+    def default_callback(selected: List[str]) -> None:
+        for sel in selected:
+            target_idx = int(sel)
+            if 0 <= target_idx < len(snapshot):
+                target = snapshot[target_idx]
+                target.is_resting = True
+                game_state._log(f"{target.name} was rested")
+
+    # Use provided callable; fall back to default; fall back to string dispatch if custom action given
+    final_callback = callback if callback is not None else (None if callback_action else default_callback)
     cb_action = callback_action or ("rest_targets_multi" if max_selections > 1 else "rest_target")
 
     game_state.pending_choice = PendingChoice(
@@ -1092,10 +1387,11 @@ def create_rest_choice(game_state: 'GameState', player: 'Player',
         max_selections=max_selections,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
+        callback=final_callback,
         callback_action=cb_action,
         callback_data={
             "player_id": player.player_id,
-            "target_cards": [{"id": c.id, "name": c.name} for c in targets],
+            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
         }
     )
     return True
@@ -1103,19 +1399,21 @@ def create_rest_choice(game_state: 'GameState', player: 'Player',
 
 def create_set_active_choice(game_state: 'GameState', player: 'Player',
                               targets: List['Card'], source_card: 'Card' = None,
-                              prompt: str = None, callback_action: str = "set_active",
-                              extra_data: dict = None) -> bool:
+                              prompt: str = None, callback_action: str = None,
+                              extra_data: dict = None, callback: Callable = None) -> bool:
     """Create a pending choice for setting a card active.
 
     Returns True if choice was created.
+    Pass callback= (callable) for custom post-activation logic.
     """
     from ..game_engine import PendingChoice
 
     if not targets:
         return False
 
+    snapshot = list(targets)
     options = []
-    for i, card in enumerate(targets):
+    for i, card in enumerate(snapshot):
         options.append({
             "id": str(i),
             "label": f"{card.name} (Cost: {card.cost or 0})",
@@ -1123,9 +1421,19 @@ def create_set_active_choice(game_state: 'GameState', player: 'Player',
             "card_name": card.name,
         })
 
+    def default_callback(selected: List[str]) -> None:
+        target_idx = int(selected[0]) if selected else -1
+        if 0 <= target_idx < len(snapshot):
+            target = snapshot[target_idx]
+            target.is_resting = False
+            target.has_attacked = False
+            game_state._log(f"{target.name} was set active")
+
+    final_callback = callback if callback is not None else (None if callback_action else default_callback)
+
     cb_data = {
         "player_id": player.player_id,
-        "target_cards": [{"id": c.id, "name": c.name} for c in targets],
+        "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
     }
     if extra_data:
         cb_data.update(extra_data)
@@ -1139,7 +1447,8 @@ def create_set_active_choice(game_state: 'GameState', player: 'Player',
         max_selections=1,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
-        callback_action=callback_action,
+        callback=final_callback,
+        callback_action=callback_action or "set_active",
         callback_data=cb_data,
     )
     return True
@@ -1147,9 +1456,10 @@ def create_set_active_choice(game_state: 'GameState', player: 'Player',
 
 def create_multi_target_choice(game_state: 'GameState', player: 'Player',
                                 targets: List['Card'], count: int,
-                                callback_action: str,
+                                callback_action: str = None,
                                 source_card: 'Card' = None,
-                                prompt: str = None) -> bool:
+                                prompt: str = None,
+                                callback: Callable = None) -> bool:
     """Create a pending choice for selecting multiple targets.
 
     Returns True if choice was created.
@@ -1177,7 +1487,8 @@ def create_multi_target_choice(game_state: 'GameState', player: 'Player',
         max_selections=count,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
-        callback_action=callback_action,
+        callback=callback,
+        callback_action=callback_action or "select_target",
         callback_data={
             "player_id": player.player_id,
             "target_cards": [{"id": c.id, "name": c.name} for c in targets],
@@ -1188,7 +1499,7 @@ def create_multi_target_choice(game_state: 'GameState', player: 'Player',
 
 def create_add_from_trash_choice(game_state: 'GameState', player: 'Player',
                                   targets: List['Card'], source_card: 'Card' = None,
-                                  prompt: str = None) -> bool:
+                                  prompt: str = None, callback: Callable = None) -> bool:
     """Create a pending choice for adding a card from trash to hand.
 
     Returns True if choice was created.
@@ -1198,14 +1509,24 @@ def create_add_from_trash_choice(game_state: 'GameState', player: 'Player',
     if not targets:
         return False
 
+    snapshot = list(targets)
     options = []
-    for i, card in enumerate(targets):
+    for i, card in enumerate(snapshot):
         options.append({
             "id": str(i),
             "label": f"{card.name} (Cost: {card.cost or 0})",
             "card_id": card.id,
             "card_name": card.name,
         })
+
+    def default_callback(selected: List[str]) -> None:
+        target_idx = int(selected[0]) if selected else -1
+        if 0 <= target_idx < len(snapshot):
+            target = snapshot[target_idx]
+            if target in player.trash:
+                player.trash.remove(target)
+                player.hand.append(target)
+                game_state._log(f"{target.name} was added to hand from trash")
 
     game_state.pending_choice = PendingChoice(
         choice_id=f"add_trash_{uuid.uuid4().hex[:8]}",
@@ -1216,19 +1537,21 @@ def create_add_from_trash_choice(game_state: 'GameState', player: 'Player',
         max_selections=1,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
+        callback=callback if callback is not None else default_callback,
         callback_action="add_from_trash_to_hand",
         callback_data={
             "player_id": player.player_id,
-            "target_cards": [{"id": c.id, "name": c.name} for c in targets],
+            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
         }
     )
     return True
 
 
 def create_hand_discard_choice(game_state: 'GameState', player: 'Player',
-                                targets: List['Card'], callback_action: str,
+                                targets: List['Card'], callback_action: str = None,
                                 source_card: 'Card' = None,
-                                prompt: str = None) -> bool:
+                                prompt: str = None,
+                                callback: Callable = None) -> bool:
     """Create a pending choice for discarding a card from hand.
 
     Returns True if choice was created.
@@ -1256,6 +1579,7 @@ def create_hand_discard_choice(game_state: 'GameState', player: 'Player',
         max_selections=1,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
+        callback=callback,
         callback_action=callback_action,
         callback_data={
             "player_id": player.player_id,
@@ -1267,7 +1591,7 @@ def create_hand_discard_choice(game_state: 'GameState', player: 'Player',
 
 def create_add_to_life_choice(game_state: 'GameState', player: 'Player',
                                targets: List['Card'], source_card: 'Card' = None,
-                               prompt: str = None) -> bool:
+                               prompt: str = None, callback: Callable = None) -> bool:
     """Create a pending choice for adding a character to life.
 
     Args:
@@ -1276,6 +1600,7 @@ def create_add_to_life_choice(game_state: 'GameState', player: 'Player',
         targets: Valid targets to add to life
         source_card: Card that triggered this effect
         prompt: Custom prompt text
+        callback: Optional callable override; if None, default add_to_opponent_life logic is used
 
     Returns True if choice was created.
     """
@@ -1284,14 +1609,25 @@ def create_add_to_life_choice(game_state: 'GameState', player: 'Player',
     if not targets:
         return False
 
+    snapshot = list(targets)
+    opponent = get_opponent(game_state, player)
     options = []
-    for i, card in enumerate(targets):
+    for i, card in enumerate(snapshot):
         options.append({
             "id": str(i),
             "label": f"{card.name} (Cost: {getattr(card, 'cost', 0) or 0})",
             "card_id": card.id,
             "card_name": card.name,
         })
+
+    def default_callback(selected: List[str]) -> None:
+        target_idx = int(selected[0]) if selected else -1
+        if 0 <= target_idx < len(snapshot):
+            target = snapshot[target_idx]
+            if target in opponent.cards_in_play:
+                opponent.cards_in_play.remove(target)
+                opponent.life_cards.append(target)
+                game_state._log(f"{target.name} was added to opponent's Life")
 
     game_state.pending_choice = PendingChoice(
         choice_id=f"add_life_{uuid.uuid4().hex[:8]}",
@@ -1302,10 +1638,11 @@ def create_add_to_life_choice(game_state: 'GameState', player: 'Player',
         max_selections=1,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
+        callback=callback if callback is not None else default_callback,
         callback_action="add_to_opponent_life",
         callback_data={
             "player_id": player.player_id,
-            "target_cards": [{"id": c.id, "name": c.name} for c in targets],
+            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
         }
     )
     return True

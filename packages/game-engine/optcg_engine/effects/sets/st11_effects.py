@@ -87,9 +87,25 @@ def st11_002_uta_eot(game_state, player, card):
     """Trash 1 Event from hand: Set up to 1 FILM type Character as active."""
     events = [c for c in player.hand if getattr(c, 'card_type', '') == 'EVENT']
     if events:
+        events_snap = list(events)
+        def uta_eot_cb(selected: list) -> None:
+            for idx in sorted([int(s) for s in selected], reverse=True):
+                if 0 <= idx < len(events_snap):
+                    target = events_snap[idx]
+                    if target in player.hand:
+                        player.hand.remove(target)
+                        player.trash.append(target)
+                        game_state._log(f"{player.name} trashed {target.name}")
+            film_chars = [c for c in player.cards_in_play
+                          if 'film' in (getattr(c, 'card_types', '') or '').lower()
+                          and c.is_resting]
+            if film_chars:
+                film_chars[0].is_resting = False
+                film_chars[0].has_attacked = False
+                game_state._log(f"{film_chars[0].name} set active")
         return create_hand_discard_choice(
             game_state, player, events,
-            callback_action="uta_trash_event_then_set_active",
+            callback=uta_eot_cb,
             source_card=card,
             prompt="Choose Event to trash (then set FILM Character active)"
         )

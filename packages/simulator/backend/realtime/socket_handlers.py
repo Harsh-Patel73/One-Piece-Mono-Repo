@@ -573,6 +573,10 @@ def setup_socket_handlers(sio: socketio.AsyncServer, game_manager: GameManager):
             if card:
                 opponent.cards_in_play.append(card)
 
+        # Re-apply continuous effects so newly added cards (e.g. OP03-088 Fukurou)
+        # have their continuous flags (cannot_be_ko_by_effects, etc.) set correctly
+        gs._apply_continuous_effects()
+
         await send_game_state(sio, game_manager, game)
 
     @sio.event

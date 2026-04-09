@@ -94,11 +94,33 @@ def op08_047_jozu(game_state, player, card):
     # Cost: You may return 1 of your characters (other than this) to hand
     own_chars = [c for c in player.cards_in_play if c != card]
     if own_chars:
-        # Player chooses which character to return (optional)
+        jozu_card = card
+        own_snap = list(own_chars)
+        def jozu_cb(selected: list) -> None:
+            target_idx = int(selected[0]) if selected else -1
+            if not selected or target_idx < 0:
+                game_state._log(f"{player.name} chose not to use Jozu's effect")
+                return
+            if 0 <= target_idx < len(own_snap):
+                target = own_snap[target_idx]
+                if target in player.cards_in_play:
+                    player.cards_in_play.remove(target)
+                    player.hand.append(target)
+                    game_state._log(f"{player.name} returned {target.name} to hand")
+            opponent = get_opponent(game_state, player)
+            all_targets = [c for c in player.cards_in_play
+                           if (getattr(c, 'cost', 0) or 0) <= 6 and c is not jozu_card]
+            all_targets += [c for c in opponent.cards_in_play
+                            if (getattr(c, 'cost', 0) or 0) <= 6]
+            if all_targets:
+                create_return_to_hand_choice(game_state, player, all_targets,
+                                             source_card=None,
+                                             prompt="Return up to 1 cost 6 or less Character to owner's hand",
+                                             optional=True)
         return create_own_character_choice(
             game_state, player, own_chars, source_card=card,
             prompt="You may return one of your Characters to hand (cost for effect)",
-            callback_action="jozu_return_own",
+            callback=jozu_cb,
             optional=True
         )
     return True

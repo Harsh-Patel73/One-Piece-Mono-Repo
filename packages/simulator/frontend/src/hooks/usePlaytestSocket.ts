@@ -392,6 +392,8 @@ export function usePlaytestSocket() {
         player1: convertPlayer(gs.players[0]),
         player2: convertPlayer(gs.players[1]),
         logs: logsRef.current,
+        gameOver: gs.is_terminal ?? prev.gameOver,
+        winner: gs.is_terminal && gs.winner != null ? gs.winner as 0 | 1 : prev.winner,
         awaitingResponse: gs.awaiting_response,
         pendingAttack: gs.pending_attack ? {
           attackerName: gs.pending_attack.attacker_name,

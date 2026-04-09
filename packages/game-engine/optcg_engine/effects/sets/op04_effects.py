@@ -5,7 +5,7 @@ Hardcoded effects for OP04 cards.
 import random
 
 from ..hardcoded import (
-    add_don_from_deck, create_bottom_deck_choice, create_cost_reduction_choice, create_dual_target_choice,
+    add_don_from_deck, create_bottom_deck_choice, create_cost_reduction_choice,
     create_hand_discard_choice, create_ko_choice, create_rest_choice, create_return_to_hand_choice,
     create_target_choice, draw_cards, get_characters_by_cost, get_characters_by_type,
     get_opponent, register_effect, search_top_cards, trash_from_hand,
@@ -801,10 +801,25 @@ def op04_044_kaido(game_state, player, card):
     # Return cost 8 or less first
     targets8 = [c for c in all_chars if (getattr(c, 'cost', 0) or 0) <= 8 and c != card]
     if targets8:
-        return create_dual_target_choice(game_state, player, targets8, [], source_card=card,
-                                        prompt1="Choose cost 8 or less Character to return to hand",
-                                        prompt2="Choose cost 3 or less Character to return to hand",
-                                        callback_action="kaido_return")
+        t8_snap = list(targets8)
+        def kaido_step1_cb(selected: list) -> None:
+            target_idx = int(selected[0]) if selected else -1
+            if 0 <= target_idx < len(t8_snap):
+                target = t8_snap[target_idx]
+                for p in [player, get_opponent(game_state, player)]:
+                    if target in p.cards_in_play:
+                        p.cards_in_play.remove(target)
+                        p.hand.append(target)
+                        game_state._log(f"{target.name} returned to hand")
+                        break
+            all_chars2 = list(player.cards_in_play) + list(get_opponent(game_state, player).cards_in_play)
+            targets3 = [c for c in all_chars2 if (getattr(c, 'cost', 0) or 0) <= 3]
+            if targets3:
+                create_return_to_hand_choice(game_state, player, targets3, source_card=None,
+                                             prompt="Choose cost 3 or less Character to return to hand")
+        return create_return_to_hand_choice(game_state, player, targets8, source_card=card,
+                                            prompt="Choose cost 8 or less Character to return to hand",
+                                            callback=kaido_step1_cb)
     return True
 
 
@@ -1191,10 +1206,20 @@ def op04_073_mr13_friday(game_state, player, card):
     if bw_chars and card in player.cards_in_play:
         player.cards_in_play.remove(card)
         player.trash.append(card)
-        # Player chooses which Baroque Works character to trash
+        bw_snap = list(bw_chars)
+        def mr13_friday_cb(selected: list) -> None:
+            target_idx = int(selected[0]) if selected else -1
+            if 0 <= target_idx < len(bw_snap):
+                target = bw_snap[target_idx]
+                if target in player.cards_in_play:
+                    player.cards_in_play.remove(target)
+                    player.trash.append(target)
+                    game_state._log(f"{target.name} was trashed")
+            add_don_from_deck(player, 1, set_active=True)
+            game_state._log(f"{player.name} gained 1 active DON")
         return create_ko_choice(game_state, player, bw_chars, source_card=card,
                                prompt="Choose your Baroque Works Character to trash",
-                               callback_action="trash_bw_add_don")
+                               callback=mr13_friday_cb)
     return False
 
 
@@ -1223,9 +1248,21 @@ def op04_079_orlumbus(game_state, player, card):
         card.op04_079_used = True
         opponent = get_opponent(game_state, player)
         if opponent.cards_in_play:
+            opp_snap = list(opponent.cards_in_play)
+            def orlumbus_cb(selected: list) -> None:
+                for sel in selected:
+                    target_idx = int(sel)
+                    if 0 <= target_idx < len(opp_snap):
+                        target = opp_snap[target_idx]
+                        target.cost_modifier = getattr(target, 'cost_modifier', 0) - 4
+                        game_state._log(f"{target.name} gets -4 cost this turn")
+                dressrosa = [c for c in player.cards_in_play if 'Dressrosa' in (c.card_origin or '')]
+                if dressrosa:
+                    create_ko_choice(game_state, player, list(dressrosa), source_card=None,
+                                    prompt="Choose your Dressrosa Character to K.O.")
             return create_cost_reduction_choice(game_state, player, list(opponent.cards_in_play), -4, source_card=card,
                                                prompt="Choose opponent's Character to give -4 cost",
-                                               callback_action="orlumbus_cost_then_ko")
+                                               callback=orlumbus_cb)
         return True
     return False
 
@@ -1599,10 +1636,24 @@ def op04_105_amande(game_state, player, card):
         trigger_cards = [c for c in player.hand if getattr(c, 'trigger', None)]
         if trigger_cards:
             card.op04_105_used = True
-            # Player chooses which trigger card to trash, then which to rest
+            trigger_snap = list(trigger_cards)
+            def amande_cb(selected: list) -> None:
+                target_idx = int(selected[0]) if selected else -1
+                if 0 <= target_idx < len(trigger_snap):
+                    target = trigger_snap[target_idx]
+                    if target in player.hand:
+                        player.hand.remove(target)
+                        player.trash.append(target)
+                        game_state._log(f"{target.name} was trashed")
+                opponent = get_opponent(game_state, player)
+                rest_targets = [c for c in opponent.cards_in_play
+                               if not c.is_resting and (getattr(c, 'cost', 0) or 0) <= 2]
+                if rest_targets:
+                    create_rest_choice(game_state, player, rest_targets, source_card=card,
+                                      prompt="Choose opponent's cost 2 or less Character to rest")
             return create_hand_discard_choice(game_state, player, trigger_cards, source_card=card,
                                              prompt="Choose a Trigger card to trash",
-                                             callback_action="amande_trash_then_rest")
+                                             callback=amande_cb)
     return False
 
 
@@ -1691,10 +1742,24 @@ def op04_111_hera(game_state, player, card):
     homies = [c for c in player.cards_in_play if 'Homies' in (c.card_origin or '') and c != card]
     if homies and not getattr(card, 'is_resting', False):
         card.is_resting = True
-        # Player chooses which Homies to trash
+        homies_snap = list(homies)
+        def hera_cb(selected: list) -> None:
+            target_idx = int(selected[0]) if selected else -1
+            if 0 <= target_idx < len(homies_snap):
+                target = homies_snap[target_idx]
+                if target in player.cards_in_play:
+                    player.cards_in_play.remove(target)
+                    player.trash.append(target)
+                    game_state._log(f"{target.name} was trashed")
+            for c in player.cards_in_play:
+                if 'Charlotte Linlin' in (getattr(c, 'name', '') or ''):
+                    c.is_resting = False
+                    c.has_attacked = False
+                    game_state._log(f"{c.name} set active")
+                    break
         return create_ko_choice(game_state, player, homies, source_card=card,
                                prompt="Choose Homies Character to trash",
-                               callback_action="hera_trash_homies")
+                               callback=hera_cb)
     return False
 
 

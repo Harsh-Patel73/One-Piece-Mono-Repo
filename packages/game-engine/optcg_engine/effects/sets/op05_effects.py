@@ -635,9 +635,20 @@ def op05_026_sarquiss(game_state, player, card):
         chars_to_rest = [c for c in player.cards_in_play if (getattr(c, 'cost', 0) or 0) >= 3 and c != card and not getattr(c, 'is_resting', False)]
         if chars_to_rest:
             card.op05_026_used = True
+            sarquiss_ref = card
+            rest_snap = list(chars_to_rest)
+            def sarquiss_cb(selected: list) -> None:
+                target_idx = int(selected[0]) if selected else -1
+                if 0 <= target_idx < len(rest_snap):
+                    target = rest_snap[target_idx]
+                    target.is_resting = True
+                    game_state._log(f"{target.name} was rested")
+                sarquiss_ref.is_resting = False
+                sarquiss_ref.has_attacked = False
+                game_state._log(f"{sarquiss_ref.name} set active")
             return create_rest_choice(game_state, player, chars_to_rest, source_card=card,
                                      prompt="Choose your cost 3+ Character to rest (this becomes active)",
-                                     callback_action="sarquiss_rest_then_active")
+                                     callback=sarquiss_cb)
     return False
 
 
@@ -1684,9 +1695,22 @@ def op05_021_revolutionary_army_hq(game_state, player, card):
     card.main_activated_this_turn = True
 
     # Create trash-from-hand choice, then chain to search
+    hand_snap = list(player.hand)
+    def rev_army_hq_cb(selected: list) -> None:
+        target_idx = int(selected[0]) if selected else -1
+        if 0 <= target_idx < len(hand_snap):
+            target = hand_snap[target_idx]
+            if target in player.hand:
+                player.hand.remove(target)
+                player.trash.append(target)
+                game_state._log(f"{player.name} trashed {target.name}")
+        search_top_cards(game_state, player, look_count=3, add_count=1,
+                        filter_fn=lambda c: 'revolutionary army' in (c.card_origin or '').lower(),
+                        source_card=None,
+                        prompt="Look at top 3: choose 1 Revolutionary Army card to add to hand")
     return create_hand_discard_choice(
         game_state, player, list(player.hand),
-        callback_action="rev_army_hq_trash_then_search",
+        callback=rev_army_hq_cb,
         source_card=card,
         prompt="Choose 1 card from hand to trash (cost for Revolutionary Army HQ search)")
 

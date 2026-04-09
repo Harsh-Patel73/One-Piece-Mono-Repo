@@ -4,9 +4,9 @@ Hardcoded effects for OP13 cards.
 
 from ..hardcoded import (
     add_don_from_deck, create_don_assignment_choice, create_hand_discard_choice, create_ko_choice,
-    create_own_character_choice, create_return_to_hand_choice, draw_cards, get_opponent,
-    give_don_to_card, register_effect, rest_cards, search_top_cards, set_active,
-    trash_from_hand,
+    create_own_character_choice, create_power_effect_choice, create_return_to_hand_choice,
+    draw_cards, get_opponent, give_don_to_card, register_effect, rest_cards, search_top_cards,
+    set_active, trash_from_hand,
 )
 
 
@@ -364,11 +364,26 @@ def op13_054_yamato(game_state, player, card):
 def op13_059_brilliant_punk(game_state, player, card):
     """Main: Return char to hand, return opponent's cost 6 or less to hand."""
     if player.cards_in_play:
-        # Player chooses which character to return as cost
+        own_snap = list(player.cards_in_play)
+        def brilliant_punk_cb(selected: list) -> None:
+            target_idx = int(selected[0]) if selected else -1
+            if 0 <= target_idx < len(own_snap):
+                target = own_snap[target_idx]
+                if target in player.cards_in_play:
+                    player.cards_in_play.remove(target)
+                    player.hand.append(target)
+                    game_state._log(f"{player.name} returned {target.name} to hand")
+            opponent = get_opponent(game_state, player)
+            opp_targets = [c for c in opponent.cards_in_play
+                           if (getattr(c, 'cost', 0) or 0) <= 6]
+            if opp_targets:
+                create_return_to_hand_choice(game_state, player, opp_targets,
+                                             source_card=None,
+                                             prompt="Choose opponent's cost 6 or less Character to return to hand")
         return create_own_character_choice(
             game_state, player, player.cards_in_play, source_card=card,
             prompt="Choose one of your Characters to return to hand (cost)",
-            callback_action="brilliant_punk_return"
+            callback=brilliant_punk_cb
         )
     return False
 
@@ -397,9 +412,27 @@ def op13_002_ace_leader(game_state, player, card):
     if hasattr(card, 'op13_002_used') and card.op13_002_used:
         return False
     if player.hand:
-        # Prompt player to choose which card to trash (triggers callback for -2000 power choice)
+        card.op13_002_used = True
+        hand_snap = list(player.hand)
+        def ace_cb(selected: list) -> None:
+            target_idx = int(selected[0]) if selected else -1
+            if 0 <= target_idx < len(hand_snap):
+                target = hand_snap[target_idx]
+                if target in player.hand:
+                    player.hand.remove(target)
+                    player.trash.append(target)
+                    game_state._log(f"{target.name} was trashed from hand")
+            opponent = get_opponent(game_state, player)
+            power_targets = []
+            if opponent.leader:
+                power_targets.append(opponent.leader)
+            power_targets.extend(opponent.cards_in_play)
+            if power_targets:
+                create_power_effect_choice(game_state, player, power_targets, -2000,
+                                           source_card=None,
+                                           prompt="Choose opponent's Leader or Character to give -2000 power")
         return create_hand_discard_choice(game_state, player, player.hand,
-            "ace_trash_for_power", source_card=card,
+            callback=ace_cb, source_card=card,
             prompt="Trash a card to give opponent's Leader or Character -2000 power")
     return False
 
