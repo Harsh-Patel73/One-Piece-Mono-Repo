@@ -1516,22 +1516,25 @@ def op01_094_kaido_char(game_state, player, card):
         total_don += player.leader.attached_don
     if total_don < 6:
         return True  # Can't pay cost — effect doesn't fire
-    auto = return_don_to_deck(game_state, player, 6, source_card=card,
-                              after_callback="op01_094_kaido_ko_all",
-                              after_callback_data={"source_card_id": card.id})
+    opponent = get_opponent(game_state, player)
+
+    def _kaido_ko_cb():
+        leader_ok = 'animal kingdom pirates' in (player.leader.card_origin or '').lower() if player.leader else False
+        if leader_ok:
+            for c in opponent.cards_in_play[:]:
+                opponent.cards_in_play.remove(c)
+                opponent.trash.append(c)
+                game_state._log(f"  {c.name} K.O.'d")
+            for c in player.cards_in_play[:]:
+                if c is not card:
+                    player.cards_in_play.remove(c)
+                    player.trash.append(c)
+                    game_state._log(f"  {c.name} K.O.'d")
+
+    auto = return_don_to_deck(game_state, player, 6, source_card=card, post_callback=_kaido_ko_cb)
     if not auto:
-        return True  # Pending choice — callback handles the rest
-    # DON auto-paid, apply effect immediately
-    leader_origin = (player.leader.card_origin or '').lower() if player.leader else ''
-    if 'animal kingdom pirates' in leader_origin:
-        opponent = get_opponent(game_state, player)
-        for c in opponent.cards_in_play[:]:
-            opponent.cards_in_play.remove(c)
-            opponent.trash.append(c)
-        for c in player.cards_in_play[:]:
-            if c != card:
-                player.cards_in_play.remove(c)
-                player.trash.append(c)
+        return True
+    _kaido_ko_cb()
     return True
 
 

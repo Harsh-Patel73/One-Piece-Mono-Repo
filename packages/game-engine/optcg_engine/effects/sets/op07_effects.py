@@ -5,25 +5,10 @@ Hardcoded effects for OP07 cards.
 from ..hardcoded import (
     create_bottom_deck_choice, create_don_assignment_choice, create_ko_choice, create_own_character_choice,
     create_play_from_hand_choice, create_play_from_trash_choice, create_rest_choice, create_return_to_hand_choice,
-    create_target_choice, draw_cards, get_opponent, register_effect,
+    create_target_choice, add_power_modifier, check_leader_type, check_life_count,
+    draw_cards, get_opponent, register_effect,
     search_top_cards, trash_from_hand,
 )
-
-
-# --- OP07-009: Dogura & Magura ---
-@register_effect("OP07-009", "ON_PLAY", "Give cost 1 red char Double Attack")
-def dogura_magura_effect(game_state, player, card):
-    red_cost_1 = [c for c in player.cards_in_play
-                 if 'red' in (getattr(c, 'colors', '') or '').lower()
-                 and (getattr(c, 'cost', 0) or 0) == 1]
-    if red_cost_1:
-        return create_target_choice(
-            game_state, player, red_cost_1,
-            callback_action="give_double_attack",
-            source_card=card,
-            prompt="Choose your cost 1 red Character to give Double Attack"
-        )
-    return False
 
 
 # --- OP07-117: Egghead Stage ---
@@ -62,23 +47,6 @@ def dragon_effect(game_state, player, card):
     return False
 
 
-# --- OP07-020: Aladine ---
-@register_effect("OP07-020", "ON_KO", "If Leader is Fish-Man, play Fish-Man cost 4 or less from trash")
-def op07_020_aladine(game_state, player, card):
-    if check_leader_type(player, "Fish-Man"):
-        fm_chars = [c for c in player.trash
-                    if 'Fish-Man' in (getattr(c, 'card_origin', '') or '')
-                    and getattr(c, 'card_type', '') == 'CHARACTER'
-                    and (getattr(c, 'cost', 0) or 0) <= 4]
-        if fm_chars:
-            return create_play_from_trash_choice(
-                game_state, player, fm_chars, source_card=card,
-                rest_on_play=False,
-                prompt="Choose a Fish-Man cost 4 or less to play from trash"
-            )
-    return False
-
-
 # =============================================================================
 # MORE LEADER CONDITION CARDS - Supernovas
 # =============================================================================
@@ -98,17 +66,6 @@ def op07_030_kid(game_state, player, card):
     if check_life_count(opponent, 2, 'le'):
         add_power_modifier(card, 3000)
     return True
-
-
-# --- OP07-100: Edison ---
-@register_effect("OP07-100", "ON_PLAY", "If 2 or less life, draw 2 and trash 2")
-def op07_100_edison(game_state, player, card):
-    """On Play: If 2 or less life, draw 2 cards and trash 2 from hand."""
-    if check_life_count(player, 2):
-        draw_cards(player, 2)
-        trash_from_hand(player, 2, game_state, card)
-        return True
-    return False
 
 
 # --- OP07-106: Fuza ---
@@ -191,36 +148,6 @@ def op07_116_blaze_slice(game_state, player, card):
     return False
 
 
-# --- OP07-119: Portgas.D.Ace ---
-@register_effect("OP07-119", "ON_PLAY", "Add deck to life, if 2 or less life gain Rush")
-def op07_119_ace(game_state, player, card):
-    """On Play: Add deck to life, if 2 or less life this gains Rush."""
-    if player.deck:
-        deck_card = player.deck.pop(0)
-        player.life_cards.append(deck_card)
-    if check_life_count(player, 2):
-        card.has_rush = True
-    return True
-
-
-# --- OP07-105: Pythagoras ---
-@register_effect("OP07-105", "ON_KO", "If 2 or less life, play Egghead cost 4 or less from trash rested")
-def op07_105_pythagoras(game_state, player, card):
-    """On KO: If 2 or less life, play Egghead cost 4 or less from trash rested."""
-    if check_life_count(player, 2):
-        egghead = [c for c in player.trash
-                   if 'egghead' in (c.card_origin or '').lower()
-                   and (getattr(c, 'cost', 0) or 0) <= 4
-                   and getattr(c, 'card_type', '') == 'CHARACTER']
-        if egghead:
-            char = egghead[0]
-            player.trash.remove(char)
-            char.is_resting = True
-            player.cards_in_play.append(char)
-            return True
-    return False
-
-
 # --- OP07-094: Shave ---
 @register_effect("OP07-094", "COUNTER", "+2000 power, return CP char to hand if 10+ trash")
 def op07_094_shave(game_state, player, card):
@@ -291,37 +218,6 @@ def op07_056_slave_arrow(game_state, player, card):
             source_card=card,
             callback=slave_arrow_cb,
             prompt="Choose your cost 2+ Character to return to hand (Leader gains +4000 power)"
-        )
-    return False
-
-
-# --- OP07-085: Stussy ---
-@register_effect("OP07-085", "ON_PLAY", "Trash a char: KO opponent's char")
-def op07_085_stussy(game_state, player, card):
-    """On Play: Trash one of your chars to KO opponent's char."""
-    # Don't trash Stussy herself
-    chars = [c for c in player.cards_in_play if c != card]
-    opponent = get_opponent(game_state, player)
-    if chars and opponent.cards_in_play:
-        chars_snap = list(chars)
-        def stussy_cb(selected: list) -> None:
-            target_idx = int(selected[0]) if selected else -1
-            if 0 <= target_idx < len(chars_snap):
-                target = chars_snap[target_idx]
-                if target in player.cards_in_play:
-                    player.cards_in_play.remove(target)
-                    player.trash.append(target)
-                    game_state._log(f"{target.name} was trashed")
-            opp_ref = get_opponent(game_state, player)
-            if opp_ref.cards_in_play:
-                create_ko_choice(game_state, player, list(opp_ref.cards_in_play),
-                                 source_card=card,
-                                 prompt="Choose opponent's Character to KO")
-        return create_own_character_choice(
-            game_state, player, chars,
-            source_card=card,
-            callback=stussy_cb,
-            prompt="Choose your Character to trash (then KO opponent's Character)"
         )
     return False
 

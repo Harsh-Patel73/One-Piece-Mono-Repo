@@ -5,31 +5,8 @@ Hardcoded effects for OP09 cards.
 from ..hardcoded import (
     create_bottom_deck_choice, create_ko_choice, create_own_character_choice, create_play_from_hand_choice,
     create_return_to_hand_choice, create_target_choice, draw_cards, get_opponent,
-    register_effect, search_top_cards, set_active, trash_from_hand,
+    register_effect, search_top_cards, set_active, check_leader_type, check_life_count, trash_from_hand,
 )
-
-
-# --- OP09-014: Limejuice ---
-@register_effect("OP09-014", "ON_PLAY", "Opponent cannot activate Blocker with 4000 or less power")
-def limejuice_effect(game_state, player, card):
-    opponent = get_opponent(game_state, player)
-    for c in opponent.cards_in_play:
-        if (getattr(c, 'power', 0) or 0) <= 4000:
-            c.blocker_disabled_this_turn = True
-    return True
-
-
-# --- OP09-033: Nico Robin ---
-@register_effect("OP09-033", "ON_PLAY", "If 2+ rested chars, ODYSSEY/Straw Hat can't be KO'd by effects")
-def robin_op09_effect(game_state, player, card):
-    rested = [c for c in player.cards_in_play if c.is_resting]
-    if len(rested) >= 2:
-        for c in player.cards_in_play:
-            types = (c.card_origin or '').lower()
-            if 'odyssey' in types or 'straw hat crew' in types:
-                c.protected_from_ko = True
-        return True
-    return False
 
 
 # --- OP09-029: Tony Tony.Chopper ---
@@ -52,14 +29,6 @@ def chopper_op09_effect(game_state, player, card):
 # =============================================================================
 # LEADER CONDITION CARDS - Other Types
 # =============================================================================
-
-# --- OP09-023: Adio ---
-@register_effect("OP09-023", "ON_PLAY", "If Leader is ODYSSEY, set 3 DON active")
-def op09_023_adio(game_state, player, card):
-    if check_leader_type(player, "ODYSSEY"):
-        set_active(player.don_pool[:3])
-    return True
-
 
 # --- OP09-043: Alvida ---
 @register_effect("OP09-043", "ON_KO", "If Leader is Cross Guild, play cost 5 or less from hand")
@@ -103,38 +72,6 @@ def op09_112_belo_betty(game_state, player, card):
     if check_life_count(player, 2):
         draw_cards(player, 1)
         return True
-    return False
-
-
-# --- OP09-030: Trafalgar Law ---
-@register_effect("OP09-030", "ON_PLAY", "Return char to hand: Play ODYSSEY cost 3 or less")
-def op09_030_law(game_state, player, card):
-    """On Play: Return char to hand, play ODYSSEY cost 3 or less from hand."""
-    chars = [c for c in player.cards_in_play if c != card]
-    if chars:
-        chars_snap = list(chars)
-        def law_cb(selected: list) -> None:
-            target_idx = int(selected[0]) if selected else -1
-            if 0 <= target_idx < len(chars_snap):
-                target = chars_snap[target_idx]
-                if target in player.cards_in_play:
-                    player.cards_in_play.remove(target)
-                    player.hand.append(target)
-                    game_state._log(f"{target.name} returned to hand")
-            odyssey = [c for c in player.hand
-                       if 'odyssey' in (getattr(c, 'card_types', '') or '').lower()
-                       and (getattr(c, 'cost', 0) or 0) <= 3
-                       and getattr(c, 'card_type', '') == 'CHARACTER'
-                       and 'Trafalgar Law' not in getattr(c, 'name', '')]
-            if odyssey:
-                create_play_from_hand_choice(game_state, player, odyssey, source_card=None,
-                                             prompt="Choose ODYSSEY cost 3 or less Character to play")
-        return create_own_character_choice(
-            game_state, player, chars,
-            source_card=card,
-            callback=law_cb,
-            prompt="Choose your Character to return to hand (then play ODYSSEY cost 3 or less)"
-        )
     return False
 
 

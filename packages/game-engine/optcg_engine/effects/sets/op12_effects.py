@@ -3,6 +3,7 @@ Hardcoded effects for OP12 cards.
 """
 
 from ..hardcoded import (
+    add_power_modifier, check_leader_type, check_life_count,
     create_bottom_deck_choice, create_ko_choice, create_mode_choice, create_return_to_hand_choice,
     draw_cards, get_opponent, register_effect, search_top_cards, trash_from_hand,
 )

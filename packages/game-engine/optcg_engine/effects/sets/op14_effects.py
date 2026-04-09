@@ -3,7 +3,8 @@ Hardcoded effects for OP14 cards.
 """
 
 from ..hardcoded import (
-    add_don_from_deck, create_ko_choice, create_multi_target_choice, create_own_character_choice,
+    add_don_from_deck, add_power_modifier, check_leader_type,
+    create_ko_choice, create_multi_target_choice, create_own_character_choice,
     create_power_effect_choice, create_target_choice, draw_cards, get_opponent, give_don_to_card,
     register_effect, search_top_cards, trash_from_hand,
 )

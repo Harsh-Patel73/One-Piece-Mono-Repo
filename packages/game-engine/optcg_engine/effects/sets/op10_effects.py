@@ -6,7 +6,8 @@ from ..hardcoded import (
     add_don_from_deck, add_power_modifier,
     create_bottom_deck_choice, create_ko_choice, create_own_character_choice,
     create_play_from_hand_choice, create_rest_choice, create_return_to_hand_choice,
-    create_target_choice, draw_cards, get_opponent, register_effect, search_top_cards,
+    create_target_choice, check_leader_type, check_life_count,
+    draw_cards, get_opponent, register_effect, search_top_cards,
     trash_from_hand,
 )
 

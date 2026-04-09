@@ -7,7 +7,8 @@ import random
 from ..hardcoded import (
     add_don_from_deck, create_bottom_deck_choice, create_hand_discard_choice, create_ko_choice,
     create_mode_choice, create_rest_choice, create_return_to_hand_choice, create_set_active_choice,
-    create_target_choice, draw_cards, get_opponent, register_effect,
+    create_target_choice, add_power_modifier, check_life_count, check_leader_type,
+    draw_cards, get_opponent, register_effect,
     search_top_cards, trash_from_hand,
 )
 
@@ -43,53 +44,9 @@ def buffalo_effect(game_state, player, card):
     return False
 
 
-# --- OP05-079: Viola ---
-@register_effect("OP05-079", "ON_PLAY", "Opponent places 3 from trash at bottom of deck")
-def viola_effect(game_state, player, card):
-    opponent = get_opponent(game_state, player)
-    for _ in range(min(3, len(opponent.trash))):
-        if opponent.trash:
-            card_to_place = opponent.trash.pop(0)
-            opponent.deck.append(card_to_place)
-    return True
-
-
 # =============================================================================
 # EXTRA TURN EFFECTS
 # =============================================================================
-
-# --- OP05-119: Monkey.D.Luffy (Gear 5) ---
-@register_effect("OP05-119", "ON_PLAY", "DON -10: Place all chars at bottom, take extra turn")
-def luffy_gear5_on_play(game_state, player, card):
-    """Place all characters at bottom, take an extra turn."""
-    # This is a costly effect - requires 10 DON
-    don_count = len([d for d in player.don_pool if not d.is_resting])
-    if don_count < 10:
-        return False
-
-    # Return 10 DON to deck
-    returned = 0
-    for don in list(player.don_pool):
-        if returned >= 10:
-            break
-        if not don.is_resting:
-            player.don_pool.remove(don)
-            if hasattr(player, 'don_deck'):
-                player.don_deck.append(don)
-            returned += 1
-
-    # Place all characters except this one at bottom of deck
-    chars_to_move = [c for c in player.cards_in_play if c.id != card.id]
-    for char in chars_to_move:
-        player.cards_in_play.remove(char)
-        player.deck.append(char)
-
-    # Grant extra turn
-    game_state.extra_turn_pending = True
-    game_state.extra_turn_player = player
-
-    return True
-
 
 @register_effect("OP05-119", "ACTIVATE_MAIN", "Add 1 DON from DON deck and set active")
 def luffy_gear5_activate(game_state, player, card):
@@ -159,31 +116,6 @@ def op05_019_fire_fist(game_state, player, card):
     return False
 
 
-# --- OP05-101: Ohm ---
-@register_effect("OP05-101", "CONTINUOUS", "If 2 or less life, gain +1000 power")
-def op05_101_ohm(game_state, player, card):
-    """Continuous: If 2 or less life, this card gains +1000 power."""
-    if check_life_count(player, 2):
-        add_power_modifier(card, 1000)
-        return True
-    return False
-
-
-@register_effect("OP05-101", "ON_PLAY", "Look at 5, add Holly to hand")
-def op05_101_ohm_play(game_state, player, card):
-    """On Play: Look at 5, reveal Holly and add to hand."""
-    if len(player.deck) >= 5:
-        top_5 = player.deck[:5]
-        player.deck = player.deck[5:]
-        holly = [c for c in top_5 if 'Holly' in getattr(c, 'name', '')]
-        if holly:
-            player.hand.append(holly[0])
-            top_5.remove(holly[0])
-        player.deck.extend(top_5)
-        return True
-    return False
-
-
 # --- OP05-114: El Thor ---
 @register_effect("OP05-114", "COUNTER", "+2000 power, +2000 more if opponent has 2 or less life")
 def op05_114_el_thor(game_state, player, card):
@@ -216,17 +148,6 @@ def op05_115_amaru(game_state, player, card):
                     source_card=card,
                     prompt="Choose opponent's cost 4 or less Character to rest"
                 )
-        return True
-    return False
-
-
-# --- OP05-118: Kaido ---
-@register_effect("OP05-118", "ON_PLAY", "Draw 4 if opponent has 3 or less life")
-def op05_118_kaido(game_state, player, card):
-    """On Play: Draw 4 cards if opponent has 3 or less life."""
-    opponent = get_opponent(game_state, player)
-    if len(opponent.life_cards) <= 3:
-        draw_cards(player, 4)
         return True
     return False
 

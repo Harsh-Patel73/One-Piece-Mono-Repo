@@ -5,37 +5,9 @@ Hardcoded effects for OP08 cards.
 from ..hardcoded import (
     create_add_to_life_choice, create_bottom_deck_choice, create_ko_choice, create_mode_choice,
     create_own_character_choice, create_play_from_hand_choice, create_power_effect_choice, create_return_to_hand_choice,
-    create_target_choice, draw_cards, get_opponent, give_don_to_card,
+    create_target_choice, add_power_modifier, check_leader_type, draw_cards, get_opponent, give_don_to_card,
     register_effect, search_top_cards, trash_from_hand,
 )
-
-
-# --- OP08-031: Miyagi ---
-@register_effect("OP08-031", "ON_PLAY", "Set Minks cost 2 or less active")
-def miyagi_effect(game_state, player, card):
-    minks = [c for c in player.cards_in_play
-            if 'minks' in (c.card_origin or '').lower()
-            and (getattr(c, 'cost', 0) or 0) <= 2
-            and c.is_resting]
-    if minks:
-        minks[0].is_resting = False
-        return True
-    return False
-
-
-# --- OP08-100: South Bird ---
-@register_effect("OP08-100", "ON_PLAY", "Look at 7, play Upper Yard Stage")
-def south_bird_effect(game_state, player, card):
-    if len(player.deck) >= 7:
-        top_7 = player.deck[:7]
-        player.deck = player.deck[7:]
-        upper_yard = [c for c in top_7 if 'Upper Yard' in getattr(c, 'name', '')]
-        if upper_yard:
-            player.cards_in_play.append(upper_yard[0])
-            top_7.remove(upper_yard[0])
-        player.deck.extend(top_7)
-        return True
-    return False
 
 
 # --- OP08-001: Tony Tony.Chopper (Leader) ---
@@ -78,14 +50,6 @@ def we_would_never_sell_effect(game_state, player, card):
             c.protected_from_ko_effects_until_opponent_turn_end = True
         return True
     return False
-
-
-# --- OP08-040: Atmos ---
-@register_effect("OP08-040", "ON_PLAY", "If Leader is Whitebeard Pirates, return opponent's cost 4 or less to hand")
-def op08_040_atmos(game_state, player, card):
-    if check_leader_type(player, "Whitebeard Pirates"):
-        return return_opponent_to_hand(game_state, player, max_cost=4, source_card=card)
-    return True
 
 
 # --- OP08-047: Jozu ---

@@ -4,7 +4,8 @@ Hardcoded effects for OP11 cards.
 
 from ..hardcoded import (
     create_bottom_deck_choice, create_ko_choice, create_play_from_hand_choice, create_return_to_hand_choice,
-    create_target_choice, draw_cards, get_opponent, register_effect,
+    create_target_choice, add_power_modifier, check_leader_type, check_life_count,
+    draw_cards, get_opponent, register_effect,
     reorder_top_cards, search_top_cards,
 )
 
@@ -293,22 +294,6 @@ def op11_041_nami_leader(game_state, player, card):
     if len(player.hand) <= 7:
         draw_cards(player, 1)
         card.op11_041_used = True
-        return True
-    return False
-
-
-# --- OP11-062: Charlotte Katakuri (Leader) ---
-@register_effect("OP11-062", "on_attack", "[When Attacking] DON -1: Look at opponent's top deck, +1000")
-def op11_062_katakuri_leader(game_state, player, card):
-    """When Attacking/On Opponent's Attack, Once Per Turn, DON -1: Look at opponent's top deck, +1000 power."""
-    if hasattr(card, 'op11_062_used') and card.op11_062_used:
-        return False
-    if len(player.don_pool) >= 1:
-        don = player.don_pool.pop()
-        if hasattr(player, 'don_deck'):
-            player.don_deck.append(don)
-        card.power_modifier = getattr(card, 'power_modifier', 0) + 1000
-        card.op11_062_used = True
         return True
     return False
 

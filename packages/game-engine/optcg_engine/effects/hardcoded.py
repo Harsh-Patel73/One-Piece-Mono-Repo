@@ -564,8 +564,7 @@ def add_don_from_deck(player: 'Player', count: int, set_active: bool = False) ->
 
 def return_don_to_deck(game_state: 'GameState', player: 'Player', count: int,
                        source_card: 'Card' = None,
-                       after_callback: str = None,
-                       after_callback_data: dict = None) -> bool:
+                       post_callback: Callable = None) -> bool:
     """Return DON!! cards from field to DON deck, prompting player if DON is attached to characters.
 
     If all available DON are in the pool (none attached to characters),
@@ -642,7 +641,8 @@ def return_don_to_deck(game_state: 'GameState', player: 'Player', count: int,
                 c.attached_don = max(0, getattr(c, 'attached_don', 0) - cnt)
         game_state._log(f"Returned {len(selected)} DON!! to DON deck")
         game_state._trigger_on_don_return_effects(player)
-        game_state._dispatch_don_after_callback(player, after_callback, after_callback_data or {})
+        if post_callback is not None:
+            post_callback()
 
     game_state.pending_choice = PendingChoice(
         choice_id=f"don_return_{uuid.uuid4().hex[:8]}",
@@ -654,12 +654,9 @@ def return_don_to_deck(game_state: 'GameState', player: 'Player', count: int,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
         callback=default_callback,
-        callback_action="don_return",
         callback_data={
             "player_id": player.player_id,
             "count": count,
-            "after_callback": after_callback,
-            "after_callback_data": after_callback_data or {},
         },
     )
     return False  # Pending — caller should return True
@@ -667,8 +664,7 @@ def return_don_to_deck(game_state: 'GameState', player: 'Player', count: int,
 
 def optional_don_return(game_state: 'GameState', player: 'Player', count: int,
                         source_card: 'Card' = None,
-                        after_callback: str = None,
-                        after_callback_data: dict = None) -> bool:
+                        post_callback: Callable = None) -> bool:
     """Prompt the player whether they want to pay an optional DON!! -X cost.
 
     In OPTCG, bolded DON!! -X costs are optional.  This creates a yes/no
@@ -690,22 +686,16 @@ def optional_don_return(game_state: 'GameState', player: 'Player', count: int,
 
     def default_callback(selected: List[str]) -> None:
         if "yes" in selected:
-            src_id = (after_callback_data or {}).get("source_card_id")
-            src_card = None
-            if src_id:
-                src_card = next((c for c in player.cards_in_play if c.id == src_id), None)
-                if not src_card and player.leader and player.leader.id == src_id:
-                    src_card = player.leader
             auto = return_don_to_deck(
                 game_state, player, count,
-                source_card=src_card,
-                after_callback=after_callback,
-                after_callback_data=after_callback_data or {},
+                source_card=source_card,
+                post_callback=post_callback,
             )
             if auto:
                 game_state._log(f"Returned {count} DON!! to DON deck")
                 game_state._trigger_on_don_return_effects(player)
-                game_state._dispatch_don_after_callback(player, after_callback, after_callback_data or {})
+                if post_callback is not None:
+                    post_callback()
         else:
             game_state._log("Player chose not to return DON!!")
 
@@ -722,12 +712,9 @@ def optional_don_return(game_state: 'GameState', player: 'Player', count: int,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
         callback=default_callback,
-        callback_action="don_optional",
         callback_data={
             "player_id": player.player_id,
             "count": count,
-            "after_callback": after_callback,
-            "after_callback_data": after_callback_data or {},
         },
     )
     return False  # Pending

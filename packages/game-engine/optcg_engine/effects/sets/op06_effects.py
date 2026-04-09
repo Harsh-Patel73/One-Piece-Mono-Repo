@@ -7,7 +7,8 @@ import random
 from ..hardcoded import (
     create_add_to_life_choice, create_bottom_deck_choice, create_don_assignment_choice, create_ko_choice,
     create_mode_choice, create_play_from_trash_choice, create_power_effect_choice, create_rest_choice,
-    create_target_choice, draw_cards, get_opponent, register_effect, search_top_cards, trash_from_hand,
+    create_target_choice, check_leader_type, draw_cards, get_opponent, register_effect,
+    search_top_cards, trash_from_hand,
 )
 
 
@@ -60,22 +61,6 @@ def ark_noah_effect(game_state, player, card):
     return True
 
 
-# --- OP06-051: Tsuru ---
-@register_effect("OP06-051", "ON_PLAY", "Trash 2: Opponent returns 1 char to hand")
-def tsuru_effect(game_state, player, card):
-    if len(player.hand) >= 2:
-        trash_from_hand(player, 2, game_state, card)
-        opponent = get_opponent(game_state, player)
-        if opponent.cards_in_play:
-            # Opponent picks (AI picks lowest cost)
-            sorted_chars = sorted(opponent.cards_in_play, key=lambda c: getattr(c, 'cost', 0) or 0)
-            char = sorted_chars[0]
-            opponent.cards_in_play.remove(char)
-            opponent.hand.append(char)
-            return True
-    return False
-
-
 # --- OP06-044: Gion ---
 @register_effect("OP06-044", "ON_OPPONENT_EVENT", "Opponent places 1 card from hand at bottom")
 def gion_effect(game_state, player, card):
@@ -100,28 +85,6 @@ def ark_maxim_effect(game_state, player, card):
             opponent.cards_in_play.remove(c)
             opponent.trash.append(c)
         return True
-    return False
-
-
-# --- OP06-092: Brook ---
-@register_effect("OP06-092", "ON_PLAY", "Choose: Trash cost 4 or less OR opponent returns 3 from trash")
-def brook_choose_effect(game_state, player, card):
-    """Choose: Trash opponent's cost 4 or less OR opponent returns cards from trash."""
-    opponent = get_opponent(game_state, player)
-    targets = [c for c in opponent.cards_in_play
-              if (getattr(c, 'cost', 0) or 0) <= 4]
-
-    modes = []
-    if targets:
-        modes.append({"id": "trash", "label": "Trash cost 4 or less", "description": f"Trash 1 of {len(targets)} targets"})
-    if len(opponent.trash) >= 3:
-        modes.append({"id": "return_trash", "label": "Return 3 from opponent's trash", "description": "Opponent returns 3 cards from trash to deck"})
-
-    if modes:
-        return create_mode_choice(
-            game_state, player, modes, source_card=card,
-            prompt="Choose Brook effect"
-        )
     return False
 
 
@@ -218,44 +181,6 @@ def op06_015_lily(game_state, player, card):
 # =============================================================================
 # MORE COMPLEX CHOICE CARDS
 # =============================================================================
-
-# --- OP06-065: Vinsmoke Niji ---
-@register_effect("OP06-065", "ON_PLAY", "If DON <= opponent's DON, choose: KO cost 2 or return cost 3")
-def op06_065_niji(game_state, player, card):
-    opponent = get_opponent(game_state, player)
-    if len(player.don_pool) <= len(opponent.don_pool):
-        # Player chooses between KO or return
-        modes = [
-            {"id": "ko", "label": "KO Character", "description": "KO opponent's cost 2 or less Character"},
-            {"id": "return", "label": "Return to Hand", "description": "Return opponent's cost 3 or less Character to hand"}
-        ]
-        return create_mode_choice(game_state, player, modes, source_card=card,
-                                   prompt="Choose: KO opponent's cost 2 or less, OR Return cost 3 or less to hand")
-    return True
-
-
-# --- OP06-104: Kikunojo ---
-@register_effect("OP06-104", "ON_KO", "If opponent has 3 or less life, add deck to life")
-def op06_104_kikunojo(game_state, player, card):
-    """On KO: If opponent has 3 or less life, add deck card to life."""
-    opponent = get_opponent(game_state, player)
-    if len(opponent.life_cards) <= 3 and player.deck:
-        deck_card = player.deck.pop(0)
-        player.life_cards.append(deck_card)
-        return True
-    return False
-
-
-# --- OP06-109: Denjiro ---
-@register_effect("OP06-109", "CONTINUOUS", "If DONx2 and opponent has 3 or less life, cannot be KO'd by effects")
-def op06_109_denjiro(game_state, player, card):
-    """Continuous: If opponent has 3 or less life, cannot be KO'd by effects."""
-    opponent = get_opponent(game_state, player)
-    if getattr(card, 'attached_don', 0) >= 2 and len(opponent.life_cards) <= 3:
-        card.protected_from_ko_effects = True
-        return True
-    return False
-
 
 # =============================================================================
 # LEADER CARD EFFECTS - OP06 (Wings of the Captain)
