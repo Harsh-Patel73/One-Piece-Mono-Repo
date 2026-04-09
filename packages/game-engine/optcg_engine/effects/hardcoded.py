@@ -112,6 +112,34 @@ def check_life_count(player, count: int, op: str = 'le') -> bool:
     return life <= count
 
 
+def filter_by_cost_range(cards: List['Card'], min_cost: int = None, max_cost: int = None) -> List['Card']:
+    """Filter cards by inclusive base-cost range."""
+    filtered = []
+    for card in cards:
+        cost = getattr(card, 'cost', 0) or 0
+        if min_cost is not None and cost < min_cost:
+            continue
+        if max_cost is not None and cost > max_cost:
+            continue
+        filtered.append(card)
+    return filtered
+
+
+def filter_by_max_cost(cards: List['Card'], max_cost: int) -> List['Card']:
+    """Filter cards by base cost less than or equal to max_cost."""
+    return filter_by_cost_range(cards, max_cost=max_cost)
+
+
+def filter_rested(cards: List['Card']) -> List['Card']:
+    """Return rested cards only."""
+    return [card for card in cards if getattr(card, 'is_resting', False)]
+
+
+def filter_active(cards: List['Card']) -> List['Card']:
+    """Return active cards only."""
+    return [card for card in cards if not getattr(card, 'is_resting', False)]
+
+
 def draw_cards(player: 'Player', count: int) -> List['Card']:
     """Draw cards from deck."""
     import traceback
@@ -125,6 +153,32 @@ def draw_cards(player: 'Player', count: int) -> List['Card']:
             drawn.append(card)
     print(f"[DEBUG] drew {len(drawn)} cards: {[c.name for c in drawn]}")
     return drawn
+
+
+def ko_opponent_character(game_state: 'GameState', player: 'Player', max_cost: int,
+                          source_card: 'Card' = None) -> bool:
+    """Create a KO choice for an opponent's Character with cost <= max_cost."""
+    opponent = get_opponent(game_state, player)
+    targets = filter_by_max_cost(opponent.cards_in_play, max_cost)
+    if not targets:
+        return False
+    return create_ko_choice(
+        game_state, player, targets, source_card=source_card,
+        prompt=f"Choose opponent's cost {max_cost} or less Character to K.O."
+    )
+
+
+def return_opponent_to_hand(game_state: 'GameState', player: 'Player', max_cost: int,
+                            source_card: 'Card' = None) -> bool:
+    """Create a return-to-hand choice for an opponent's Character with cost <= max_cost."""
+    opponent = get_opponent(game_state, player)
+    targets = filter_by_max_cost(opponent.cards_in_play, max_cost)
+    if not targets:
+        return False
+    return create_return_to_hand_choice(
+        game_state, player, targets, source_card=source_card,
+        prompt=f"Choose opponent's cost {max_cost} or less Character to return to hand"
+    )
 
 
 def _player_index(game_state: 'GameState', player: 'Player') -> int:
@@ -1041,8 +1095,9 @@ def create_play_from_trash_choice(game_state: 'GameState', player: 'Player',
 
 
 def create_mode_choice(game_state: 'GameState', player: 'Player',
-                       modes: List[Dict[str, str]], source_card: 'Card' = None,
-                       prompt: str = None) -> bool:
+                       modes: List[Dict[str, str]] = None, source_card: 'Card' = None,
+                       prompt: str = None, callback: Callable = None,
+                       options: List[Any] = None) -> bool:
     """Create a pending choice for selecting between effect modes.
 
     Args:
@@ -1056,6 +1111,21 @@ def create_mode_choice(game_state: 'GameState', player: 'Player',
     """
     from ..game_engine import PendingChoice
 
+    if modes is None and options is not None:
+        modes = []
+        for option in options:
+            if isinstance(option, dict):
+                modes.append(option)
+            elif isinstance(option, (list, tuple)):
+                mode_id = option[0] if len(option) >= 1 else str(len(modes))
+                label = option[1] if len(option) >= 2 else f"Mode {len(modes) + 1}"
+                mode = {"id": mode_id, "label": label}
+                if len(option) >= 3:
+                    mode["targets"] = option[2]
+                if len(option) >= 4:
+                    mode["description"] = option[3]
+                modes.append(mode)
+
     if not modes or len(modes) < 2:
         return False
 
@@ -1067,6 +1137,11 @@ def create_mode_choice(game_state: 'GameState', player: 'Player',
             "description": mode.get("description", ""),
         })
 
+    callback_action = None
+    callback_callable = callback if callable(callback) else None
+    if isinstance(callback, str):
+        callback_action = callback
+
     game_state.pending_choice = PendingChoice(
         choice_id=f"mode_{uuid.uuid4().hex[:8]}",
         choice_type="select_mode",
@@ -1076,9 +1151,11 @@ def create_mode_choice(game_state: 'GameState', player: 'Player',
         max_selections=1,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
-        callback_action="select_mode",
+        callback=callback_callable,
+        callback_action=callback_action or "select_mode",
         callback_data={
             "player_id": player.player_id,
+            "player_index": _player_index(game_state, player),
             "card_id": source_card.id if source_card else None,
             "modes": modes,
         }

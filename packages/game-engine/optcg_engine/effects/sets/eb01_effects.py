@@ -156,7 +156,15 @@ def eb01_052_viola(game_state, player, card):
         {"id": "view_life", "label": "View Opponent's Life", "description": "Look at all of your opponent's Life cards"},
         {"id": "view_deck", "label": "View Top 5 & Rearrange", "description": "Look at the top 5 cards of your deck and rearrange them"}
     ]
-    return create_mode_choice(game_state, player, modes, source_card=card,
+    def callback(selected: list[str]) -> None:
+        selected_mode = selected[0] if selected else None
+        opponent = get_opponent(game_state, player)
+        if selected_mode == "view_life":
+            game_state._log(f"{player.name} looked at {opponent.name}'s life cards")
+        elif selected_mode == "view_deck":
+            game_state._log(f"{player.name} looked at top 5 cards of deck")
+
+    return create_mode_choice(game_state, player, modes, source_card=card, callback=callback,
                                prompt="Choose: Look at opponent's Life OR Look at top 5 of your deck and rearrange")
 
 

@@ -4,7 +4,8 @@ Hardcoded effects for OP08 cards.
 
 from ..hardcoded import (
     create_add_to_life_choice, create_bottom_deck_choice, create_ko_choice, create_mode_choice,
-    create_own_character_choice, create_play_from_hand_choice, create_power_effect_choice, create_return_to_hand_choice,
+    create_own_character_choice, create_play_from_hand_choice, create_play_from_trash_choice,
+    create_power_effect_choice, create_return_to_hand_choice,
     create_target_choice, add_power_modifier, check_leader_type, draw_cards, get_opponent, give_don_to_card,
     register_effect, search_top_cards, trash_from_hand,
 )
@@ -264,8 +265,22 @@ def op08_057_king_leader(game_state, player, card):
             modes.append({"id": "play_trash", "label": "Play from trash", "description": f"Play 1 of {len(trash_chars)} cost 2 or less rested"})
 
         if modes:
+            def callback(selected: list[str]) -> None:
+                selected_mode = selected[0] if selected else None
+                if selected_mode == "power" and player.cards_in_play:
+                    create_power_effect_choice(
+                        game_state, player, list(player.cards_in_play), 2000, source_card=card,
+                        prompt="Choose your Character to give +2000 power"
+                    )
+                elif selected_mode == "play_trash" and trash_chars:
+                    create_play_from_trash_choice(
+                        game_state, player, trash_chars, source_card=card,
+                        rest_on_play=True,
+                        prompt="Choose a cost 2 or less Character to play from trash rested"
+                    )
+
             return create_mode_choice(
-                game_state, player, modes, source_card=card,
+                game_state, player, modes, source_card=card, callback=callback,
                 prompt="Choose King Leader effect"
             )
         return True

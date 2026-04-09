@@ -6,8 +6,9 @@ import random
 
 from ..hardcoded import (
     create_add_to_life_choice, create_bottom_deck_choice, create_don_assignment_choice, create_ko_choice,
-    create_mode_choice, create_play_from_trash_choice, create_power_effect_choice, create_rest_choice,
-    create_target_choice, check_leader_type, draw_cards, get_opponent, register_effect,
+    create_cost_reduction_choice, create_mode_choice, create_play_from_trash_choice,
+    create_power_effect_choice, create_rest_choice, create_return_to_hand_choice,
+    create_target_choice, check_leader_type, draw_cards, filter_by_max_cost, get_opponent, register_effect,
     search_top_cards, trash_from_hand,
 )
 
@@ -105,8 +106,17 @@ def you_aint_worth_effect(game_state, player, card):
         modes.append({"id": "ko", "label": "KO rested cost 6 or less", "description": f"KO 1 of {len(rested_targets)} rested targets"})
 
     if modes:
+        def callback(selected: list[str]) -> None:
+            selected_mode = selected[0] if selected else None
+            if selected_mode == "rest" and active_targets:
+                create_rest_choice(game_state, player, active_targets, source_card=card,
+                                   prompt="Choose opponent's cost 6 or less Character to rest")
+            elif selected_mode == "ko" and rested_targets:
+                create_ko_choice(game_state, player, rested_targets, source_card=card,
+                                 prompt="Choose opponent's rested cost 6 or less Character to K.O.")
+
         return create_mode_choice(
-            game_state, player, modes, source_card=card,
+            game_state, player, modes, source_card=card, callback=callback,
             prompt="Choose effect"
         )
     return False
@@ -127,8 +137,19 @@ def reject_effect(game_state, player, card):
         modes.append({"id": "damage", "label": "Deal 1 damage", "description": "Deal 1 damage to opponent (they have 1 life!)"})
 
     if modes:
+        def callback(selected: list[str]) -> None:
+            selected_mode = selected[0] if selected else None
+            if selected_mode == "ko" and targets:
+                create_ko_choice(game_state, player, targets, source_card=card,
+                                 prompt="Choose opponent's cost 5 or less Character to K.O.")
+            elif selected_mode == "damage":
+                opponent_ref = get_opponent(game_state, player)
+                if opponent_ref.life_cards:
+                    opponent_ref.trash.append(opponent_ref.life_cards.pop(0))
+                    game_state._log(f"{opponent_ref.name} took 1 damage")
+
         return create_mode_choice(
-            game_state, player, modes, source_card=card,
+            game_state, player, modes, source_card=card, callback=callback,
             prompt="Choose Reject effect"
         )
     return False
@@ -149,8 +170,20 @@ def perona_activate_effect(game_state, player, card):
         modes.append({"id": "cost_reduce", "label": "Give -1 cost", "description": f"Give -1 cost to 1 of {len(opponent.cards_in_play)} characters"})
 
     if modes:
+        def callback(selected: list[str]) -> None:
+            selected_mode = selected[0] if selected else None
+            opponent_ref = get_opponent(game_state, player)
+            if selected_mode == "rest" and rest_targets:
+                create_rest_choice(game_state, player, rest_targets, source_card=card,
+                                   prompt="Choose opponent's cost 4 or less Character to rest")
+            elif selected_mode == "cost_reduce" and opponent_ref.cards_in_play:
+                create_cost_reduction_choice(
+                    game_state, player, list(opponent_ref.cards_in_play), -1, source_card=card,
+                    prompt="Choose opponent's Character to give -1 cost"
+                )
+
         return create_mode_choice(
-            game_state, player, modes, source_card=card,
+            game_state, player, modes, source_card=card, callback=callback,
             prompt="Choose Perona effect"
         )
     return False
@@ -250,8 +283,20 @@ def op06_021_perona_leader(game_state, player, card):
 
     if modes:
         card.op06_021_used = True
+        def callback(selected: list[str]) -> None:
+            selected_mode = selected[0] if selected else None
+            opponent_ref = get_opponent(game_state, player)
+            if selected_mode == "rest" and rest_targets:
+                create_rest_choice(game_state, player, rest_targets, source_card=card,
+                                   prompt="Choose opponent's cost 4 or less Character to rest")
+            elif selected_mode == "cost_reduce" and opponent_ref.cards_in_play:
+                create_cost_reduction_choice(
+                    game_state, player, list(opponent_ref.cards_in_play), -2, source_card=card,
+                    prompt="Choose opponent's Character to give -2 cost"
+                )
+
         return create_mode_choice(
-            game_state, player, modes, source_card=card,
+            game_state, player, modes, source_card=card, callback=callback,
             prompt="Choose Perona Leader effect"
         )
     return False
@@ -1059,15 +1104,24 @@ def op06_065_niji(game_state, player, card):
     """On Play: If DON <= opponent, K.O. cost 2 or less OR return cost 4 or less to hand."""
     opponent = get_opponent(game_state, player)
     if len(player.don_pool) <= len(opponent.don_pool):
-        ko_targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 2]
-        return_targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 4]
+        ko_targets = filter_by_max_cost(opponent.cards_in_play, 2)
+        return_targets = filter_by_max_cost(opponent.cards_in_play, 4)
         if ko_targets or return_targets:
-            # Create mode selection choice
+            def callback(selected: list[str]) -> None:
+                selected_mode = selected[0] if selected else None
+                if selected_mode == "ko" and ko_targets:
+                    create_ko_choice(game_state, player, ko_targets, source_card=card,
+                                     prompt="Choose opponent's cost 2 or less Character to K.O.")
+                elif selected_mode == "return" and return_targets:
+                    create_return_to_hand_choice(game_state, player, return_targets, source_card=card,
+                                                 prompt="Choose opponent's cost 4 or less Character to return to hand")
+
             return create_mode_choice(game_state, player, source_card=card,
                                      options=[
                                          ("ko", "K.O. cost 2 or less", ko_targets),
                                          ("return", "Return cost 4 or less to hand", return_targets)
                                      ],
+                                     callback=callback,
                                      prompt="Choose effect mode for Vinsmoke Niji")
     return True
 
@@ -1411,12 +1465,29 @@ def op06_092_brook(game_state, player, card):
     """On Play: Trash opponent's cost 4 or less OR opponent bottoms 3 from trash."""
     opponent = get_opponent(game_state, player)
     ko_targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 4]
-    # Create mode selection choice
+    def callback(selected: list[str]) -> None:
+        selected_mode = selected[0] if selected else None
+        opponent_ref = get_opponent(game_state, player)
+        if selected_mode == "ko" and ko_targets:
+            create_ko_choice(game_state, player, ko_targets, source_card=card,
+                             prompt="Choose opponent's cost 4 or less Character to K.O.")
+        elif selected_mode == "bottom":
+            moved = 0
+            for trashed in list(opponent_ref.trash):
+                if moved >= 3:
+                    break
+                opponent_ref.trash.remove(trashed)
+                opponent_ref.deck.append(trashed)
+                moved += 1
+            if moved:
+                game_state._log(f"{opponent_ref.name} placed {moved} card(s) from trash at the bottom of deck")
+
     return create_mode_choice(game_state, player, source_card=card,
                              options=[
                                  ("ko", "Trash cost 4 or less", ko_targets),
                                  ("bottom", "Opponent bottoms 3 from trash", [])
                              ],
+                             callback=callback,
                              prompt="Choose effect mode for Brook")
 
 

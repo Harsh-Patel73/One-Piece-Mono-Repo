@@ -3,8 +3,8 @@ Hardcoded effects for EB02 cards.
 """
 
 from ..hardcoded import (
-    create_mode_choice, draw_cards, get_opponent, give_don_to_card,
-    register_effect, search_top_cards, trash_from_hand,
+    create_cost_reduction_choice, create_mode_choice, create_ko_choice, draw_cards, filter_by_max_cost, get_opponent,
+    give_don_to_card, register_effect, search_top_cards, trash_from_hand,
 )
 
 
@@ -65,7 +65,18 @@ def eb02_045_law(game_state, player, card):
             {"id": "draw", "label": "Draw 1", "description": "Draw 1 card"},
             {"id": "discard", "label": "Opponent Discards", "description": "Opponent discards 1 card from hand"}
         ]
-        return create_mode_choice(game_state, player, modes, source_card=card,
+        def callback(selected: list[str]) -> None:
+            selected_mode = selected[0] if selected else None
+            if selected_mode == "draw":
+                draw_cards(player, 1)
+                game_state._log(f"{player.name} drew 1 card")
+            elif selected_mode == "discard":
+                opponent = get_opponent(game_state, player)
+                if opponent.hand:
+                    trash_from_hand(opponent, 1, game_state, card)
+                    game_state._log(f"{opponent.name} must discard 1 card")
+
+        return create_mode_choice(game_state, player, modes, source_card=card, callback=callback,
                                    prompt="Choose: Draw 1 card, OR Opponent discards 1 card")
     return True
 
@@ -79,7 +90,21 @@ def eb02_051_three_pace(game_state, player, card):
         {"id": "ko", "label": "KO Character", "description": "KO opponent's cost 2 or less Character"},
         {"id": "cost_reduce", "label": "Give -4 Cost", "description": "Give opponent's Character -4 cost this turn"}
     ]
-    return create_mode_choice(game_state, player, modes, source_card=card,
+    def callback(selected: list[str]) -> None:
+        selected_mode = selected[0] if selected else None
+        opponent = get_opponent(game_state, player)
+        if selected_mode == "ko":
+            targets = filter_by_max_cost(opponent.cards_in_play, 2)
+            if targets:
+                create_ko_choice(game_state, player, targets, source_card=card,
+                                 prompt="Choose opponent's cost 2 or less Character to K.O.")
+        elif selected_mode == "cost_reduce" and opponent.cards_in_play:
+            create_cost_reduction_choice(
+                game_state, player, list(opponent.cards_in_play), -4, source_card=card,
+                prompt="Choose opponent's Character to give -4 cost"
+            )
+
+    return create_mode_choice(game_state, player, modes, source_card=card, callback=callback,
                                prompt="Choose: KO opponent's cost 2 or less, OR Give -4 cost to a Character")
 
 

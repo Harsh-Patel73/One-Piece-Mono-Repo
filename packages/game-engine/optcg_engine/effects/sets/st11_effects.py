@@ -3,7 +3,7 @@ Hardcoded effects for ST11 cards.
 """
 
 from ..hardcoded import (
-    create_hand_discard_choice, create_mode_choice, get_opponent, register_effect,
+    create_hand_discard_choice, create_mode_choice, filter_by_max_cost, get_opponent, register_effect,
     search_top_cards, set_active,
 )
 
@@ -36,10 +36,8 @@ def backlight_choose_effect(game_state, player, card):
         return False
 
     opponent = get_opponent(game_state, player)
-    rested_targets = [c for c in opponent.cards_in_play
-                     if c.is_resting and (getattr(c, 'cost', 0) or 0) <= 5]
-    active_targets = [c for c in opponent.cards_in_play
-                     if not c.is_resting and (getattr(c, 'cost', 0) or 0) <= 5]
+    rested_targets = [c for c in filter_by_max_cost(opponent.cards_in_play, 5) if c.is_resting]
+    active_targets = [c for c in filter_by_max_cost(opponent.cards_in_play, 5) if not c.is_resting]
 
     modes = []
     if active_targets:
@@ -48,8 +46,17 @@ def backlight_choose_effect(game_state, player, card):
         modes.append({"id": "ko", "label": "KO rested cost 5 or less", "description": f"KO 1 of {len(rested_targets)} rested targets"})
 
     if modes:
+        def callback(selected: list[str]) -> None:
+            selected_mode = selected[0] if selected else None
+            if selected_mode == "rest" and active_targets:
+                create_rest_choice(game_state, player, active_targets, source_card=card,
+                                   prompt="Choose opponent's cost 5 or less Character to rest")
+            elif selected_mode == "ko" and rested_targets:
+                create_ko_choice(game_state, player, rested_targets, source_card=card,
+                                 prompt="Choose opponent's rested cost 5 or less Character to K.O.")
+
         return create_mode_choice(
-            game_state, player, modes, source_card=card,
+            game_state, player, modes, source_card=card, callback=callback,
             prompt="Choose Backlight effect"
         )
     return False

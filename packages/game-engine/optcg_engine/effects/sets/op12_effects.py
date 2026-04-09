@@ -5,7 +5,7 @@ Hardcoded effects for OP12 cards.
 from ..hardcoded import (
     add_power_modifier, check_leader_type, check_life_count,
     create_bottom_deck_choice, create_ko_choice, create_mode_choice, create_return_to_hand_choice,
-    draw_cards, get_opponent, register_effect, search_top_cards, trash_from_hand,
+    draw_cards, filter_by_max_cost, get_opponent, register_effect, search_top_cards, trash_from_hand,
 )
 
 
@@ -147,7 +147,19 @@ def op12_060_boeuf_burst(game_state, player, card):
             {"id": "return", "label": "Return to Hand", "description": "Return opponent's cost 4 or less Character to hand"},
             {"id": "draw", "label": "Draw 2", "description": "Draw 2 cards"}
         ]
-        return create_mode_choice(game_state, player, modes, source_card=card,
+        def callback(selected: list[str]) -> None:
+            selected_mode = selected[0] if selected else None
+            if selected_mode == "return":
+                opponent = get_opponent(game_state, player)
+                targets = filter_by_max_cost(opponent.cards_in_play, 4)
+                if targets:
+                    create_return_to_hand_choice(game_state, player, targets, source_card=card,
+                                                 prompt="Choose opponent's cost 4 or less Character to return to hand")
+            elif selected_mode == "draw":
+                draw_cards(player, 2)
+                game_state._log(f"{player.name} drew 2 cards")
+
+        return create_mode_choice(game_state, player, modes, source_card=card, callback=callback,
                                    prompt="Choose an effect: Return opponent's cost 4 or less to hand, OR Draw 2 cards")
     return True
 

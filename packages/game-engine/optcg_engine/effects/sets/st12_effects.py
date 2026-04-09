@@ -60,13 +60,22 @@ def yosaku_johnny_effect(game_state, player, card):
                                      prompt="Choose cost 2 or less to rest")
 
     # Both options available - mode choice
+    def callback(selected: list[str]) -> None:
+        selected_mode = selected[0] if selected else None
+        if selected_mode == "ko" and rested_targets:
+            create_ko_choice(game_state, player, rested_targets, source_card=card,
+                             prompt="Choose rested cost 2 or less Character to K.O.")
+        elif selected_mode == "rest" and active_targets:
+            create_rest_choice(game_state, player, active_targets, source_card=card,
+                               prompt="Choose cost 2 or less Character to rest")
+
     return create_mode_choice(
         game_state, player,
         modes=[
             {"id": "ko", "label": "KO rested cost 2 or less", "targets": rested_targets},
             {"id": "rest", "label": "Rest cost 2 or less", "targets": active_targets}
         ],
-        callback="yosaku_johnny_mode",
+        callback=callback,
         source_card=card,
         prompt="Choose effect mode"
     )

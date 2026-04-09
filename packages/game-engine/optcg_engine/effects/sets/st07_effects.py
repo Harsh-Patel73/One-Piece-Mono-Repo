@@ -18,7 +18,16 @@ def charlotte_linlin_st07_effect(game_state, player, card):
         {"id": "add_life", "label": "Add to Life", "description": "Add the top card of deck to opponent's Life (opponent gains 1 life)"}
     ]
     # This is opponent's choice, so we pass opponent as the player making the decision
-    return create_mode_choice(game_state, opponent, modes, source_card=card,
+    def callback(selected: list[str]) -> None:
+        selected_mode = selected[0] if selected else None
+        if selected_mode == "trash_life" and opponent.life_cards:
+            opponent.trash.append(opponent.life_cards.pop(0))
+            game_state._log(f"{opponent.name}'s top life was trashed")
+        elif selected_mode == "add_life" and player.deck:
+            opponent.life_cards.append(player.deck.pop(0))
+            game_state._log(f"{opponent.name} added a card to life")
+
+    return create_mode_choice(game_state, opponent, modes, source_card=card, callback=callback,
                                prompt="Charlotte Linlin: Choose your fate - Trash top Life OR let opponent add deck to Life")
 
 

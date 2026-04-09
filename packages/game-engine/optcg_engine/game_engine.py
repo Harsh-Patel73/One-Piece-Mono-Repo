@@ -5,6 +5,8 @@ This module provides the main game logic for simulating One Piece TCG matches.
 It integrates with the mechanics module for combat, blockers, and triggers.
 """
 
+import logging
+import os
 import random
 import uuid
 import re
@@ -18,6 +20,8 @@ from .effects.resolver import resolve_effect, EffectContext, get_resolver
 from .effects.effects import EffectTiming, EffectType
 from .effects.tokenizer import extract_keywords
 from .effects.manager import get_effect_manager, parse_card_effects, get_effects_by_timing
+
+logger = logging.getLogger(__name__)
 
 # Constants
 MAX_DON = 10
@@ -2027,7 +2031,7 @@ class GameState:
             'pending_choice': self.pending_choice.to_dict() if self.pending_choice else None,
         }
 
-    def resolve_pending_choice(self, selected: List[str]) -> bool:
+    def _resolve_pending_choice_legacy_unused(self, selected: List[str]) -> bool:
         """
         Resolve a pending choice with the player's selection.
 
@@ -2966,4 +2970,833 @@ class GameState:
             print(f"Error resolving choice: {e}")
             traceback.print_exc()
             self.pending_choice = None
+            return False
+
+    def _resolve_choice_player(self, data: Dict[str, Any]) -> Player:
+        """Resolve the player associated with a pending choice."""
+        if "player_index" in data:
+            return self.player1 if data["player_index"] == 0 else self.player2
+        player_id = data.get("player_id")
+        return self.player1 if self.player1.player_id == player_id else self.player2
+
+    def _pending_choice_strict_mode(self) -> bool:
+        """Use strict failures in test/dev flows."""
+        return bool(
+            os.environ.get("PYTEST_CURRENT_TEST")
+            or os.environ.get("OPTCG_STRICT_PENDING_CHOICE")
+        )
+
+    def _log_invalid_selection(self, action: str, selected: List[str], detail: str) -> None:
+        """Log malformed pending-choice selections consistently."""
+        logger.warning(
+            "Invalid pending choice selection for action %s: %s (%s)",
+            action,
+            selected,
+            detail,
+        )
+        self._log(f"Invalid selection for {action}")
+
+    def _parse_selected_index(
+        self,
+        action: str,
+        selected: List[str],
+        *,
+        position: int = 0,
+        allow_missing: bool = False,
+    ) -> Optional[int]:
+        """Parse one selected index, logging malformed input."""
+        if len(selected) <= position:
+            if not allow_missing:
+                self._log_invalid_selection(action, selected, f"missing index at position {position}")
+            return None
+        raw = selected[position]
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            self._log_invalid_selection(action, selected, f"non-integer value {raw!r}")
+            return None
+
+    def _parse_selected_indices(self, action: str, selected: List[str]) -> List[int]:
+        """Parse many selected indices, skipping malformed values with logs."""
+        indices: List[int] = []
+        for raw in selected:
+            try:
+                indices.append(int(raw))
+            except (TypeError, ValueError):
+                self._log_invalid_selection(action, selected, f"non-integer value {raw!r}")
+        return indices
+
+    def _get_target_info(
+        self,
+        action: str,
+        data: Dict[str, Any],
+        selected: List[str],
+        *,
+        position: int = 0,
+    ) -> Optional[Dict[str, Any]]:
+        """Resolve one target info payload from callback data."""
+        target_cards = data.get("target_cards", [])
+        idx = self._parse_selected_index(action, selected, position=position)
+        if idx is None:
+            return None
+        if not (0 <= idx < len(target_cards)):
+            self._log_invalid_selection(action, selected, f"index {idx} out of range for {len(target_cards)} targets")
+            return None
+        return target_cards[idx]
+
+    def _get_target_infos(self, action: str, data: Dict[str, Any], selected: List[str]) -> List[Dict[str, Any]]:
+        """Resolve many target info payloads from callback data."""
+        target_cards = data.get("target_cards", [])
+        infos: List[Dict[str, Any]] = []
+        for idx in self._parse_selected_indices(action, selected):
+            if 0 <= idx < len(target_cards):
+                infos.append(target_cards[idx])
+            else:
+                self._log_invalid_selection(action, selected, f"index {idx} out of range for {len(target_cards)} targets")
+        return infos
+
+    def _find_card_by_id(
+        self,
+        card_id: str,
+        zones: List[List[Card]],
+        *,
+        include_leaders: Optional[List[Optional[Card]]] = None,
+    ) -> Optional[Card]:
+        """Find a card object by id across provided zones."""
+        for zone in zones:
+            for card in zone:
+                if card and card.id == card_id:
+                    return card
+        for leader in include_leaders or []:
+            if leader and leader.id == card_id:
+                return leader
+        return None
+
+    def _target_card_from_info(
+        self,
+        player: Player,
+        target_info: Dict[str, Any],
+        *,
+        include_leaders: bool = False,
+    ) -> Optional[Card]:
+        """Resolve a serialized target reference to the live card."""
+        leaders = [self.player1.leader, self.player2.leader] if include_leaders else None
+        return self._find_card_by_id(
+            target_info["id"],
+            [self.player1.cards_in_play, self.player2.cards_in_play, player.cards_in_play],
+            include_leaders=leaders,
+        )
+
+    def _finalize_pending_choice_resolution(self, choice: PendingChoice) -> None:
+        """Clear resolved choices and continue any queued follow-up processing."""
+        if self.pending_choice is not choice:
+            return
+
+        self.pending_choice = None
+        queued = getattr(self, '_queued_counter_effects', [])
+        if queued:
+            defender_player, counter_card = queued.pop(0)
+            from .effects.hardcoded import execute_hardcoded_effect
+            execute_hardcoded_effect(self, defender_player, counter_card, 'counter')
+
+        if (
+            not self.pending_choice
+            and self.pending_attack
+            and self.pending_attack.get('_needs_attack_resolution')
+        ):
+            self.pending_attack.pop('_needs_attack_resolution', None)
+            self._resolve_attack_damage()
+
+    def _handle_unknown_pending_choice_action(self, action: Optional[str]) -> bool:
+        """Fail unknown callback actions loudly in tests and cleanly at runtime."""
+        message = f"Unknown callback_action: {action}"
+        if self._pending_choice_strict_mode():
+            raise ValueError(message)
+        logger.error(message)
+        self._log(message)
+        self.pending_choice = None
+        return False
+
+    def _pending_choice_handlers(self) -> Dict[str, Callable[[List[str], Player, Dict[str, Any]], Any]]:
+        """Registry for legacy callback_action dispatch during migration."""
+        return {
+            "trash_from_hand": self._handle_trash_from_hand_choice,
+            "select_target": self._handle_select_target_choice,
+            "choose_option": self._handle_choose_option_choice,
+            "search_add_to_hand": self._handle_search_add_to_hand_choice,
+            "assign_don": self._handle_assign_don_choice,
+            "apply_power": self._handle_apply_power_choice,
+            "apply_power_until_next_turn": self._handle_apply_power_until_next_turn_choice,
+            "ko_target": self._handle_ko_target_choice,
+            "trash_own_character": self._handle_trash_own_character_choice,
+            "ko_multi_targets": self._handle_ko_multi_targets_choice,
+            "rest_targets_multi": self._handle_rest_targets_multi_choice,
+            "return_from_trash_to_hand": self._handle_return_from_trash_to_hand_choice,
+            "return_to_hand": self._handle_return_to_hand_choice,
+            "play_from_trash": self._handle_play_from_trash_choice,
+            "select_mode": self._handle_select_mode_choice,
+            "return_own_to_hand": self._handle_return_own_to_hand_choice,
+            "apply_cost_reduction": self._handle_apply_cost_reduction_choice,
+            "play_from_hand": self._handle_play_from_hand_choice,
+            "place_at_bottom": self._handle_place_at_bottom_choice,
+            "nami_deck_order": self._handle_nami_deck_order_choice,
+            "deck_top_or_bottom_all": self._handle_deck_top_or_bottom_all_choice,
+            "cannot_attack_target": self._handle_cannot_attack_target_choice,
+            "give_double_attack": self._handle_give_double_attack_choice,
+            "give_banish": self._handle_give_banish_choice,
+            "add_to_opponent_life": self._handle_add_to_opponent_life_choice,
+            "replace_field_card": self._handle_replace_field_card_choice,
+            "perona_cannot_rest": self._handle_perona_cannot_rest_choice,
+            "play_from_hand_or_trash": self._handle_play_from_hand_or_trash_choice,
+            "give_rush": self._handle_give_rush_choice,
+            "set_active": self._handle_set_active_choice,
+            "rest_instead": self._handle_rest_instead_choice,
+            "rest_target": self._handle_rest_target_choice,
+            "add_to_hand_from_trash": self._handle_add_to_hand_from_trash_choice,
+            "add_from_trash_to_hand": self._handle_add_to_hand_from_trash_choice,
+            "negate_effects": self._handle_negate_effects_choice,
+        }
+
+    def _dispatch_pending_choice_action(
+        self,
+        action: Optional[str],
+        selected: List[str],
+        player: Player,
+        data: Dict[str, Any],
+    ) -> bool:
+        """Dispatch a legacy callback_action through the registry."""
+        handler = self._pending_choice_handlers().get(action or "")
+        if handler is None:
+            return self._handle_unknown_pending_choice_action(action)
+        result = handler(selected, player, data)
+        return result is not False
+
+    def _handle_trash_from_hand_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Trash selected cards from hand by index."""
+        for idx in sorted(self._parse_selected_indices("trash_from_hand", selected), reverse=True):
+            if 0 <= idx < len(player.hand):
+                card = player.hand.pop(idx)
+                player.trash.append(card)
+                self._log(f"{player.name} trashed {card.name}")
+            else:
+                self._log_invalid_selection("trash_from_hand", selected, f"index {idx} out of range for hand size {len(player.hand)}")
+
+    def _handle_select_target_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Persist a chosen target index for legacy continuations."""
+        data["selected_target"] = self._parse_selected_index("select_target", selected)
+
+    def _handle_choose_option_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Persist a chosen option id for legacy continuations."""
+        data["selected_option"] = selected[0] if selected else None
+
+    def _handle_search_add_to_hand_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Resolve deck-search style choices."""
+        look_count = data.get("look_count", 0) or len(data.get("top_card_indices", []))
+        valid_indices = data.get("valid_indices")
+        source_name = data.get("source_name", player.name)
+        source_id = data.get("source_id", "")
+        trash_rest = data.get("trash_rest", False)
+        play_to_field = data.get("play_to_field", False)
+        play_rested = data.get("play_rested", False)
+
+        chosen_indices = sorted(self._parse_selected_indices("search_add_to_hand", selected), reverse=True)
+        if valid_indices is not None:
+            chosen_indices = [idx for idx in chosen_indices if idx in valid_indices]
+
+        chosen_cards: List[Card] = []
+        for idx in chosen_indices:
+            if 0 <= idx < len(player.deck):
+                chosen_cards.append(player.deck.pop(idx))
+            else:
+                self._log_invalid_selection("search_add_to_hand", selected, f"index {idx} out of range for deck size {len(player.deck)}")
+
+        for card in chosen_cards:
+            if play_to_field:
+                player.cards_in_play.append(card)
+                setattr(card, 'played_turn', self.turn_count)
+                if play_rested:
+                    card.is_resting = True
+                self._apply_keywords(card)
+                self._log(f"{source_name}: Played {card.name} to field")
+                if card.effect and '[On Play]' in card.effect:
+                    self._trigger_on_play_effects(card)
+            else:
+                player.hand.append(card)
+                self._log(f"{source_name}: Added {card.name} to hand")
+
+        remaining_count = max(0, look_count - len(chosen_cards))
+        remaining = player.deck[:remaining_count]
+        for _ in range(remaining_count):
+            if player.deck:
+                player.deck.pop(0)
+
+        if trash_rest:
+            for card in remaining:
+                player.trash.append(card)
+            if remaining:
+                self._log(f"{source_name}: Trashed {len(remaining)} remaining cards")
+        elif len(remaining) <= 1:
+            player.deck.extend(remaining)
+            if remaining:
+                self._log(f"{source_name}: Remaining card placed at bottom of deck")
+        else:
+            self._create_deck_order_choice(
+                player,
+                remaining,
+                [],
+                source_name=source_name,
+                source_id=source_id,
+            )
+
+    def _handle_assign_don_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Attach DON to a selected card using the current engine's pool representation."""
+        target_info = self._get_target_info("assign_don", data, selected)
+        if not target_info:
+            return
+        target = self._target_card_from_info(player, target_info, include_leaders=True)
+        if target is None:
+            return
+
+        don_count = data.get("don_count", 1)
+        rested_only = data.get("rested_only", True)
+        given = 0
+        if hasattr(player, "don_cards"):
+            for don in list(getattr(player, "don_cards", [])):
+                if given >= don_count:
+                    break
+                if rested_only and not getattr(don, "is_resting", False):
+                    continue
+                target.attached_don = getattr(target, "attached_don", 0) + 1
+                given += 1
+        else:
+            for state in list(player.don_pool):
+                if given >= don_count:
+                    break
+                if rested_only and state != "rested":
+                    continue
+                target.attached_don = getattr(target, "attached_don", 0) + 1
+                given += 1
+        self._log(f"{player.name} attached {given} DON to {target.name}")
+
+    def _apply_power_modifier(self, player: Player, target_info: Dict[str, Any], power_amount: int, *, until_next_turn: bool = False) -> None:
+        """Apply power changes to a resolved target."""
+        target = self._target_card_from_info(player, target_info, include_leaders=True)
+        if target is None:
+            return
+        target.power_modifier = getattr(target, 'power_modifier', 0) + power_amount
+        target._sticky_power_modifier = getattr(target, '_sticky_power_modifier', 0) + power_amount
+        if until_next_turn:
+            target.power_modifier_expires_on_turn = self.turn_count + 1
+            target._sticky_power_modifier_expires_on_turn = self.turn_count + 1
+        sign = "+" if power_amount >= 0 else ""
+        suffix = " until end of next turn" if until_next_turn else ""
+        self._log(f"{target.name} gets {sign}{power_amount} power{suffix}")
+
+    def _handle_apply_power_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Apply a power modifier to one or more selected targets."""
+        power_amount = data.get("power_amount", 0)
+        for target_info in self._get_target_infos("apply_power", data, selected):
+            self._apply_power_modifier(player, target_info, power_amount)
+
+    def _handle_apply_power_until_next_turn_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Apply a power modifier through the end of the next turn."""
+        power_amount = data.get("power_amount", 0)
+        for target_info in self._get_target_infos("apply_power_until_next_turn", data, selected):
+            self._apply_power_modifier(player, target_info, power_amount, until_next_turn=True)
+
+    def _handle_ko_target_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """K.O. a single selected target."""
+        target_info = self._get_target_info("ko_target", data, selected)
+        if not target_info:
+            return
+        for participant in [self.player1, self.player2]:
+            for card in participant.cards_in_play[:]:
+                if card.id != target_info["id"]:
+                    continue
+                if getattr(card, 'cannot_be_ko_by_effects', False):
+                    self._log(f"{card.name} cannot be K.O.'d by effects")
+                    return
+                participant.cards_in_play.remove(card)
+                participant.trash.append(card)
+                self._log(f"{card.name} was KO'd")
+                return
+
+    def _handle_trash_own_character_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Trash one of your own characters from hand or field."""
+        target_info = self._get_target_info("trash_own_character", data, selected)
+        if not target_info:
+            return
+
+        trashed_card: Optional[Card] = None
+        for zone_name, zone in (("hand", player.hand), ("field", player.cards_in_play)):
+            for card in zone[:]:
+                if card.id == target_info["id"]:
+                    zone.remove(card)
+                    player.trash.append(card)
+                    trashed_card = card
+                    self._log(f"{player.name} trashed {card.name} from {zone_name}")
+                    break
+            if trashed_card:
+                break
+
+        if trashed_card is None:
+            return
+
+        draw_after = data.get("draw_after", 0)
+        if draw_after > 0:
+            from .effects.hardcoded import draw_cards
+            draw_cards(player, draw_after)
+
+        power_boost_card_id = data.get("power_boost_card_id", "")
+        power_boost_amount = data.get("power_boost_amount", 0)
+        if power_boost_card_id and power_boost_amount:
+            boost_card = self._find_card_by_id(
+                power_boost_card_id,
+                [player.cards_in_play],
+                include_leaders=[player.leader],
+            )
+            if boost_card:
+                boost_card.power_modifier = getattr(boost_card, 'power_modifier', 0) + power_boost_amount
+                boost_card._sticky_power_modifier = getattr(boost_card, '_sticky_power_modifier', 0) + power_boost_amount
+                self._log(f"{boost_card.name} gains +{power_boost_amount} power")
+
+    def _handle_ko_multi_targets_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """K.O. multiple selected targets."""
+        for target_info in self._get_target_infos("ko_multi_targets", data, selected):
+            self._handle_ko_target_choice(["0"], player, {"target_cards": [target_info]})
+
+    def _handle_rest_targets_multi_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Rest multiple selected targets."""
+        for target_info in self._get_target_infos("rest_targets_multi", data, selected):
+            target = self._target_card_from_info(player, target_info)
+            if target:
+                target.is_resting = True
+                self._log(f"{target.name} was rested")
+
+    def _handle_return_from_trash_to_hand_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Move one selected card from trash to hand."""
+        target_info = self._get_target_info("return_from_trash_to_hand", data, selected)
+        if not target_info:
+            return
+        for card in player.trash[:]:
+            if card.id == target_info["id"]:
+                player.trash.remove(card)
+                player.hand.append(card)
+                self._log(f"{card.name} added to hand from trash")
+                return
+
+    def _handle_return_to_hand_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Return a selected in-play card to its owner's hand."""
+        target_info = self._get_target_info("return_to_hand", data, selected)
+        if not target_info:
+            return
+        for participant in [self.player1, self.player2]:
+            for card in participant.cards_in_play[:]:
+                if card.id == target_info["id"]:
+                    participant.cards_in_play.remove(card)
+                    participant.hand.append(card)
+                    self._log(f"{card.name} returned to hand")
+                    return
+
+    def _handle_play_from_trash_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Play a selected card from trash."""
+        idx = self._parse_selected_index("play_from_trash", selected, allow_missing=True)
+        if idx is None:
+            return
+        target_cards = data.get("target_cards", [])
+        if not (0 <= idx < len(target_cards)):
+            self._log_invalid_selection("play_from_trash", selected, f"index {idx} out of range for {len(target_cards)} targets")
+            return
+        target_info = target_cards[idx]
+        rest_on_play = data.get("rest_on_play", True)
+        for card in player.trash[:]:
+            if card.id == target_info["id"]:
+                player.trash.remove(card)
+                card.is_resting = rest_on_play
+                player.cards_in_play.append(card)
+                self._log(f"{player.name} played {card.name} from trash")
+                return
+
+    def _handle_select_mode_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Compatibility shim for remaining legacy select_mode flows."""
+        selected_mode = selected[0] if selected else None
+        data["selected_mode"] = selected_mode
+        opponent = self.player2 if player == self.player1 else self.player1
+
+        if selected_mode == "trash_life":
+            if opponent.life_cards:
+                life = opponent.life_cards.pop(0)
+                opponent.trash.append(life)
+                self._log(f"{opponent.name}'s top life was trashed")
+            return
+        if selected_mode == "add_life":
+            if player.deck:
+                player.life_cards.append(player.deck.pop(0))
+                self._log(f"{player.name} added a card to life")
+            return
+        if selected_mode == "view_life":
+            self._log(f"{player.name} looked at {opponent.name}'s life cards")
+            return
+        if selected_mode == "view_deck":
+            self._log(f"{player.name} looked at top 5 cards of deck")
+            return
+        if selected_mode in {"top_life", "bottom_life"}:
+            if player.life_cards:
+                life_card = player.life_cards.pop(0 if selected_mode == "top_life" else -1)
+                player.hand.append(life_card)
+                label = "top" if selected_mode == "top_life" else "bottom"
+                self._log(f"{player.name} added {label} life card to hand")
+                if player.leader:
+                    player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 2000
+                    self._log(f"{player.leader.name} gains +2000 power until end of opponent's next turn")
+            return
+        if selected_mode == "skip":
+            self._log(f"{player.name} chose not to resolve the optional mode effect")
+            return
+
+        message = f"Unhandled legacy select_mode option: {selected_mode}"
+        if self._pending_choice_strict_mode():
+            raise ValueError(message)
+        logger.warning(message)
+        self._log(message)
+
+    def _handle_return_own_to_hand_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Return one of your own characters to hand."""
+        target_info = self._get_target_info("return_own_to_hand", data, selected)
+        if not target_info:
+            return
+        for card in player.cards_in_play[:]:
+            if card.id == target_info["id"]:
+                player.cards_in_play.remove(card)
+                player.hand.append(card)
+                self._log(f"{player.name} returned {card.name} to hand")
+                return
+
+    def _handle_apply_cost_reduction_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Apply cost reduction to selected targets."""
+        cost_reduction = data.get("cost_reduction", 0)
+        for target_info in self._get_target_infos("apply_cost_reduction", data, selected):
+            for participant in [self.player2 if player == self.player1 else self.player1, player]:
+                for card in participant.cards_in_play:
+                    if card.id != target_info["id"]:
+                        continue
+                    if cost_reduction == "zero":
+                        current_cost = max(0, (card.cost or 0) + getattr(card, 'cost_modifier', 0))
+                        card.cost_modifier = getattr(card, 'cost_modifier', 0) - current_cost
+                        self._log(f"{card.name}'s cost set to 0 this turn")
+                    else:
+                        card.cost_modifier = getattr(card, 'cost_modifier', 0) + cost_reduction
+                        self._log(f"{card.name} gets {cost_reduction} cost this turn")
+                    return
+
+    def _handle_play_from_hand_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Play a selected card from hand."""
+        idx = self._parse_selected_index("play_from_hand", selected, allow_missing=True)
+        if idx is None:
+            return
+        target_cards = data.get("target_cards", [])
+        if not (0 <= idx < len(target_cards)):
+            self._log_invalid_selection("play_from_hand", selected, f"index {idx} out of range for {len(target_cards)} targets")
+            return
+        target_info = target_cards[idx]
+        rest_on_play = data.get("rest_on_play", False)
+        for card in player.hand[:]:
+            if card.id == target_info["id"]:
+                player.hand.remove(card)
+                card.is_resting = rest_on_play
+                setattr(card, 'played_turn', self.turn_count)
+                player.cards_in_play.append(card)
+                self._apply_keywords(card)
+                self._log(f"{player.name} played {card.name} from hand")
+                if card.effect and '[On Play]' in card.effect:
+                    self._trigger_on_play_effects(card)
+                return
+
+    def _handle_place_at_bottom_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Place a selected in-play card at the bottom of its owner's deck."""
+        target_info = self._get_target_info("place_at_bottom", data, selected)
+        if not target_info:
+            return
+        for participant in [self.player1, self.player2]:
+            for card in participant.cards_in_play[:]:
+                if card.id == target_info["id"]:
+                    participant.cards_in_play.remove(card)
+                    participant.deck.append(card)
+                    self._log(f"{card.name} was placed at the bottom of deck")
+                    return
+
+    def _handle_nami_deck_order_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Handle sequential deck ordering choices."""
+        remaining_cards_data = data.get("remaining_cards", [])
+        ordered_so_far = data.get("ordered_so_far", [])
+        source_name = data.get("source_name", "Nami")
+        source_id = data.get("source_id", "OP01-016")
+        placement = data.get("placement", "bottom")
+
+        chosen_idx = self._parse_selected_index("nami_deck_order", selected, allow_missing=True)
+        if chosen_idx is not None and 0 <= chosen_idx < len(remaining_cards_data):
+            ordered_so_far.append(remaining_cards_data.pop(chosen_idx))
+        elif chosen_idx is not None and remaining_cards_data:
+            self._log_invalid_selection("nami_deck_order", selected, f"index {chosen_idx} out of range for {len(remaining_cards_data)} cards")
+
+        if len(remaining_cards_data) <= 1:
+            if remaining_cards_data:
+                ordered_so_far.append(remaining_cards_data[0])
+            if placement == "top":
+                for card_info in reversed(ordered_so_far):
+                    card_obj = self._find_card_by_info(card_info)
+                    if card_obj:
+                        player.deck.insert(0, card_obj)
+                self._log(f"{source_name}: Cards placed on TOP of deck")
+            else:
+                for card_info in ordered_so_far:
+                    card_obj = self._find_card_by_info(card_info)
+                    if card_obj:
+                        player.deck.append(card_obj)
+                self._log(f"{source_name}: Cards placed at BOTTOM of deck")
+            return
+
+        self._create_deck_order_choice(
+            player,
+            None,
+            ordered_so_far,
+            source_name=source_name,
+            source_id=source_id,
+            remaining_cards_data=remaining_cards_data,
+            placement=placement,
+        )
+
+    def _handle_deck_top_or_bottom_all_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Choose whether a searched batch goes to top or bottom, then order if needed."""
+        cards_data = data.get("cards_data", [])
+        source_name = data.get("source_name", "")
+        placement = selected[0] if selected else "bottom"
+        if len(cards_data) <= 1:
+            card_obj = self._find_card_by_info(cards_data[0]) if cards_data else None
+            if not card_obj:
+                return
+            if placement == "top":
+                player.deck.insert(0, card_obj)
+                self._log(f"{source_name}: {card_obj.name} placed on TOP of deck")
+            else:
+                player.deck.append(card_obj)
+                self._log(f"{source_name}: {card_obj.name} placed at BOTTOM of deck")
+            return
+
+        self._create_deck_order_choice(
+            player,
+            None,
+            [],
+            source_name=source_name,
+            source_id=data.get("source_id", ""),
+            remaining_cards_data=cards_data,
+            placement=placement,
+        )
+
+    def _handle_cannot_attack_target_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Prevent a selected opponent character from attacking."""
+        target_info = self._get_target_info("cannot_attack_target", data, selected)
+        if not target_info:
+            return
+        opponent = self.player2 if player == self.player1 else self.player1
+        for card in opponent.cards_in_play:
+            if card.id == target_info["id"]:
+                card.cannot_attack = True
+                card.cannot_attack_until_turn = self.turn_count + 1
+                self._log(f"{card.name} cannot attack this turn")
+                return
+
+    def _handle_give_double_attack_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Grant Double Attack to a selected friendly character."""
+        target_info = self._get_target_info("give_double_attack", data, selected)
+        if not target_info:
+            return
+        for card in player.cards_in_play:
+            if card.id == target_info["id"]:
+                card.has_doubleattack = True
+                card.has_double_attack = True
+                self._log(f"{card.name} gains Double Attack")
+                return
+
+    def _handle_give_banish_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Grant Banish to a selected friendly character."""
+        target_info = self._get_target_info("give_banish", data, selected)
+        if not target_info:
+            return
+        for card in player.cards_in_play:
+            if card.id == target_info["id"]:
+                card.has_banish = True
+                self._log(f"{card.name} gains Banish")
+                return
+
+    def _handle_add_to_opponent_life_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Move a selected opponent character into its owner's life."""
+        target_info = self._get_target_info("add_to_opponent_life", data, selected)
+        if not target_info:
+            return
+        opponent = self.player2 if player == self.player1 else self.player1
+        for card in opponent.cards_in_play[:]:
+            if card.id == target_info["id"]:
+                opponent.cards_in_play.remove(card)
+                opponent.life_cards.append(card)
+                self._log(f"{card.name} was added to opponent's Life")
+                return
+
+    def _handle_replace_field_card_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Trash a chosen field card to make room, then play the queued card."""
+        target_idx = self._parse_selected_index("replace_field_card", selected)
+        if target_idx is None:
+            return
+        if not (0 <= target_idx < len(player.cards_in_play)):
+            self._log_invalid_selection("replace_field_card", selected, f"index {target_idx} out of range for field size {len(player.cards_in_play)}")
+            return
+        removed = player.cards_in_play.pop(target_idx)
+        player.trash.append(removed)
+        self._log(f"{removed.name} was trashed to make room")
+
+        card_to_play_id = data.get("card_to_play_id")
+        card_to_play = next((card for card in player.hand if card.id == card_to_play_id), None)
+        if card_to_play:
+            self.play_card(card_to_play)
+        else:
+            self._log(f"Card {card_to_play_id} no longer in hand")
+
+    def _handle_perona_cannot_rest_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Mark up to two selected opponent characters as unable to be rested."""
+        opponent = self.player2 if player == self.player1 else self.player1
+        for target_info in self._get_target_infos("perona_cannot_rest", data, selected[:2]):
+            for card in opponent.cards_in_play:
+                if card.id == target_info["id"]:
+                    card.cannot_be_rested = True
+                    self._log(f"{card.name} cannot be rested")
+                    break
+
+    def _handle_play_from_hand_or_trash_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Play a selected card from hand, or fall back to trash."""
+        target_info = self._get_target_info("play_from_hand_or_trash", data, selected)
+        if not target_info:
+            return
+        for card in player.hand[:]:
+            if card.id == target_info["id"]:
+                player.hand.remove(card)
+                player.cards_in_play.append(card)
+                self._log(f"{card.name} was played from hand")
+                return
+        for card in list(player.trash):
+            if card.id == target_info["id"]:
+                player.trash.remove(card)
+                player.cards_in_play.append(card)
+                self._log(f"{card.name} was played from trash")
+                return
+
+    def _handle_give_rush_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Grant Rush to a selected friendly character."""
+        target_info = self._get_target_info("give_rush", data, selected)
+        if not target_info:
+            return
+        for card in player.cards_in_play:
+            if card.id == target_info["id"]:
+                card.has_rush = True
+                self._log(f"{card.name} gains Rush")
+                return
+
+    def _handle_set_active_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Set a selected friendly character active."""
+        target_info = self._get_target_info("set_active", data, selected)
+        if not target_info:
+            return
+        for card in player.cards_in_play:
+            if card.id == target_info["id"]:
+                card.is_resting = False
+                card.has_attacked = False
+                self._log(f"{card.name} was set active")
+                return
+
+    def _handle_rest_instead_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Rest a selected friendly character instead of another one."""
+        target_info = self._get_target_info("rest_instead", data, selected)
+        if not target_info:
+            return
+        for card in player.cards_in_play:
+            if card.id == target_info["id"]:
+                card.is_resting = True
+                self._log(f"{card.name} was rested instead")
+                return
+
+    def _handle_rest_target_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Rest a selected target on either side of the field."""
+        target_info = self._get_target_info("rest_target", data, selected)
+        if not target_info:
+            return
+        target = self._target_card_from_info(player, target_info)
+        if target:
+            target.is_resting = True
+            self._log(f"{target.name} was rested")
+
+    def _handle_add_to_hand_from_trash_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Add one selected card from trash back to hand."""
+        target_info = self._get_target_info("add_to_hand_from_trash", data, selected)
+        if not target_info:
+            return
+        for card in list(player.trash):
+            if card.id == target_info["id"]:
+                player.trash.remove(card)
+                player.hand.append(card)
+                self._log(f"{card.name} was added to hand from trash")
+                return
+
+    def _handle_negate_effects_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
+        """Negate a selected opponent character's effects for the turn."""
+        target_info = self._get_target_info("negate_effects", data, selected)
+        if not target_info:
+            return
+        opponent = self.player2 if player == self.player1 else self.player1
+        for card in opponent.cards_in_play:
+            if card.id == target_info["id"]:
+                card.effects_negated_this_turn = True
+                self._log(f"{card.name}'s effects were negated")
+                return
+
+    def resolve_pending_choice(self, selected: List[str]) -> bool:
+        """
+        Resolve a pending choice with the player's selection.
+
+        Args:
+            selected: List of selected option IDs
+
+        Returns:
+            True if the choice was resolved successfully
+        """
+        if not self.pending_choice:
+            return False
+
+        choice = self.pending_choice
+        data = choice.callback_data
+        player = self._resolve_choice_player(data)
+
+        try:
+            if choice.callback is not None:
+                choice.callback(selected)
+            else:
+                resolved = self._dispatch_pending_choice_action(
+                    choice.callback_action,
+                    selected,
+                    player,
+                    data,
+                )
+                if not resolved:
+                    return False
+
+            self._finalize_pending_choice_resolution(choice)
+            return True
+        except Exception:
+            logger.exception(
+                "Error resolving pending choice action=%s source=%s selected=%s",
+                choice.callback_action,
+                choice.source_card_id,
+                selected,
+            )
+            self.pending_choice = None
+            if self._pending_choice_strict_mode():
+                raise
             return False

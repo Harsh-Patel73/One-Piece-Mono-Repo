@@ -145,11 +145,30 @@ def st22_015_i_am_whitebeard(game_state, player, card):
                                                 prompt="Choose an Edward.Newgate to play from hand")
         # Step 2: Even without Newgate, offer life choice
         if player.life_cards:
+            def callback(selected: list[str]) -> None:
+                selected_mode = selected[0] if selected else None
+                if selected_mode == "top_life" and player.life_cards:
+                    life_card = player.life_cards.pop(0)
+                    player.hand.append(life_card)
+                    game_state._log(f"{player.name} added top life card to hand")
+                    if player.leader:
+                        player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 2000
+                        game_state._log(f"{player.leader.name} gains +2000 power until end of opponent's next turn")
+                elif selected_mode == "bottom_life" and player.life_cards:
+                    life_card = player.life_cards.pop()
+                    player.hand.append(life_card)
+                    game_state._log(f"{player.name} added bottom life card to hand")
+                    if player.leader:
+                        player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 2000
+                        game_state._log(f"{player.leader.name} gains +2000 power until end of opponent's next turn")
+                elif selected_mode == "skip":
+                    game_state._log(f"{player.name} chose not to add a life card to hand")
+
             return create_mode_choice(game_state, player, [
                 {"id": "top_life", "label": "Take Top Life", "description": "Add top life card to hand, Leader gains +2000"},
                 {"id": "bottom_life", "label": "Take Bottom Life", "description": "Add bottom life card to hand, Leader gains +2000"},
                 {"id": "skip", "label": "Don't Take Life", "description": "Skip the life effect"}
-            ], source_card=card, prompt="Add a Life card to hand? (Leader gains +2000 if you do)")
+            ], source_card=card, callback=callback, prompt="Add a Life card to hand? (Leader gains +2000 if you do)")
     return False
 
 

@@ -8,7 +8,7 @@ from ..hardcoded import (
     add_don_from_deck, create_bottom_deck_choice, create_hand_discard_choice, create_ko_choice,
     create_mode_choice, create_rest_choice, create_return_to_hand_choice, create_set_active_choice,
     create_target_choice, add_power_modifier, check_life_count, check_leader_type,
-    draw_cards, get_opponent, register_effect,
+    draw_cards, filter_by_max_cost, get_opponent, register_effect,
     search_top_cards, trash_from_hand,
 )
 
@@ -84,7 +84,7 @@ def op05_086_vivi(game_state, player, card):
 @register_effect("OP05-096", "MAIN", "Choose: KO cost 1 OR return cost 1 to hand OR place cost 1 at bottom of deck")
 def op05_096_500_million(game_state, player, card):
     opponent = get_opponent(game_state, player)
-    targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 1]
+    targets = filter_by_max_cost(opponent.cards_in_play, 1)
     if targets:
         # Player chooses how to remove the target
         modes = [
@@ -92,7 +92,22 @@ def op05_096_500_million(game_state, player, card):
             {"id": "return", "label": "Return to Hand", "description": "Return opponent's cost 1 or less Character to hand"},
             {"id": "bottom", "label": "Place at Bottom", "description": "Place opponent's cost 1 or less Character at bottom of deck"}
         ]
-        return create_mode_choice(game_state, player, modes, source_card=card,
+        def callback(selected: list[str]) -> None:
+            selected_mode = selected[0] if selected else None
+            mode_targets = filter_by_max_cost(get_opponent(game_state, player).cards_in_play, 1)
+            if not mode_targets:
+                return
+            if selected_mode == "ko":
+                create_ko_choice(game_state, player, mode_targets, source_card=card,
+                                 prompt="Choose opponent's cost 1 or less Character to K.O.")
+            elif selected_mode == "return":
+                create_return_to_hand_choice(game_state, player, mode_targets, source_card=card,
+                                             prompt="Choose opponent's cost 1 or less Character to return to hand")
+            elif selected_mode == "bottom":
+                create_bottom_deck_choice(game_state, player, mode_targets, source_card=card,
+                                          prompt="Choose opponent's cost 1 or less Character to place at bottom of deck")
+
+        return create_mode_choice(game_state, player, modes, source_card=card, callback=callback,
                                    prompt="Choose: KO, Return to hand, OR Place at bottom of deck")
     return True
 
