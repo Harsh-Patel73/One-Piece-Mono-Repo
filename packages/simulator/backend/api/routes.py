@@ -23,6 +23,62 @@ except Exception as e:
     print(f"[ERROR] Failed to load card database: {e}")
 
 
+STATUS_LABELS = (
+    "✅ Verified",
+    "⚠ Needs Fix",
+    "🔲 To Do",
+    "❌ Missing",
+    "⬜ No Effect",
+    "⬜ Keywords",
+    "âœ… Verified",
+    "âš  Needs Fix",
+    "ðŸ”² To Do",
+    "âŒ Missing",
+    "â¬œ No Effect",
+    "â¬œ Keywords",
+)
+
+
+def _looks_like_status(value: str) -> bool:
+    return any(label in (value or "") for label in STATUS_LABELS)
+
+
+def _parse_status_line(parts: list[str]) -> dict:
+    info = {"status": "🔲 To Do", "notes": ""}
+
+    if len(parts) >= 7 and _looks_like_status(parts[4]):
+        info["status"] = parts[4]
+        info["notes"] = parts[6] if len(parts) > 6 else ""
+        return info
+
+    if len(parts) >= 5 and _looks_like_status(parts[2]):
+        info["status"] = parts[2]
+        info["notes"] = parts[4] if len(parts) > 4 else ""
+        return info
+
+    for idx, cell in enumerate(parts[2:], start=2):
+        if _looks_like_status(cell):
+            info["status"] = cell
+            if idx + 2 < len(parts):
+                info["notes"] = parts[idx + 2]
+            elif idx + 1 < len(parts):
+                info["notes"] = parts[idx + 1]
+            return info
+
+    return info
+
+
+def _build_status_row(card_id: str, status: str, card_type: str, note: str, card_obj) -> str:
+    card_name = getattr(card_obj, "name", "") if card_obj else ""
+    effect_text = ""
+    if card_obj:
+        effect_text = (getattr(card_obj, "effect", "") or getattr(card_obj, "trigger", "") or "")
+    effect_summary = " ".join(effect_text.replace("<br>", " ").split())[:70]
+    if len(effect_text) > 70:
+        effect_summary += "…"
+    return f"| {card_id} | {card_name} | {card_type} | {status} | {effect_summary} | {note} |"
+
+
 class CreateRoomRequest(BaseModel):
     player_name: str
     deck_id: Optional[str] = None
@@ -198,11 +254,7 @@ async def effect_test_queue(set_code: str = "OP01"):
             card_id_cell = parts[1]
             if not re.match(r"[A-Z0-9]+-\d+", card_id_cell):
                 continue
-            statuses[card_id_cell] = {
-                "status": parts[2],
-                "name": parts[3],
-                "notes": parts[4] if len(parts) > 4 else "",
-            }
+            statuses[card_id_cell] = _parse_status_line(parts)
 
     # Pull cards for the set from the database (search by set prefix)
     prefix = set_code.lower() + "-"
@@ -271,10 +323,24 @@ async def submit_verdict(data: dict):
             continue
         parts = [p.strip() for p in line.split("|")]
         if len(parts) >= 3 and parts[1] == card_id:
-            parts[2] = new_status
-            if note and len(parts) >= 5:
-                parts[4] = note
-            lines[i] = "| " + " | ".join(parts[1:-1]) + " |"
+            cells = parts[1:-1]
+            if len(cells) >= 6 and _looks_like_status(cells[3]):
+                cells[3] = new_status
+                if note:
+                    cells[5] = note
+            elif len(cells) >= 4 and _looks_like_status(cells[1]):
+                cells[1] = new_status
+                if note:
+                    cells[3] = note
+            else:
+                for idx, cell in enumerate(cells):
+                    if _looks_like_status(cell):
+                        cells[idx] = new_status
+                        if note:
+                            note_idx = min(len(cells) - 1, idx + 2)
+                            cells[note_idx] = note
+                        break
+            lines[i] = "| " + " | ".join(cells) + " |"
             updated = True
             break
 
@@ -286,7 +352,7 @@ async def submit_verdict(data: dict):
         card_obj = CARD_DB.get(card_id)
         if card_obj:
             card_type = getattr(card_obj, "card_type", "") or ""
-        new_row = f"| {card_id} | {new_status} | {card_type} | {note} |"
+        new_row = _build_status_row(card_id, new_status, card_type, note, card_obj)
 
         # Find the right section to insert into
         section_header = f"# Card Effect Status — {set_prefix}"

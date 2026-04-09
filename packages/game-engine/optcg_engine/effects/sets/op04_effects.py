@@ -7,9 +7,43 @@ import random
 from ..hardcoded import (
     add_don_from_deck, create_bottom_deck_choice, create_cost_reduction_choice,
     create_hand_discard_choice, create_ko_choice, create_rest_choice, create_return_to_hand_choice,
-    create_target_choice, draw_cards, get_characters_by_cost, get_characters_by_type,
-    get_opponent, register_effect, search_top_cards, trash_from_hand,
+    create_mode_choice, create_play_from_trash_choice, create_power_effect_choice,
+    create_set_active_choice, create_target_choice, draw_cards, get_characters_by_cost,
+    get_characters_by_type, get_opponent, register_effect, search_top_cards, trash_from_hand,
 )
+
+
+def _own_leader_and_characters(player):
+    targets = list(player.cards_in_play)
+    if player.leader:
+        targets.insert(0, player.leader)
+    return targets
+
+
+def _opponent_leader_and_characters(game_state, player):
+    opponent = get_opponent(game_state, player)
+    targets = list(opponent.cards_in_play)
+    if opponent.leader:
+        targets.insert(0, opponent.leader)
+    return targets
+
+
+def _all_characters(game_state):
+    return list(game_state.player1.cards_in_play) + list(game_state.player2.cards_in_play)
+
+
+def _rested_don_cards(player):
+    return [d for d in getattr(player, 'don_pool', []) if hasattr(d, 'is_resting') and d.is_resting]
+
+
+def _return_active_don_to_deck(player):
+    for don in list(getattr(player, 'don_pool', [])):
+        if hasattr(don, 'is_resting') and not don.is_resting:
+            player.don_pool.remove(don)
+            if hasattr(player, 'don_deck'):
+                player.don_deck.append(don)
+            return True
+    return False
 
 
 # --- OP04-081: Cavendish ---

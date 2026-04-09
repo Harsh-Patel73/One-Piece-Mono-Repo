@@ -1,12 +1,16 @@
-import requests
 import json
+from pathlib import Path
+from urllib.request import Request, urlopen
 
 API_URL = "https://api.dotgg.gg/cgfw/getcards?game=onepiece&mode=indexed&cache=4021"
+SCRIPT_DIR = Path(__file__).resolve().parent
+GAME_ENGINE_CARDS = SCRIPT_DIR / "english_cards.json"
+SIMULATOR_CARDS = SCRIPT_DIR.parent.parent / "simulator" / "backend" / "data" / "cards.json"
 
 def fetch_card_data():
-    response = requests.get(API_URL)
-    response.raise_for_status()
-    return response.json()
+    request = Request(API_URL, headers={"User-Agent": "Mozilla/5.0"})
+    with urlopen(request, timeout=30) as response:
+        return json.load(response)
 
 def main():
     data = fetch_card_data()
@@ -34,10 +38,17 @@ def main():
 
             english_cards.append(card_dict)
 
-    with open("english_cards.json", "w", encoding="utf-8") as f:
-        json.dump(english_cards, f, ensure_ascii=False, indent=2)
+    GAME_ENGINE_CARDS.write_text(
+        json.dumps(english_cards, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    SIMULATOR_CARDS.write_text(
+        json.dumps(english_cards, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
-    print(f"Saved {len(english_cards)} English cards with image links to 'english_cards.json'.")
+    print(f"Saved {len(english_cards)} English cards to '{GAME_ENGINE_CARDS}'.")
+    print(f"Synchronized simulator cards to '{SIMULATOR_CARDS}'.")
 
 if __name__ == "__main__":
     main()

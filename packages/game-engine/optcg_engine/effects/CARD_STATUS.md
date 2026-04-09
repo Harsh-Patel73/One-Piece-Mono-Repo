@@ -1,4 +1,4 @@
-# Card Effect Status — OP01
+﻿# Card Effect Status — OP01
 
 ## Status Legend
 - `✅ Verified` — Implemented and confirmed correct in simulator
@@ -16,55 +16,55 @@
 | OP01-005 | ✅ Verified | CHARACTER | This card is aso close to being completed correctly. The options are great, and accurate but the card does not get added to hand when I select it. | [On Play] Add up to 1 red Character card other than [Uta] with a cost … | Impl exists: on_play |
 | OP01-006 | ✅ Verified | CHARACTER | When combat happens, after playing Otama to give Katakuri -2000 power, it is not reflecting the -2000 debuff. He is still at 6000 in combat. | [On Play] Give up to 1 of your opponent's Characters −2000 power durin… | Impl exists: on_play |
 | OP01-007 | ✅ Verified | CHARACTER | I cannot test, there is no way to KO my Caribou to see if it lets me KO an opponents character with 4000 power or less. | [On K.O.] K.O. up to 1 of your opponent's Characters with 4000 power o… | Impl exists: on_ko |
-| OP01-008 | ✅ Verified | CHARACTER | 🔲 To Do | [On Play] You may add 1 card from your Life area to your hand: This Ch… | Impl exists: on_play |
+| OP01-008 | ✅ Verified | CHARACTER | ⚠ Needs Fix | [On Play] You may add 1 card from your Life area to your hand: This Ch… | I should be prompted if I want to take 1 card from my life to my hand, if I choose to do so then this card should get rush.  |
 | OP01-009 | ✅ Verified | CHARACTER | The trigger activates correctly, but when I attack the opponents life THEY should be getting the trigger. So, Opponent would play out the carrot in this testing. (I know it should not be allowed regularly since the color does not match the leader) | [Trigger] Play this card. | Impl exists: trigger |
-| OP01-010 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
+| OP01-010 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
 | OP01-011 | ✅ Verified | CHARACTER | Player should be prompted for which card they walk to place at bottom of deck. | [On Play] You may place 1 card from your hand at the bottom of your de… | Impl exists: on_play |
-| OP01-012 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
-| OP01-013 | ✅ Verified | CHARACTER | 🔲 To Do | [Activate: Main] [Once Per Turn] You may add 1 card from your Life are… | Impl exists: activate |
+| OP01-012 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
+| OP01-013 | ✅ Verified | CHARACTER | ✅ Verified | [Activate: Main] [Once Per Turn] You may add 1 card from your Life are… | Impl exists: activate |
 | OP01-014 | ✅ Verified | CHARACTER | Effect works as intended. A change to remember for the remainder of the project though is that when a character blocks it should become rested. It will refresh when we enter refresh phase (Start of turn) UNLESS there is an effect preventing it from restanding to active. | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_block |
 | OP01-015 | ✅ Verified | CHARACTER | Only seeing Error: Invalid choice response in Game Log, I am at least being prompted which is good, but not the correct effect at the end. The card I choose to trash is not being trashed and the card I am taking from trash to hand is not working either. | [DON!! x1] [When Attacking] You may trash 1 card from your hand: Add u… | Impl exists: on_attack |
 | OP01-016 | ✅ Verified | CHARACTER | Still cannot choose the order that I want to send the cards to the bottom of the deck in. | [On Play] Look at 5 cards from the top of your deck; reveal up to 1 {S… | Impl exists: on_play |
 | OP01-017 | ✅ Verified | CHARACTER | For testing this card needs to be in play already and opponent should have a 3000 power character. | [DON!! x1] [When Attacking] K.O. up to 1 of your opponent's Characters… | Impl exists: on_attack |
-| OP01-018 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
+| OP01-018 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
 | OP01-019 | ✅ Verified | CHARACTER | The card effect is working as intended, somehow your dumbass has not figured out that DON should only give extra power when it is that card's owner's turn. When they pass the buff from Don cards goes away. | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, continuous |
-| OP01-020 | ✅ Verified | CHARACTER | 🔲 To Do | [Activate: Main] You may rest this Character: Up to 1 of your Leader o… | Impl exists: activate |
+| OP01-020 | ✅ Verified | CHARACTER | ✅ Verified | [Activate: Main] You may rest this Character: Up to 1 of your Leader o… | Impl exists: activate |
 | OP01-021 | ✅ Verified | CHARACTER | This card should be able to attack ACTIVE characters when he has a Don on him, however this is not the case. Only the leader is an option to attack. | [DON!! x1] This Character can also attack your opponent's active Chara… | Impl exists: continuous |
 | OP01-022 | ✅ Verified | CHARACTER | The player should be prompted and allowed to select who to give -2000 to. But other than that it works. | [DON!! x1] [When Attacking] Give up to 2 of your opponent's Characters… | Impl exists: on_attack |
-| OP01-023 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
+| OP01-023 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
 | OP01-024 | ✅ Verified | CHARACTER | This card can still be KOd in battle by Strike Attribute Characters. | [DON!! x2] This Character cannot be K.O.'d in battle by ＜Strike＞ attri… | Impl exists: continuous, activate |
-| OP01-025 | ✅ Verified | CHARACTER | 🔲 To Do | [Rush] (This card can attack on the turn in which it is played.) | Impl exists: continuous |
+| OP01-025 | ✅ Verified | CHARACTER | ✅ Verified | [Rush] (This card can attack on the turn in which it is played.) | Impl exists: continuous |
 | OP01-026 | ✅ Verified | EVENT | The coutner part of this card worked correctly. There was no prompt given to KO the character with 4000 power or less though. | [Counter] Up to 1 of your Leader or Character cards gains +4000 power … | Impl exists: counter |
-| OP01-027 | ✅ Verified | EVENT | 🔲 To Do | [Main] Give up to 1 of your opponent's Characters −10000 power during … | Impl exists: on_play |
+| OP01-027 | ✅ Verified | EVENT | ✅ Verified | [Main] Give up to 1 of your opponent's Characters −10000 power during … | Impl exists: on_play |
 | OP01-028 | ✅ Verified | EVENT | === Turn 2: Opponent (DON: 5) === Opponent's Atlas (Power: 6000) attacks Monkey.D.Luffy! [COUNTER EVENT] Tester plays Green Star Rafflesia (Cost 1 DON, +0) Atlas gets -2000 power Karoo added to hand. This is the game log, I should not be taking damage in this interaction, I gave the Atlas -2000 power. | [Counter] Give up to 1 of your opponent's Leader or Character cards −2… | Impl exists: counter |
 | OP01-029 | ✅ Verified | EVENT | Why is this being buffed to 11000? It should not give +2000 then +4000 it should be +2000 then another +2000 when the player has 2 or less life. | [Counter] Up to 1 of your Leader or Character cards gains +2000 power … | Impl exists: counter |
 | OP01-030 | ✅ Verified | EVENT | For some reason it only shows the top 4 cards not 5. But that part does work fine. | [Main] Look at 5 cards from the top of your deck; reveal up to 1 {Stra… | Impl exists: on_play |
 | OP01-031 | ✅ Verified | LEADER | Leader works, but again the player should have the option to select which card they want to trash. | [Activate: Main] [Once Per Turn] You can trash 1 {Land of Wano} type c… | Impl exists: activate |
 | OP01-032 | ✅ Verified | CHARACTER | The +2000 power should be IMMEDIATE when there is a 2nd rested character. The issue I am seeing is that when a 5000 power character attacks Ashura Doji he is not getting the +2000 to help him defend. | [DON!! x1] If your opponent has 2 or more rested Characters, this Char… | Impl exists: continuous |
-| OP01-033 | ✅ Verified | CHARACTER | 🔲 To Do | [On Play] Rest up to 1 of your opponent's Characters with a cost of 4 … | Impl exists: on_play |
-| OP01-034 | ✅ Verified | CHARACTER | 🔲 To Do | [DON!! x2] [When Attacking] Set up to 1 of your DON!! cards as active. | Impl exists: on_attack |
-| OP01-035 | ✅ Verified | CHARACTER | 🔲 To Do | [DON!! x1] [When Attacking] [Once Per Turn] Rest up to 1 of your oppon… | Impl exists: on_attack |
-| OP01-036 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
-| OP01-037 | ✅ Verified | CHARACTER | 🔲 To Do |  | Impl exists: trigger |
+| OP01-033 | ✅ Verified | CHARACTER | ✅ Verified | [On Play] Rest up to 1 of your opponent's Characters with a cost of 4 … | Impl exists: on_play |
+| OP01-034 | ✅ Verified | CHARACTER | ✅ Verified | [DON!! x2] [When Attacking] Set up to 1 of your DON!! cards as active. | Impl exists: on_attack |
+| OP01-035 | ✅ Verified | CHARACTER | ✅ Verified | [DON!! x1] [When Attacking] [Once Per Turn] Rest up to 1 of your oppon… | Impl exists: on_attack |
+| OP01-036 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
+| OP01-037 | ✅ Verified | CHARACTER | ✅ Verified |  | Impl exists: trigger |
 | OP01-038 | ✅ Verified | CHARACTER | The effect works as intended, 1 slight problem. The opponent should not see the hand, they should have to choose the card to trash without knowing what it is. | [DON!! x1] [When Attacking] K.O. up to 1 of your opponent's rested Cha… | Impl exists: on_attack, on_ko |
 | OP01-039 | ✅ Verified | CHARACTER | On Block there is no additional draw even though there are 3 or more characters on field. Also keep in mind IMMEDIATELY when the block is done is when that effect should take place. | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_block |
-| OP01-040 | ✅ Verified | CHARACTER | 🔲 To Do | [On Play] If your Leader is [Kouzuki Oden], play up to 1 {The Akazaya … | Impl exists: on_play, on_attack |
+| OP01-040 | ✅ Verified | CHARACTER | ✅ Verified | [On Play] If your Leader is [Kouzuki Oden], play up to 1 {The Akazaya … | Impl exists: on_play, on_attack |
 | OP01-041 | ✅ Verified | CHARACTER | For this testing make it so that the search has Land of Wano type cards in it. | [Activate: Main] ➀ (You may rest the specified number of DON!! cards i… | Impl exists: activate |
 | OP01-042 | ✅ Verified | CHARACTER | Card effect is working, but the player should be prompted to choose a character to restand (set as active again). | [On Play] ③ (You may rest the specified number of DON!! cards in your … | Impl exists: on_play |
-| OP01-043 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
-| OP01-044 | ✅ Verified | CHARACTER | 🔲 To Do | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_play |
-| OP01-045 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
+| OP01-043 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
+| OP01-044 | ✅ Verified | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_play |
+| OP01-045 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
 | OP01-046 | ✅ Verified | CHARACTER | Effect did not work at all. | [DON!! x1] [When Attacking] If your Leader is [Kouzuki Oden], set up t… | Impl exists: on_attack |
 | OP01-047 | ✅ Verified | CHARACTER | It is letting me pick up a character but it wont let me do the 2nd part where I get to play a 3 cost or less from hand. Also when I pick up the card to hand it is not coming to hand it jsut disappears. | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_play |
-| OP01-048 | ✅ Verified | CHARACTER | 🔲 To Do | [On Play] Rest up to 1 of your opponent's Characters with a cost of 3 … | Impl exists: on_play |
-| OP01-049 | ✅ Verified | CHARACTER | 🔲 To Do | [DON!! x1] [When Attacking] Play up to 1 {Heart Pirates} type Characte… | Impl exists: on_attack |
-| OP01-050 | ✅ Verified | CHARACTER | 🔲 To Do | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_play |
+| OP01-048 | ✅ Verified | CHARACTER | ✅ Verified | [On Play] Rest up to 1 of your opponent's Characters with a cost of 3 … | Impl exists: on_play |
+| OP01-049 | ✅ Verified | CHARACTER | ✅ Verified | [DON!! x1] [When Attacking] Play up to 1 {Heart Pirates} type Characte… | Impl exists: on_attack |
+| OP01-050 | ✅ Verified | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_play |
 | OP01-051 | ✅ Verified | CHARACTER | When this character has a DON attached to it, the enemy can ONLY attack this card but it still let's me choose other targets. | [DON!! x1] [Opponent's Turn] If this Character is rested, your opponen… | Impl exists: continuous, activate |
-| OP01-052 | ✅ Verified | CHARACTER | 🔲 To Do | [When Attacking] [Once Per Turn] If you have 2 or more rested Characte… | Impl exists: on_attack |
-| OP01-053 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
-| OP01-054 | ✅ Verified | CHARACTER | 🔲 To Do | [On Play] K.O. up to 1 of your opponent's rested Characters with a cos… | Impl exists: on_play |
+| OP01-052 | ✅ Verified | CHARACTER | ✅ Verified | [When Attacking] [Once Per Turn] If you have 2 or more rested Characte… | Impl exists: on_attack |
+| OP01-053 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
+| OP01-054 | ✅ Verified | CHARACTER | ✅ Verified | [On Play] K.O. up to 1 of your opponent's rested Characters with a cos… | Impl exists: on_play |
 | OP01-055 | ✅ Verified | EVENT | No effect at all | [Main] You may rest 2 of your Characters: Draw 2 cards. | Impl exists: on_play |
-| OP01-056 | ✅ Verified | EVENT | 🔲 To Do | [Main] K.O. up to 2 of your opponent's rested Characters with a cost o… | Impl exists: on_play |
+| OP01-056 | ✅ Verified | EVENT | ✅ Verified | [Main] K.O. up to 2 of your opponent's rested Characters with a cost o… | Impl exists: on_play |
 | OP01-057 | ✅ Verified | EVENT | At least in this instance the counter effect is being counted twice: Opponent's Charlotte Cracker (Power: 5000) attacks Sanji! [COUNTER EVENT] Tester plays Paradise Waterfall (Cost 1 DON, +2000) Paradise Waterfall: Sanji gains +2000 power Sanji was set active Charlotte Cracker's attack is defended (Defense: 8000). This should not be the case now and I hope this is not an issue with the other events. Please let me know if it is an issue across multiple effects or jsut with this card. | [Counter] Up to 1 of your Leader or Character cards gains +2000 power … | Impl exists: counter |
 | OP01-058 | ✅ Verified | EVENT | Player is not prompted to rest a 4 cost or less when using this counter. But the +4000 is working as expected. | [Counter] Up to 1 of your Leader or Character cards gains +4000 power … | Impl exists: counter |
 | OP01-059 | ✅ Verified | EVENT | Put Land of Wano characters in this board so I can test this card. | [Main] You may trash 1 {Land of Wano} type card from your hand: Set up… | Impl exists: on_play |
@@ -73,63 +73,63 @@
 | OP01-062 | ✅ Verified | LEADER | Even on the opponents turn if I use a counter event, I should still draw 1 card if I have less than 4 in hand. | [DON!! x1] When you activate an Event, you may draw 1 card if you have… | Impl exists: on_event |
 | OP01-063 | ✅ Verified | CHARACTER | The game log says: "=== Turn 1: Tester (DON: 1) === Both players ready. Game starting! Tester attaches 1 DON to Arlong. Arlong: Opponent reveals Thunder Bolt (EVENT) Arlong: Placed 1 of Tester's Life at bottom of deck" but the life is not actually being placed to the bottom of the deck, the opponent still has 4 life. | [DON!! x1] [Activate: Main] You may rest this Character: Choose 1 card… | Impl exists: activate |
 | OP01-064 | ✅ Verified | CHARACTER | Effect does nothing at all | [DON!! x1] [When Attacking] You may trash 1 card from your hand: Retur… | Impl exists: on_attack |
-| OP01-065 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
-| OP01-066 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
+| OP01-065 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
+| OP01-066 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
 | OP01-067 | ✅ Verified | CHARACTER | Fixed: cost=0 DON spending loop bug was already fixed but server needed restart (uvicorn --reload only watches backend dir, not game-engine package). | [Banish] (When this card deals damage, the target card is trashed with… | Impl exists: continuous |
 | OP01-068 | ✅ Verified | CHARACTER | This card is still dealing double attack even with less than 5 cards in hand. | [Your Turn] This Character gains [Double Attack] if you have 5 or more… | Impl exists: continuous |
 | OP01-069 | ✅ Verified | CHARACTER | On KO effect is not doing anything | [On K.O.] Play up to 1 [Smiley] from your deck, then shuffle your deck… | Impl exists: on_ko |
-| OP01-070 | ✅ Verified | CHARACTER | 🔲 To Do | [On Play] Place up to 1 Character with a cost of 7 or less at the bott… | Impl exists: on_play |
-| OP01-071 | ✅ Verified | CHARACTER | 🔲 To Do | [On Play] Place up to 1 Character with a cost of 3 or less at the bott… | Impl exists: on_play |
+| OP01-070 | ✅ Verified | CHARACTER | ✅ Verified | [On Play] Place up to 1 Character with a cost of 7 or less at the bott… | Impl exists: on_play |
+| OP01-071 | ✅ Verified | CHARACTER | ✅ Verified | [On Play] Place up to 1 Character with a cost of 3 or less at the bott… | Impl exists: on_play |
 | OP01-072 | ✅ Verified | CHARACTER | Effect for the card works great, problem is with core game engine. Don only gives the card power on Your Turn, when the player passes power from Don goes away. i.e, Smiley has 1000 power, on his turn if DON is attached he gets power from the don. When turn is passed that DON no longer gives power. | [DON!! x1] [Your Turn] This Character gains +1000 power for every card… | Impl exists: continuous |
 | OP01-073 | ✅ Verified | CHARACTER | I can now choose the top or bottom but I cannot choose the order that I want to rearrange them to. | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_play |
 | OP01-074 | ✅ Verified | CHARACTER | The on KO is working, but this card is not being detected as a blocker. | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_ko |
 | OP01-075 | ✅ Verified | CHARACTER | This blocker is not being detected as a blocker. | Under the rules of this game, you may have any number of this card in … | Impl exists: blocker |
-| OP01-076 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
+| OP01-076 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
 | OP01-077 | ✅ Verified | CHARACTER | I can now choose the top or bottom of the deck but I cannot choose the order to rearrange them to now. | [On Play] Look at 5 cards from the top of your deck and place them at … | Impl exists: on_play |
 | OP01-078 | ✅ Verified | CHARACTER | Two problems I am noticing so far. 1: WHen I attack while having DON attached I should draw 1 card but it is drawing 2. 2: This card is not being detected as a blocker. | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: on_play |
 | OP01-079 | ✅ Verified | CHARACTER | 1. We need to ensure that there is an event card in trash so I can test that effect.  Also, when I block this card has the wrong effect, it is making me trash 2 cards for some reason. | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_block |
-| OP01-080 | ✅ Verified | CHARACTER | 🔲 To Do | [On K.O.] Draw 1 card. | Impl exists: on_ko |
-| OP01-081 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
-| OP01-082 | ✅ Verified | CHARACTER | 🔲 To Do |  | Impl exists: trigger |
+| OP01-080 | ✅ Verified | CHARACTER | ✅ Verified | [On K.O.] Draw 1 card. | Impl exists: on_ko |
+| OP01-081 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
+| OP01-082 | ✅ Verified | CHARACTER | ✅ Verified |  | Impl exists: trigger |
 | OP01-083 | ✅ Verified | CHARACTER | Make it so that only events are in trash so I can test this card. | [DON!! x1] [Your Turn] If your Leader has the {Baroque Works} type, th… | Impl exists: continuous |
 | OP01-084 | ✅ Verified | CHARACTER | Ensure that there is a Baroque Works type event in the top 5 so I can test this card correctly. | [DON!! x1] [When Attacking] Look at 5 cards from the top of your deck;… | Impl exists: on_attack |
 | OP01-085 | ✅ Verified | CHARACTER | I am choosing the character that cannot attack, but it is still allowing that character to attack when I pass the turn. | [On Play] If your Leader has the {Baroque Works} type, select up to 1 … | Impl exists: on_play |
 | OP01-086 | ✅ Verified | EVENT | This effect works almost as intended. It let's me return an OPPONENTS cost of 3 or less to hand if it is active  - this is correct. I should also be given the option to return one of my OWN characters that are active with 3 cost or less as well. | [Counter] Up to 1 of your Leader or Character cards gains +4000 power … | Impl exists: counter |
-| OP01-087 | ✅ Verified | EVENT | 🔲 To Do | [Counter] Play up to 1 {Baroque Works} type Character card with a cost… | Impl exists: counter |
+| OP01-087 | ✅ Verified | EVENT | ✅ Verified | [Counter] Play up to 1 {Baroque Works} type Character card with a cost… | Impl exists: counter |
 | OP01-088 | ✅ Verified | EVENT | I can now choose the top or bottom but I cannot choose the order that I want to rearrange them to. | [Counter] Up to 1 of your Leader or Character cards gains +2000 power … | Impl exists: counter |
-| OP01-089 | ✅ Verified | EVENT | 🔲 To Do | [Counter] If your Leader has the {The Seven Warlords of the Sea} type,… | Impl exists: counter |
-| OP01-090 | ✅ Verified | EVENT | 🔲 To Do | [Main] Look at 5 cards from the top of your deck; reveal up to 1 {Baro… | Impl exists: on_play |
-| OP01-091 | ✅ Verified | LEADER | 🔲 To Do | [Your Turn] If you have 10 DON!! cards on your field, give all of your… | Impl exists: continuous |
-| OP01-092 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
+| OP01-089 | ✅ Verified | EVENT | ✅ Verified | [Counter] If your Leader has the {The Seven Warlords of the Sea} type,… | Impl exists: counter |
+| OP01-090 | ✅ Verified | EVENT | ✅ Verified | [Main] Look at 5 cards from the top of your deck; reveal up to 1 {Baro… | Impl exists: on_play |
+| OP01-091 | ✅ Verified | LEADER | ✅ Verified | [Your Turn] If you have 10 DON!! cards on your field, give all of your… | Impl exists: continuous |
+| OP01-092 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
 | OP01-093 | ✅ Verified | CHARACTER | This card automatically chooses to rest 1 more DON for the on play effect, I should be prompted if I want to do this. If I do I should gain 1 DON card rested. I am not gaining the extra don. | [On Play] ① (You may rest the specified number of DON!! cards in your … | Impl exists: on_play |
 | OP01-094 | ✅ Verified | CHARACTER | Effect seems to be working, but cannot tell for sure, for testing the leader needs to be an Animal Kingdom Pirates type. | [On Play] DON!! −6 (You may return the specified number of DON!! cards… | Impl exists: on_play |
-| OP01-095 | ✅ Verified | CHARACTER | 🔲 To Do | [On Play] Draw 1 card if you have 8 or more DON!! cards on your field. | Impl exists: on_play |
+| OP01-095 | ✅ Verified | CHARACTER | ✅ Verified | [On Play] Draw 1 card if you have 8 or more DON!! cards on your field. | Impl exists: on_play |
 | OP01-096 | ✅ Verified | CHARACTER | I am not being given the option to choose which don I want to return so it is automatically returning the active don. | [On Play] DON!! −2 (You may return the specified number of DON!! cards… | Impl exists: on_play |
-| OP01-097 | ✅ Verified | CHARACTER | 🔲 To Do | [On Play] DON!! −1 (You may return the specified number of DON!! cards… | Impl exists: on_play |
+| OP01-097 | ✅ Verified | CHARACTER | ✅ Verified | [On Play] DON!! −1 (You may return the specified number of DON!! cards… | Impl exists: on_play |
 | OP01-098 | ✅ Verified | CHARACTER | Fixed: was searching deck by card name instead of card_origin (Type field) for SMILE. Changed to check card_origin for 'smile'. | [On Play] Reveal up to 1 [Artificial Devil Fruit SMILE] from your deck… | Impl exists: on_play |
 | OP01-099 | ✅ Verified | CHARACTER | Kurozumi Clan characters other than Kurozumi Semimaru can still get KOd in battle. This should not be the case with Kurozumi Semimaru is in play. | {Kurozumi Clan} type Characters other than your [Kurozumi Semimaru] ca… | Impl exists: on_play |
-| OP01-100 | ✅ Verified | CHARACTER | 🔲 To Do | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: on_attack |
+| OP01-100 | ✅ Verified | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: on_attack |
 | OP01-101 | ✅ Verified | CHARACTER | The card is letting me trash 1 from hand but I am not gaining the 1 DON!! card from the DON!! deck rested. | [DON!! x1] [When Attacking] You may trash 1 card from your hand: Add u… | Impl exists: on_attack |
 | OP01-102 | ✅ Verified | CHARACTER | When I attack I am not prompted to DON!! -1 if I want to. So I do not know if the opponent is prompted to trash 1 card from their hand. | [When Attacking] DON!! −1 (You may return the specified number of DON!… | Impl exists: on_play |
-| OP01-103 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
+| OP01-103 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
 | OP01-104 | ✅ Verified | CHARACTER | The card is a trigger and it is prompting me to use trigger, but when I select to play the card and activate the trigger it is not playing onto the field. |  | Impl exists: blocker |
 | OP01-105 | ✅ Verified | CHARACTER | This card is revealing MY own hand when it should reveal the opponents. | [On Play] Choose 2 cards from your opponent's hand; your opponent reve… | Impl exists: on_play |
 | OP01-106 | ✅ Verified | CHARACTER | When I play the card I am not gaining 1 DON!! card from the DON!! deck. | [On Play] Add up to 1 DON!! card from your DON!! deck and rest it. | Impl exists: on_play |
-| OP01-107 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
-| OP01-108 | ✅ Verified | CHARACTER | 🔲 To Do | [On K.O.] DON!! −1 (You may return the specified number of DON!! cards… | Impl exists: on_ko |
-| OP01-109 | ✅ Verified | CHARACTER | 🔲 To Do | [DON!! x1] [Your Turn] If you have 8 or more DON!! cards on your field… | Impl exists: blocker, continuous |
-| OP01-110 | ✅ Verified | CHARACTER | ⬜ No Effect |  |  |
+| OP01-107 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
+| OP01-108 | ✅ Verified | CHARACTER | ✅ Verified | [On K.O.] DON!! −1 (You may return the specified number of DON!! cards… | Impl exists: on_ko |
+| OP01-109 | ✅ Verified | CHARACTER | ✅ Verified | [DON!! x1] [Your Turn] If you have 8 or more DON!! cards on your field… | Impl exists: blocker, continuous |
+| OP01-110 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
 | OP01-111 | ✅ Verified | CHARACTER | I should be prompted if I want to use the DON -1 effect, it works as intended but is automatic. | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_block |
-| OP01-112 | ✅ Verified | CHARACTER | 🔲 To Do | [Activate: Main] [Once Per Turn] DON!! −1 (You may return the specifie… | Impl exists: activate |
+| OP01-112 | ✅ Verified | CHARACTER | ✅ Verified | [Activate: Main] [Once Per Turn] DON!! −1 (You may return the specifie… | Impl exists: activate |
 | OP01-113 | ✅ Verified | CHARACTER | ON KO I am not adding the DON!! card. | [On K.O.] Add up to 1 DON!! card from your DON!! deck and rest it. | Impl exists: on_ko |
 | OP01-114 | ✅ Verified | CHARACTER | I am not prompted to DON!! -1 so the rest of the effect is not working either. | [On Play] DON!! −1 (You may return the specified number of DON!! cards… | Impl exists: continuous |
 | OP01-115 | ✅ Verified | EVENT | I am prompted to KO a 2 cost or less, this works correctly. But I should also be able to add 1 DON!! card as active. | [Main] K.O. up to 1 of your opponent's Characters with a cost of 2 or … | Impl exists: on_play |
 | OP01-116 | ✅ Verified | EVENT | Fixed: rewrote to use search_top_cards helper which always shows all top cards and handles deck ordering, even when no valid SMILE target exists. | [Main] Look at 5 cards from the top of your deck; play up to 1 {SMILE}… | Impl exists: on_play |
-| OP01-117 | ✅ Verified | EVENT | 🔲 To Do | [Main] DON!! −1 (You may return the specified number of DON!! cards fr… | Impl exists: on_play |
+| OP01-117 | ✅ Verified | EVENT | ✅ Verified | [Main] DON!! −1 (You may return the specified number of DON!! cards fr… | Impl exists: on_play |
 | OP01-118 | ✅ Verified | EVENT | Fixed: DON return callback used wrong keyword arg `power_change=2000` instead of positional `power_amount`. TypeError left game stuck in counter stage. | [Counter] DON!! −2 (You may return the specified number of DON!! cards… | Impl exists: counter |
-| OP01-119 | ✅ Verified | EVENT | 🔲 To Do | [Counter] Up to 1 of your Leader or Character cards gains +4000 power … | Impl exists: counter |
+| OP01-119 | ✅ Verified | EVENT | ⚠ Needs Fix | [Counter] Up to 1 of your Leader or Character cards gains +4000 power … | When I use the counter, the card should gain +4000 power as well. It seems that is not taking place when this card is used.  |
 | OP01-120 | ✅ Verified | CHARACTER | The game is still allowing blockers with a power of 2000 or less to be activated. | [Rush] (This card can attack on the turn in which it is played.) [When… | Impl exists: on_attack |
-| OP01-121 | ✅ Verified | CHARACTER | 🔲 To Do | Also treat this card's name as [Kouzuki Oden] according to the rules. … | Impl exists: continuous |
+| OP01-121 | ✅ Verified | CHARACTER | ✅ Verified | Also treat this card's name as [Kouzuki Oden] according to the rules. … | Impl exists: continuous |
 
 **Total:** 121 cards
 **Missing:** 0
@@ -170,7 +170,7 @@
 | OP02-022 | ✅ Verified | EVENT | on_play: look 5, reveal WB char; trigger |
 | OP02-023 | ✅ Verified | EVENT | Currently, this card is taking a life and adding it to hand. It should simply prevent the user from taking cards from life to hand by EFFECTS on their turn. So Newgate's leader effect would not let him take the life since you can no longer take life by effects when you have 3 life or less. |
 | OP02-024 | ✅ Verified | STAGE | This stage should give "Edward Newgate" and ALL Whitebeard Pirates type cards +2000 power if they have 1 life or less. |
-| OP02-025 | ⚠ Needs Fix | LEADER | Still getting "Error: Cannot activate effect" error.  |
+| OP02-025 | ⚠ Needs Fix | LEADER | If I have 1 or less characters on the field, then I should be able to reduce the cost of all my land of wano characters with a cost of 3 or less by 1 in my hand. Currently says "Error: Cannot activate effect" |
 | OP02-026 | ✅ Verified | LEADER | When a character with no base effect so no on play, no activate main, no when attacking, there should be NO description on the card.  When that card is played, I should be prompted to set UP TO 2 DON!! cards as active. |
 | OP02-027 | 🔲 To Do | CHARACTER | continuous: if all DON rested, immune to opp removal |
 | OP02-028 | ✅ Verified | CHARACTER |  |
@@ -258,15 +258,15 @@
 | OP02-110 | ✅ Verified | CHARACTER | Even though I chose a character to not let them be able to attack per Hina's effect it still allows them to attack. |
 | OP02-111 | ✅ Verified | CHARACTER | on_attack: if Jango in play, +3000 power |
 | OP02-112 | ✅ Verified | CHARACTER | When I activate this character's effect it lets me give an opponents character -1 cost but it does not let me choose a leader or character to give +1000 power to. |
-| OP02-113 | ⚠ Needs Fix | CHARACTER | The power gain should only last for the battle, so once the combat is done it shuld return to it's base power.  |
-| OP02-114 | ⚠ Needs Fix | CHARACTER | This card should only gain +1000 power on the opponents turn, he is currently getting it on my turn too.  |
+| OP02-113 | ✅ Verified | CHARACTER | The power gain should only last for the battle, so once the combat is done it shuld return to it's base power. |
+| OP02-114 | ✅ Verified | CHARACTER | This card should only gain +1000 power on the opponents turn, he is currently getting it on my turn too. |
 | OP02-115 | ✅ Verified | CHARACTER | on_attack: DON x2; KO opp cost 0 char |
 | OP02-116 | ✅ Verified | CHARACTER |  |
 | OP02-117 | ✅ Verified | EVENT | on_play: opp char -5 cost |
 | OP02-118 | ✅ Verified | EVENT | I am using the effect on a card that is being targeted by an attack, the attack is big enough to kill and it is killing the character EVEN though the counter card says that the selected character cannot be KOd during THIS battle. |
 | OP02-119 | ✅ Verified | EVENT | on_play: KO opp char cost 1 or less |
 | OP02-120 | ✅ Verified | CHARACTER | They lose the +1000 power when I end my turn, they should keep that buff until my NEXT turn begins. |
-| OP02-121 | ⚠ Needs Fix | CHARACTER | There is still no prompt to KO a 0 cost, after he gives all the opponents characters -5 cost.  |
+| OP02-121 | ✅ Verified | CHARACTER | There is still no prompt to KO a 0 cost, after he gives all the opponents characters -5 cost. |
 
 ---
 
@@ -309,7 +309,7 @@
 | OP03-033 | ✅ Verified | CHARACTER | Leader needs to be an East Blue Type in the simulation to test. |
 | OP03-034 | ✅ Verified | CHARACTER | on_play: KO rested cost 2- |
 | OP03-035 | ✅ Verified | CHARACTER |  |
-| OP03-036 | ⚠ Needs Fix | EVENT | This card does nothing even when played with Kuro leader, it should allow me to choose an east blue character to rest, if I do it then I should be prompted to select a Kuro card, Character OR leader to set back to active.  |
+| OP03-036 | ⚠ Needs Fix | EVENT | When I use this card, and my Kuro leader is rested it should let me set it as active, but it does not do that.  |
 | OP03-037 | ✅ Verified | EVENT | I should be prompted to select which East Blue Type character I want to rest. |
 | OP03-038 | ✅ Verified | EVENT | I should be given the option to select 2 characters with a cost of 2 or less, currently it only lets me choose 1. |
 | OP03-039 | ✅ Verified | EVENT | The leader is an option to give +1000 power, it should ONLY let me select characters. |
@@ -362,40 +362,40 @@
 | OP03-086 | ✅ Verified | CHARACTER | SHOW ME THE FUCKING TOP 3 CARDS BEFORE THEY GET TRASHED RETARD |
 | OP03-087 | ✅ Verified | CHARACTER |  |
 | OP03-088 | ⚠ Needs Fix | CHARACTER | When I add this card to the opponent's field, it is not detecting it. So I cannot test effectively. |
-| OP03-089 | ⚠ Needs Fix | CHARACTER | SHOW ME THE FUCKING TOP 3 CARDS BEFORE THEY GET TRASHED RETARD |
+| OP03-089 | ✅ Verified | CHARACTER | SHOW ME THE FUCKING TOP 3 CARDS BEFORE THEY GET TRASHED RETARD |
 | OP03-090 | ✅ Verified | CHARACTER | DON x1 continuous: Blocker; on_ko: play CP cost 4- from trash |
-| OP03-091 | ⚠ Needs Fix | CHARACTER | "Error: Invalid Choice Response" when selected a valid card.  |
+| OP03-091 | ✅ Verified | CHARACTER | "Error: Invalid Choice Response" when selected a valid card. |
 | OP03-092 | ✅ Verified | CHARACTER | I should be prompted to select 2 cards with type "CP" in the trash to add back to the bottom of the deck. And then this character should have rush if I do this. |
 | OP03-093 | ✅ Verified | CHARACTER | I need to trash 1 card from my hand first to be able to use this effect. |
-| OP03-094 | ⚠ Needs Fix | EVENT | Add a fucking CP type card in the top 5 of the deck so I can test.  |
+| OP03-094 | ✅ Verified | EVENT | Add a fucking CP type card in the top 5 of the deck so I can test. |
 | OP03-095 | ✅ Verified | EVENT | It only let's me select 1 card right now. |
 | OP03-096 | ✅ Verified | EVENT | on_play: KO opp cost 0 or Stage |
 | OP03-097 | ✅ Verified | EVENT | counter: trash 1, +3000 |
 | OP03-098 | ✅ Verified | STAGE | activate: rest, if CP leader opp -2 cost |
-| OP03-099 | ⚠ Needs Fix | LEADER | I should be able to see the top of the opponent's life cards when attacking with DON on this card. I can currently see nothing. Then I should have the option to place it at the bottom of their life or keep it at the top. THEN the leader should gain +1000 power.  |
-| OP03-100 | ⚠ Needs Fix | CHARACTER | This card is not being played out after trashing a card from life.  |
+| OP03-099 | ✅ Verified | LEADER | I should be able to see the top of the opponent's life cards when attacking with DON on this card. I can currently see nothing. Then I should have the option to place it at the bottom of their life or keep it at the top. THEN the leader should gain +1000 power. |
+| OP03-100 | ✅ Verified | CHARACTER | This card is not being played out after trashing a card from life. |
 | OP03-101 | ✅ Verified | CHARACTER |  |
-| OP03-102 | ⚠ Needs Fix | CHARACTER | When this card attacks and is giving 2 DON!! cards, then they should be able to choose if they want to add the top or bottom of their life cards to their hand. If they choose to do this, then 1 card from the top of the deck should be added to the top of the life cards from the top of the deck.  |
+| OP03-102 | ✅ Verified | CHARACTER | When this card attacks and is giving 2 DON!! cards, then they should be able to choose if they want to add the top or bottom of their life cards to their hand. If they choose to do this, then 1 card from the top of the deck should be added to the top of the life cards from the top of the deck. |
 | OP03-103 | ✅ Verified | CHARACTER |  |
-| OP03-104 | ⚠ Needs Fix | CHARACTER | When this card is played, we should be able to see the top of the opponent's life cards, and then we should be prompted if we want to leave it at the top, or add it to the BOTTOM of their life cards.  |
-| OP03-105 | ⚠ Needs Fix | CHARACTER | Also, this power gain should ONLY be for the battle. After it is concluded it should return to it's base power |
+| OP03-104 | ✅ Verified | CHARACTER | When this card is played, we should be able to see the top of the opponent's life cards, and then we should be prompted if we want to leave it at the top, or add it to the BOTTOM of their life cards. |
+| OP03-105 | ⚠ Needs Fix | CHARACTER | This card is being read as having a trigger, this card does not have a trigger. This needs to be fixed.  |
 | OP03-106 | ✅ Verified | CHARACTER |  |
 | OP03-107 | ✅ Verified | CHARACTER | blocker |
-| OP03-108 | ⚠ Needs Fix | CHARACTER | This card is not being played out per it's trigger even after trashing the 1 card from hand. The Effect on the card does work as intended |
-| OP03-109 | ⚠ Needs Fix | CHARACTER | I should be prompted when playing this card if I want to trash the top or bottom of my life cards. If I choose 1 of them THEN I should be prompted if I want to add up to 1 OR 0 cards from the top of the deck to the top of my life cards.  |
-| OP03-110 | ⚠ Needs Fix | CHARACTER | This cards trigger says: "You may trash 1 card from hand: Play this card" if the opponent who TOOK the damage and triggered this card, they can trash 1 card from THEIR hand and play this card to the field. The when attacking effect works as intended though.  |
+| OP03-108 | ⚠ Needs Fix | CHARACTER | This card has a trigger that says "You may trash 1 card from your hand: Play this card" This means that if the player that took damage and had this trigger chooses a card to trash from hand then this card should be played onto the field.  |
+| OP03-109 | ✅ Verified | CHARACTER | I should be prompted when playing this card if I want to trash the top or bottom of my life cards. If I choose 1 of them THEN I should be prompted if I want to add up to 1 OR 0 cards from the top of the deck to the top of my life cards. |
+| OP03-110 | ✅ Verified | CHARACTER | This cards trigger says: "You may trash 1 card from hand: Play this card" if the opponent who TOOK the damage and triggered this card, they can trash 1 card from THEIR hand and play this card to the field. The when attacking effect works as intended though. |
 | OP03-111 | ✅ Verified | CHARACTER |  |
 | OP03-112 | ✅ Verified | CHARACTER | on_play: look 4, reveal Sanji or Big Mom Pirates card |
 | OP03-113 | ✅ Verified | CHARACTER | on_ko: look 3, reveal Big Mom Pirates card |
 | OP03-114 | ✅ Verified | CHARACTER | on_play: if BM leader, add deck to life, trash opp life |
-| OP03-115 | ⚠ Needs Fix | CHARACTER | This card should KO up to 1 of the OPPONENT's cards with a cost of 1 or less, it currently trashes itself as well for some reason? |
+| OP03-115 | ⚠ Needs Fix | CHARACTER | I should only be able to choose 1 of the opponent's characters to KO. Right now it lets me choose my own.  |
 | OP03-116 | ✅ Verified | CHARACTER | on_play: draw 3, trash 2; trigger |
-| OP03-117 | ⚠ Needs Fix | CHARACTER | I need to be prompted to select which Charlotte Linlin I want to give 1000 power to, or if I even want to do this effect.  |
+| OP03-117 | ✅ Verified | CHARACTER | I need to be prompted to select which Charlotte Linlin I want to give 1000 power to, or if I even want to do this effect. |
 | OP03-118 | ✅ Verified | EVENT | counter: +5000 |
 | OP03-119 | ✅ Verified | EVENT | Currently this lets me KO a 6 cost or less, it should be 4 cost or less. |
 | OP03-120 | ✅ Verified | EVENT | on_play: if opp 4+ life, trash opp life |
 | OP03-121 | ✅ Verified | EVENT | on_play: trash 1 life, KO opp cost 5- |
-| OP03-122 | ⚠ Needs Fix | CHARACTER | This effect works but it should return the 6 cost or less first THEN draw 2 and trash 2 |
+| OP03-122 | ⚠ Needs Fix | CHARACTER | Currently it is prompting me to return a 6 cost or less to the owners hand which is correct, then the draw 2 trash 2 which is also correct. But then it prompts me again to return a character with cost of 6 or less AGAIN. This should not happen |
 | OP03-123 | 🔲 To Do | CHARACTER | on_play: add cost 8- char to life top/bottom |
 
 # Card Effect Status — OP14
@@ -403,3 +403,150 @@
 | ID | Status | Type | Notes |
 |----|--------|------|-------|
 | OP14-073 | ✅ Verified | CHARACTER |  |
+
+# Card Effect Status — OP15
+
+## Status Legend
+- `✅ Verified` — Implemented and confirmed correct in simulator
+- `⚠ Needs Fix` — Implementation exists but has a bug or mismatch
+- `🔲 To Do` — Hardcoded impl exists, needs audit/verification
+- `❌ Missing` — No implementation, needs writing
+- `⬜ No Effect` / `⬜ Keywords` — No custom code needed
+
+| ID | Name | Type | Status | Effect (summary) | Notes |
+|----|----|------|--------|-----------------|-------|
+| OP15-001 | Krieg | LEADER | ❌ Missing | [DON!! x1] [Opponent's Turn] If the only Characters on your field are … |  |
+| OP15-002 | Lucy | LEADER | ❌ Missing | [When Attacking]/[On Your Opponent's Attack] You may trash any number … |  |
+| OP15-003 | Alvida | CHARACTER | ❌ Missing | If this Character would be K.O.'d, you may trash 1 Character card with… |  |
+| OP15-004 | Sea Cat | CHARACTER | ❌ Missing | [On Play] If your Leader has 0 power or less, give up to 1 of your opp… |  |
+| OP15-005 | Cabaji | CHARACTER | ❌ Missing | [When Attacking] If your opponent has any DON!! cards given, this Char… |  |
+| OP15-006 | Cavendish | CHARACTER | ❌ Missing | If you have 4 or more Events in your trash, this Character gains +2000… |  |
+| OP15-007 | Gin | CHARACTER | ❌ Missing | [On Play] If your Leader has the {East Blue} type, play up to 1 Charac… |  |
+| OP15-008 | Krieg | CHARACTER | ❌ Missing | [On Play] Give up to 3 of your opponent's rested DON!! cards to 1 of y… |  |
+| OP15-009 | Koby | CHARACTER | ❌ Missing | If your Character with 7000 base power or less would be removed from t… |  |
+| OP15-010 | Nezumi | CHARACTER | ❌ Missing | [Activate: Main] [Once Per Turn] Give up to 1 rested DON!! card to its… |  |
+| OP15-011 | Pearl | CHARACTER | ❌ Missing | [Opponent's Turn] If your Leader has the {East Blue} type, this Charac… |  |
+| OP15-012 | Buggy | CHARACTER | ❌ Missing | [When Attacking] Give up to 1 rested DON!! card to its owner's Leader … |  |
+| OP15-013 | Pincers | CHARACTER | ❌ Missing | If your Leader has 0 power or less, give this card in your hand −2 cos… |  |
+| OP15-014 | Bartolomeo | CHARACTER | ❌ Missing | If this Character would be K.O.'d, you may trash 1 Event from your han… |  |
+| OP15-015 | Higuma | CHARACTER | ❌ Missing | [On Play] Give up to 1 of your opponent's rested DON!! cards to 1 of y… |  |
+| OP15-016 | Fullbody | CHARACTER | ⬜ No Effect |  |  |
+| OP15-017 | Morgan | CHARACTER | ❌ Missing | [Blocker] [Activate: Main] [Once Per Turn] You may give 1 of your oppo… |  |
+| OP15-018 | Mohji | CHARACTER | ❌ Missing | [When Attacking] K.O. up to 1 of your opponent's Characters with 3000 … |  |
+| OP15-019 | Barrier Bulls | EVENT | ❌ Missing | [Main] Draw 1 card and your Leader gains +1000 power until the end of … |  |
+| OP15-020 | Fire Fist | EVENT | ❌ Missing | [Main] Your Leader gains +3000 power during this turn and give up to 1… |  |
+| OP15-021 | Just Watch Me, Ace!!! | EVENT | ❌ Missing | If you have 4 or more Events in your trash, give this card in your han… |  |
+| OP15-022 | Brook | LEADER | ❌ Missing | Under the rules of this game, you do not lose when your deck has 0 car… |  |
+| OP15-023 | Arlong | CHARACTER | ❌ Missing | [On K.O.] Up to 2 of your opponent's rested cards will not become acti… |  |
+| OP15-024 | Usopp | CHARACTER | ❌ Missing | [Opponent's Turn] This Character cannot be rested by your opponent's L… |  |
+| OP15-025 | Kuro | CHARACTER | ❌ Missing | [Blocker] [On Play] Give up to 2 DON!! cards from your opponent's cost… |  |
+| OP15-026 | Jango | CHARACTER | ❌ Missing | [On Play] Look at 3 cards from the top of your deck; reveal up to 1 {E… |  |
+| OP15-027 | Dracule Mihawk | CHARACTER | ❌ Missing | [On Play] Rest up to 1 of your opponent's Characters with a DON!! card… |  |
+| OP15-028 | Meowban Brothers | CHARACTER | ❌ Missing | [On Play] If your Leader has the {East Blue} type, give up to 1 DON!! … |  |
+| OP15-029 | Bartholomew Kuma | CHARACTER | ❌ Missing | [On Play] Up to 1 of your opponent's Characters with a cost of 5 or le… |  |
+| OP15-030 | Hyouzou | CHARACTER | ⬜ No Effect |  |  |
+| OP15-031 | Purinpurin | CHARACTER | ❌ Missing | [On Play] Select up to 1 of your opponent's rested Characters. If the … |  |
+| OP15-032 | Brook | CHARACTER | ❌ Missing | [On Play] Rest up to 1 of your opponent's cards. [Activate: Main] You … |  |
+| OP15-033 | Hody Jones | CHARACTER | ❌ Missing | [On Play] Set your {Fish-Man} type Leader as active. Then, add 1 card … |  |
+| OP15-034 | Yorki | CHARACTER | ❌ Missing | [Your Turn] [On Play] Up to 1 of your [Brook] cards gains +2000 power … |  |
+| OP15-035 | Laboon | CHARACTER | ❌ Missing | If your Character with 7000 base power or less would be removed from t… |  |
+| OP15-036 | Ryuma | CHARACTER | ❌ Missing | [On Play]/[When Attacking] K.O. up to 1 of your opponent's rested Char… |  |
+| OP15-037 | The Outcome Will Tell Us Who's Strong and Who's Weak | EVENT | ❌ Missing | [Main] Look at 5 cards from the top of your deck; reveal up to 1 {East… |  |
+| OP15-038 | It's an Order! Do Not Defy Me!!! | EVENT | ❌ Missing | [Main] Up to 1 of your opponent's rested Characters with a cost of 8 o… |  |
+| OP15-039 | Rebecca | LEADER | ❌ Missing | This Leader cannot attack. [Activate: Main] You may rest this Leader a… |  |
+| OP15-040 | Viola | CHARACTER | ❌ Missing | [On Play] Look at 3 cards from the top of your deck; reveal up to 1 {D… |  |
+| OP15-041 | Orlumbus | CHARACTER | ❌ Missing | [On K.O.] Draw 1 card. [Activate: Main] [Once Per Turn] You may place … |  |
+| OP15-042 | Kyros | CHARACTER | ❌ Missing | [On Play] You may trash 1 card from your hand: If your Leader is [Rebe… |  |
+| OP15-043 | Kelly Funk | CHARACTER | ❌ Missing | [On Play] Play up to 1 [Bobby Funk] from your hand. |  |
+| OP15-044 | Koala | CHARACTER | ❌ Missing | [Blocker] [On K.O.] Look at 3 cards from the top of your deck; reveal … |  |
+| OP15-045 | Sai | CHARACTER | ❌ Missing | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
+| OP15-046 | Sabo | CHARACTER | ❌ Missing | [Blocker] [On Play] If your Leader has the {Dressrosa} type, activate … |  |
+| OP15-047 | Sanji | CHARACTER | ❌ Missing | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
+| OP15-048 | Chinjao | CHARACTER | ❌ Missing | [On Play] You may trash 1 Event from your hand: Draw 2 cards. [Opponen… |  |
+| OP15-049 | Hajrudin | CHARACTER | ⬜ No Effect |  |  |
+| OP15-050 | Bobby Funk | CHARACTER | ❌ Missing | If you have [Kelly Funk], this Character gains +3000 power. |  |
+| OP15-051 | Monkey.D.Luffy | CHARACTER | ❌ Missing | [Opponent's Turn] If your Leader has the {Dressrosa} type, this Charac… |  |
+| OP15-052 | Leo | CHARACTER | ❌ Missing | If your Character with 7000 base power or less would be removed from t… |  |
+| OP15-053 | Rebecca | CHARACTER | ❌ Missing | [DON!! x1] This Character gains [Blocker]. [On Play] Look at 3 cards f… |  |
+| OP15-054 | And No One Else Can Have It! It's Our Memento of Him | EVENT | ❌ Missing | [Main] If your Leader is [Lucy], choose one: • Draw 2 cards and trash … |  |
+| OP15-055 | Go Ahead and Use 'Em, Mr. Luffy!!! | EVENT | ❌ Missing | [Main] Choose one: • Draw 2 cards. • Up to 1 of your {Dressrosa} type … |  |
+| OP15-056 | Would You Let Me Eat the Flame-Flame Fruit? | EVENT | ❌ Missing | [Main] Draw 2 cards. Then, your [Lucy] Leader gains [Double Attack] an… |  |
+| OP15-057 | Dressrosa Kingdom | STAGE | ❌ Missing | [On Play] If your Leader has the {Dressrosa} type, draw 1 card. [On Yo… |  |
+| OP15-058 | Enel | LEADER | ❌ Missing | Under the rules of this game, your DON!! deck consists of 6 cards. [Ac… |  |
+| OP15-059 | Amazon | CHARACTER | ❌ Missing | [On Your Opponent's Attack] You may rest this Character: Your opponent… |  |
+| OP15-060 | Enel | CHARACTER | ❌ Missing | If you have 6 or less DON!! cards on your field, this Character cannot… |  |
+| OP15-061 | Ohm | CHARACTER | ❌ Missing | [On Play] DON!! −1: Draw 1 card. [When Attacking] If you have 6 or les… |  |
+| OP15-062 | Captain Seamars | CHARACTER | ⬜ No Effect |  |  |
+| OP15-063 | Gedatsu | CHARACTER | ❌ Missing | [On Play] DON!! −1: Draw 1 card. [On K.O.] If you have 6 or less DON!!… |  |
+| OP15-064 | Kotori | CHARACTER | ❌ Missing | [Activate: Main] DON!! −2, You may rest this Character: If you have [S… |  |
+| OP15-065 | Goro | CHARACTER | ❌ Missing | [On Play] Reveal 1 card from the top of your deck. If the revealed car… |  |
+| OP15-066 | Satori | CHARACTER | ❌ Missing | [On Play] DON!! −1: Draw 1 card. [When Attacking] If you have 6 or les… |  |
+| OP15-067 | Shura | CHARACTER | ❌ Missing | If you have 6 or less DON!! cards on your field, this Character gains … |  |
+| OP15-068 | Heavenly Warriors | CHARACTER | ❌ Missing | If you have 6 or less DON!! cards on your field, this Character gains … |  |
+| OP15-069 | Nola | CHARACTER | ❌ Missing | If your Character with 7000 base power or less would be removed from t… |  |
+| OP15-070 | Fuza | CHARACTER | ❌ Missing | All of your [Shura] cards and this Character gain [Unblockable]. (This… |  |
+| OP15-071 | Holly | CHARACTER | ❌ Missing | All of your [Ohm] cards and this Character gain [Double Attack]. (This… |  |
+| OP15-072 | Hotori | CHARACTER | ❌ Missing | [Activate: Main] DON!! −2, You may rest this Character: If you have [K… |  |
+| OP15-073 | Yama | CHARACTER | ❌ Missing | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
+| OP15-074 | Varie | EVENT | ❌ Missing | [Main] DON!! −1: If your Leader is [Enel], draw 1 card. Then, up to 1 … |  |
+| OP15-075 | El Thor | EVENT | ❌ Missing | [Main] DON!! −1: If your Leader is [Enel], up to 1 of your Leader or C… |  |
+| OP15-076 | Lightning Beast Kiten | EVENT | ❌ Missing | [Main] DON!! −1: If your Leader is [Enel], draw 1 card. Then, give up … |  |
+| OP15-077 | Lightning Dragon | EVENT | ❌ Missing | [Main] DON!! −1: Draw 1 card. Then, up to 1 of your opponent's rested … |  |
+| OP15-078 | Mamaragan | EVENT | ❌ Missing | [Main] DON!! −2: Draw 1 card. Then, rest up to 1 of your opponent's Ch… |  |
+| OP15-079 | Absalom | CHARACTER | ❌ Missing | [On K.O.] Add up to 1 {Thriller Bark Pirates} type card from your tras… |  |
+| OP15-080 | Oars | CHARACTER | ❌ Missing | If you have [Gecko Moria] with 10000 power or more on your field and t… |  |
+| OP15-081 | Sanji | CHARACTER | ❌ Missing | [On Play] If your Leader has the {Straw Hat Crew} type, trash 5 cards … |  |
+| OP15-082 | Charlotte Lola | CHARACTER | ❌ Missing | [On Play] Trash 3 cards from the top of your deck. [On K.O.] Add up to… |  |
+| OP15-083 | Spoil | CHARACTER | ❌ Missing | [On Play] Trash 3 cards from the top of your deck. [Activate: Main] Yo… |  |
+| OP15-084 | Dr. Hogback | CHARACTER | ❌ Missing | [On Play] If your Leader has the {Thriller Bark Pirates} type, trash 5… |  |
+| OP15-085 | Tony Tony.Chopper | CHARACTER | ❌ Missing | [On Play] Trash 3 cards from the top of your deck. [Activate: Main] Yo… |  |
+| OP15-086 | Nami | CHARACTER | ❌ Missing | [On Play] If your Leader has the {Straw Hat Crew} type, play up to 1 {… |  |
+| OP15-087 | Nico Robin | CHARACTER | ❌ Missing | If you have 10 or more cards in your trash, this Character gains [Bloc… |  |
+| OP15-088 | Pirates Docking Six | CHARACTER | ❌ Missing | This Character gains +6 cost. [On Play] You may trash 3 cards from the… |  |
+| OP15-089 | Franky | CHARACTER | ⬜ No Effect |  |  |
+| OP15-090 | Perona | CHARACTER | ❌ Missing | If your Character with 7000 base power or less would be removed from t… |  |
+| OP15-091 | Margarita | CHARACTER | ❌ Missing | [On Play] Place up to 1 card from your opponent's trash at the bottom … |  |
+| OP15-092 | Monkey.D.Luffy | CHARACTER | ❌ Missing | Apply each of the following effects based on the number of cards in yo… |  |
+| OP15-093 | The Risky Brothers | CHARACTER | ❌ Missing | [Activate: Main] You may trash this Character: If you have 15 or more … |  |
+| OP15-094 | Roronoa Zoro | CHARACTER | ❌ Missing | If your {Straw Hat Crew} type Character other than this Character woul… |  |
+| OP15-095 | Gum-Gum Storm | EVENT | ❌ Missing | [Main] You may rest 1 of your DON!! cards: If you have 15 or more card… |  |
+| OP15-096 | Swallow Bond en Avant | EVENT | ❌ Missing | [Main] You may rest 1 of your DON!! cards: If your Leader has the {Str… |  |
+| OP15-097 | I Find It Embarrassing as a Human Being | EVENT | ❌ Missing | [Main] If you have 10 or more cards in your trash, up to 1 of your opp… |  |
+| OP15-098 | Monkey.D.Luffy | LEADER | ❌ Missing | If your {Sky Island} type Character with 6000 base power or more would… |  |
+| OP15-099 | Urouge | CHARACTER | ❌ Missing | [On Play] You may trash 1 {Supernovas} type card from your hand: This … |  |
+| OP15-100 | Kamakiri | CHARACTER | ❌ Missing | [On Play] You may trash this Character and add 1 card from the top of … |  |
+| OP15-101 | Kalgara | CHARACTER | ❌ Missing | [On Play] You may trash 1 card from your hand: Look at 5 cards from th… |  |
+| OP15-102 | Gan.Fall | CHARACTER | ❌ Missing | If you have a {Sky Island} type Character with 7000 power or more, giv… |  |
+| OP15-103 | Genbo | CHARACTER | ❌ Missing |  |  |
+| OP15-104 | Conis | CHARACTER | ❌ Missing | [On Play] If you have less Life cards than your opponent, draw 2 cards… |  |
+| OP15-105 | Jewelry Bonney | CHARACTER | ❌ Missing | If your Character with 7000 base power or less would be removed from t… |  |
+| OP15-106 | Octoballoon | CHARACTER | ❌ Missing |  |  |
+| OP15-107 | Tony Tony.Chopper | CHARACTER | ⬜ No Effect |  |  |
+| OP15-108 | Nami | CHARACTER | ❌ Missing | [On Play] Look at 3 cards from the top of your deck; reveal up to 1 {S… |  |
+| OP15-109 | Nico Robin | CHARACTER | ❌ Missing | [On Play] You may add 1 card from the top of your Life cards to your h… |  |
+| OP15-110 | Braham | CHARACTER | ❌ Missing | [On K.O.] If your Leader has the {Shandian Warrior} type, add up to 1 … |  |
+| OP15-111 | Mont Blanc Noland | CHARACTER | ❌ Missing | [DON!! x1] [When Attacking] Up to 1 of your [Kalgara] cards gains [Rus… |  |
+| OP15-112 | Raki | CHARACTER | ❌ Missing | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
+| OP15-113 | Roronoa Zoro | CHARACTER | ❌ Missing | [On Play] You may trash 1 card from your hand: Add up to 1 card from t… |  |
+| OP15-114 | Wyper | CHARACTER | ❌ Missing | [On Play] You may turn 1 card from the top of your Life cards face-up:… |  |
+| OP15-115 | Impact Dial | EVENT | ❌ Missing | [Main] K.O. up to 1 of your opponent's Characters with a cost of 4 or … |  |
+| OP15-116 | Gum-Gum Golden Rifle | EVENT | ❌ Missing | [Main] If your Leader has the {Straw Hat Crew} type, trash 1 card from… |  |
+| OP15-117 | Heso!! | EVENT | ❌ Missing | [Main] Draw 1 card. Then, give up to 1 rested DON!! card to 1 of your … |  |
+| OP15-118 | Enel | CHARACTER | ❌ Missing | If you have 6 or less DON!! cards on your field, this Character cannot… |  |
+| OP15-119 | Monkey.D.Luffy | CHARACTER | ❌ Missing | If you have 6 or more DON!! cards on your field, this Character gains … |  |
+
+**Total:** 119 cards
+**Missing:** 113
+**To Do (audit):** 0
+**Verified:** 0
+
+
+# Card Effect Status — OP04
+| OP04-002 | Igaram | CHARACTER | ⚠ Needs Fix | [Activate: Main] You may rest this Character and give your 1 active Le… | When I activate this card this effect should go off: You may rest this Character and give your 1 active Leader −5000 power during this turn: Look at 5 cards from the top of your deck; reveal up to 1 {Alabasta} type card and add it to your hand. Then, place the rest at the bottom of your deck in any order. Currently it just let's me give -5000 power to the leader, no look at top 5 cards and add alabasta type.  |
+| OP04-003 | Usopp | CHARACTER | ✅ Verified | [On K.O.] K.O. up to 1 of your opponent's Characters with 5000 base po… |  |
+| OP04-006 | Koza | CHARACTER | ⚠ Needs Fix | [When Attacking] You may give your 1 active Leader −5000 power during … | It says you may, so I should be given the option to give -5000 to leader first via a prompt, if I do give -5000 power then this character should gain +2000 power.  |
+| OP04-007 | Sanji | CHARACTER | ✅ Verified |  |  |
+
+| ID | Status | Type | Notes |
+|----|--------|------|-------|
+| OP04-001 | Nefeltari Vivi | LEADER | ⚠ Needs Fix | This Leader cannot attack. [Activate: Main] [Once Per Turn] ➁ (You may… | I should be prompted to select a character to give rush to when I activate this leader and rest the 2 DON!! cards.   |

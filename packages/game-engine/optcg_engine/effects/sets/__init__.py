@@ -48,6 +48,7 @@ from . import op11_effects  # noqa: F401
 from . import op12_effects  # noqa: F401
 from . import op13_effects  # noqa: F401
 from . import op14_effects  # noqa: F401
+from . import op15_effects  # noqa: F401
 from . import prb01_effects  # noqa: F401
 from . import prb02_effects  # noqa: F401
 from . import p_effects  # noqa: F401
