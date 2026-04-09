@@ -1557,53 +1557,52 @@ def op01_096_king_char(game_state, player, card):
         total_don += player.leader.attached_don
     if total_don < 2:
         return True  # Can't pay cost
-    auto = return_don_to_deck(game_state, player, 2, source_card=card,
-                              after_callback="op01_096_king_ko",
-                              after_callback_data={"player_id": player.player_id})
-    if not auto:
-        return True  # Pending choice
-    # DON auto-paid, apply effect — first KO cost 3 or less
     opponent = get_opponent(game_state, player)
-    targets_3 = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 3]
-    if targets_3:
+
+    def _king_ko_effect():
         from ...game_engine import PendingChoice
         import uuid
-        options = [{"id": str(i), "label": f"{c.name} (Cost: {c.cost or 0})",
-                    "card_id": c.id, "card_name": c.name} for i, c in enumerate(targets_3)]
-        targets_3_snapshot = list(targets_3)
+        targets_3 = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 3]
+        if targets_3:
+            targets_3_snap = list(targets_3)
 
-        def king_ko1_cb(selected):
-            target_idx = int(selected[0]) if selected else -1
-            if 0 <= target_idx < len(targets_3_snapshot):
-                target = targets_3_snapshot[target_idx]
-                for p in [player, opponent]:
-                    if target in p.cards_in_play:
-                        p.cards_in_play.remove(target)
-                        p.trash.append(target)
-                        game_state._log(f"King: K.O.'d {target.name}")
-                        break
+            def king_ko1_cb(selected):
+                target_idx = int(selected[0]) if selected else -1
+                if 0 <= target_idx < len(targets_3_snap):
+                    target = targets_3_snap[target_idx]
+                    for p in [player, opponent]:
+                        if target in p.cards_in_play:
+                            p.cards_in_play.remove(target)
+                            p.trash.append(target)
+                            game_state._log(f"King: K.O.'d {target.name}")
+                            break
+                targets_2 = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 2]
+                if targets_2:
+                    create_ko_choice(game_state, player, targets_2,
+                                     prompt="King: Choose opponent's cost 2 or less Character to K.O.")
+
+            game_state.pending_choice = PendingChoice(
+                choice_id=f"king_ko1_{uuid.uuid4().hex[:8]}",
+                choice_type="select_target",
+                prompt="King: Choose opponent's cost 3 or less Character to K.O.",
+                options=[{"id": str(i), "label": f"{c.name} (Cost: {c.cost or 0})",
+                          "card_id": c.id, "card_name": c.name} for i, c in enumerate(targets_3)],
+                min_selections=0,
+                max_selections=1,
+                source_card_id=card.id,
+                source_card_name=card.name,
+                callback=king_ko1_cb,
+            )
+        else:
             targets_2 = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 2]
             if targets_2:
-                create_ko_choice(game_state, player, targets_2,
+                create_ko_choice(game_state, player, targets_2, source_card=card,
                                  prompt="King: Choose opponent's cost 2 or less Character to K.O.")
 
-        game_state.pending_choice = PendingChoice(
-            choice_id=f"king_ko1_{uuid.uuid4().hex[:8]}",
-            choice_type="select_target",
-            prompt="King: Choose opponent's cost 3 or less Character to K.O.",
-            options=options,
-            min_selections=0,
-            max_selections=1,
-            source_card_id=card.id,
-            source_card_name=card.name,
-            callback=king_ko1_cb,
-        )
-    else:
-        # No cost 3 targets, try cost 2 directly
-        targets_2 = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 2]
-        if targets_2:
-            return create_ko_choice(game_state, player, targets_2, source_card=card,
-                                   prompt="King: Choose opponent's cost 2 or less Character to K.O.")
+    auto = return_don_to_deck(game_state, player, 2, source_card=card, post_callback=_king_ko_effect)
+    if not auto:
+        return True
+    _king_ko_effect()
     return True
 
 
@@ -1617,20 +1616,22 @@ def op01_097_queen_char(game_state, player, card):
         total_don += player.leader.attached_don
     if total_don < 1:
         return True  # Can't pay cost
-    auto = return_don_to_deck(game_state, player, 1, source_card=card,
-                              after_callback="op01_097_queen_rush_power",
-                              after_callback_data={"source_card_id": card.id})
-    if not auto:
-        return True  # Pending choice
-    # DON auto-paid, apply effect
-    card.has_rush = True
     opponent = get_opponent(game_state, player)
-    if opponent.cards_in_play:
-        return create_power_effect_choice(
-            game_state, player, opponent.cards_in_play, -2000,
-            source_card=card,
-            prompt="Choose opponent's Character to give −2000 power"
-        )
+
+    def _queen_rush_cb():
+        card.has_rush = True
+        game_state._log(f"  {card.name} gained [Rush]")
+        if opponent.cards_in_play:
+            create_power_effect_choice(
+                game_state, player, opponent.cards_in_play, -2000,
+                source_card=card,
+                prompt="Choose opponent's Character to give −2000 power"
+            )
+
+    auto = return_don_to_deck(game_state, player, 1, source_card=card, post_callback=_queen_rush_cb)
+    if not auto:
+        return True
+    _queen_rush_cb()
     return True
 
 
@@ -1788,16 +1789,18 @@ def op01_108_kamazo(game_state, player, card):
         attached += getattr(player.leader, 'attached_don', 0)
     if total_pool + attached < 1:
         return True  # Can't pay DON cost
-    auto = return_don_to_deck(game_state, player, 1, source_card=card,
-                              after_callback="op01_108_kamazo_ko",
-                              after_callback_data={"player_id": player.player_id})
-    if auto:
-        # DON auto-returned, proceed with KO choice inline
-        opponent = get_opponent(game_state, player)
+    opponent = get_opponent(game_state, player)
+
+    def _kamazo_ko_cb():
         targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 5]
         if targets:
-            return create_ko_choice(game_state, player, targets, source_card=card,
-                                   prompt="Choose opponent's cost 5 or less Character to K.O.")
+            create_ko_choice(game_state, player, targets, source_card=card,
+                             prompt="Choose opponent's cost 5 or less Character to K.O.")
+
+    auto = return_don_to_deck(game_state, player, 1, source_card=card, post_callback=_kamazo_ko_cb)
+    if not auto:
+        return True
+    _kamazo_ko_cb()
     return True
 
 
@@ -1844,13 +1847,12 @@ def op01_111_blackmaria_block(game_state, player, card):
 
     def blackmaria_cb(selected):
         if selected and selected[0] == "yes":
-            auto = return_don_to_deck(game_state, player, 1, source_card=None,
-                                      after_callback="op01_111_blackmaria_power",
-                                      after_callback_data={"source_card_id": bm_card.id,
-                                                           "player_index": 0 if game_state.player1 is player else 1})
-            if auto:
+            def _bm_power_cb():
                 bm_card.power_modifier = getattr(bm_card, 'power_modifier', 0) + 1000
                 game_state._log(f"{bm_card.name} gained +1000 power")
+            auto = return_don_to_deck(game_state, player, 1, source_card=None, post_callback=_bm_power_cb)
+            if auto:
+                _bm_power_cb()
         else:
             game_state._log("Black Maria: Declined to use DON!! -1 effect")
 
@@ -1881,13 +1883,13 @@ def op01_112_pageone_char(game_state, player, card):
         attached += getattr(player.leader, 'attached_don', 0)
     if total_pool + attached < 1:
         return False  # Can't pay DON cost
-    auto = return_don_to_deck(game_state, player, 1, source_card=card,
-                              after_callback="op01_112_pageone_active",
-                              after_callback_data={"source_card_id": card.id,
-                                                   "player_id": player.player_id})
-    if auto:
-        # DON auto-returned, apply effect inline
+    def _pageone_active_cb():
         card.can_attack_active = True
+        game_state._log(f"  {card.name} can now attack active Characters")
+
+    auto = return_don_to_deck(game_state, player, 1, source_card=card, post_callback=_pageone_active_cb)
+    if auto:
+        _pageone_active_cb()
     card.main_activated_this_turn = True
     return True
 
@@ -1959,17 +1961,19 @@ def op01_117_sheeps_horn(game_state, player, card):
         attached += getattr(player.leader, 'attached_don', 0)
     if total_pool + attached < 1:
         return False  # Can't pay DON cost
-    auto = return_don_to_deck(game_state, player, 1, source_card=card,
-                              after_callback="op01_117_sheeps_horn_rest",
-                              after_callback_data={"player_id": player.player_id})
-    if auto:
-        # DON auto-returned, proceed with rest choice inline
-        opponent = get_opponent(game_state, player)
+    opponent = get_opponent(game_state, player)
+
+    def _sheeps_horn_cb():
         targets = [c for c in opponent.cards_in_play
                    if (getattr(c, 'cost', 0) or 0) <= 6 and not getattr(c, 'is_resting', False)]
         if targets:
-            return create_rest_choice(game_state, player, targets, source_card=card,
-                                     prompt="Choose opponent's cost 6 or less Character to rest")
+            create_rest_choice(game_state, player, targets, source_card=card,
+                               prompt="Choose opponent's cost 6 or less Character to rest")
+
+    auto = return_don_to_deck(game_state, player, 1, source_card=card, post_callback=_sheeps_horn_cb)
+    if not auto:
+        return True
+    _sheeps_horn_cb()
     return True
 
 
@@ -2631,20 +2635,21 @@ def op01_118_ulti_mortar(game_state, player, card):
         attached += getattr(player.leader, 'attached_don', 0)
     if total_pool + attached < 2:
         return True  # Can't pay DON cost
-    auto = return_don_to_deck(game_state, player, 2, source_card=card,
-                              after_callback="op01_118_ulti_mortar_power",
-                              after_callback_data={"player_id": player.player_id})
-    if auto:
-        # DON auto-returned, proceed with power choice inline + draw 1
+    def _ulti_mortar_cb():
         draw_cards(player, 1)
         game_state._log(f"Ulti-Mortar: {player.name} draws 1 card")
         targets = ([player.leader] if player.leader else []) + player.cards_in_play
         if targets:
-            return create_power_effect_choice(
+            create_power_effect_choice(
                 game_state, player, targets, 2000,
                 source_card=card,
                 prompt="Choose Leader or Character to give +2000 power"
             )
+
+    auto = return_don_to_deck(game_state, player, 2, source_card=card, post_callback=_ulti_mortar_cb)
+    if not auto:
+        return True
+    _ulti_mortar_cb()
     return True
 
 

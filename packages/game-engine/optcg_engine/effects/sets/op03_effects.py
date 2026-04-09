@@ -75,9 +75,14 @@ def out_of_bag_effect(game_state, player, card):
 @register_effect("OP03-074", "on_play", "[Main] DON!! -2: Place opponent's cost 4 or less at bottom")
 def top_knot_effect(game_state, player, card):
     """Return 2 DON to deck, place opponent's cost 4 or less at bottom."""
-    result = optional_don_return(game_state, player, 2, source_card=card,
-                                 after_callback="op03_074_bottom_deck",
-                                 after_callback_data={"source_card_id": card.id})
+    def _top_knot_cb():
+        opponent = get_opponent(game_state, player)
+        targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 4]
+        if targets:
+            create_bottom_deck_choice(game_state, player, targets, source_card=None,
+                                      prompt="Top Knot: Choose opponent's cost 4 or less to place at bottom of deck")
+
+    result = optional_don_return(game_state, player, 2, source_card=card, post_callback=_top_knot_cb)
     if not result:
         return True  # Pending choice
     return True  # Can't pay, fizzled
@@ -327,8 +332,13 @@ def op03_022_arlong_leader(game_state, player, card):
             if active_idx is not None:
                 player.don_pool[active_idx] = "rested"
                 game_state._log(f"{player.name} rested 1 DON!!")
-                game_state._dispatch_don_after_callback(player, "op03_022_play_trigger",
-                                                        {"source_card_id": source_card_id})
+                playable = [c for c in player.hand
+                            if getattr(c, 'card_type', '') == 'CHARACTER'
+                            and (getattr(c, 'cost', 0) or 0) <= 4
+                            and getattr(c, 'trigger', '')]
+                if playable:
+                    create_play_from_hand_choice(game_state, player, playable, source_card=None,
+                                                 prompt="Arlong: Choose a cost 4 or less Character with Trigger to play")
 
     game_state.pending_choice = PendingChoice(
         choice_id=f"op03_022_{_uuid.uuid4().hex[:8]}",
@@ -380,9 +390,16 @@ def op03_058_iceburg_activate(game_state, player, card):
     if card.is_resting:
         return False
     card.is_resting = True
-    result = optional_don_return(game_state, player, 1, source_card=card,
-                                 after_callback="op03_058_play_galley_la",
-                                 after_callback_data={"source_card_id": card.id})
+    def _iceburg_play_cb():
+        galley_la = [c for c in player.hand
+                     if getattr(c, 'card_type', '') == 'CHARACTER'
+                     and 'Galley-La Company' in (c.card_origin or '')
+                     and (getattr(c, 'cost', 0) or 0) <= 5]
+        if galley_la:
+            create_play_from_hand_choice(game_state, player, galley_la, source_card=None,
+                                         prompt="Iceburg: Choose a Galley-La cost 5 or less Character to play")
+
+    result = optional_don_return(game_state, player, 1, source_card=card, post_callback=_iceburg_play_cb)
     if not result:
         return True  # Pending choice
     return True
@@ -1410,9 +1427,11 @@ def op03_053_yosaku_johnny(game_state, player, card):
 @register_effect("OP03-059", "on_attack", "[When Attacking] DON!! -1: Gain Banish")
 def op03_059_kaku(game_state, player, card):
     """When Attacking: Return 1 DON to gain Banish."""
-    result = optional_don_return(game_state, player, 1, source_card=card,
-                                 after_callback="op03_059_banish",
-                                 after_callback_data={"source_card_id": card.id})
+    def _kaku_banish_cb():
+        card.has_banish = True
+        game_state._log(f"  {card.name} gained [Banish]")
+
+    result = optional_don_return(game_state, player, 1, source_card=card, post_callback=_kaku_banish_cb)
     if not result:
         return True  # Pending choice
     return True
@@ -1422,9 +1441,12 @@ def op03_059_kaku(game_state, player, card):
 @register_effect("OP03-060", "on_attack", "[When Attacking] DON!! -1: Draw 2, trash 1")
 def op03_060_kalifa(game_state, player, card):
     """When Attacking: Return 1 DON to draw 2 and trash 1."""
-    result = optional_don_return(game_state, player, 1, source_card=card,
-                                 after_callback="op03_060_draw_trash",
-                                 after_callback_data={"source_card_id": card.id})
+    def _kalifa_draw_trash_cb():
+        draw_cards(player, 2)
+        trash_from_hand(player, 1, game_state, None)
+        game_state._log(f"  Kalifa: Draw 2, trash 1")
+
+    result = optional_don_return(game_state, player, 1, source_card=card, post_callback=_kalifa_draw_trash_cb)
     if not result:
         return True  # Pending choice
     return True
@@ -1454,9 +1476,12 @@ def op03_063_zambai_blocker(game_state, player, card):
 @register_effect("OP03-063", "on_play", "[On Play] DON!! -1: If Water Seven Leader, draw 1")
 def op03_063_zambai_play(game_state, player, card):
     """On Play: Return 1 DON. If Water Seven Leader, draw 1."""
-    result = optional_don_return(game_state, player, 1, source_card=card,
-                                 after_callback="op03_063_draw",
-                                 after_callback_data={"source_card_id": card.id})
+    def _zambai_draw_cb():
+        if player.leader and 'Water Seven' in (player.leader.card_origin or ''):
+            draw_cards(player, 1)
+            game_state._log(f"  Zambai: Draw 1")
+
+    result = optional_don_return(game_state, player, 1, source_card=card, post_callback=_zambai_draw_cb)
     if not result:
         return True  # Pending choice
     return True
@@ -1679,9 +1704,45 @@ def op03_070_luffy(game_state, player, card):
                    (getattr(c, 'cost', 0) or 0) == 5]
     if not cost5_cards:
         return True
-    result = optional_don_return(game_state, player, 1, source_card=card,
-                                 after_callback="op03_070_rush",
-                                 after_callback_data={"source_card_id": card.id})
+
+    def _luffy_rush_cb():
+        cost5_now = [c for c in player.hand
+                     if getattr(c, 'card_type', '') == 'CHARACTER' and
+                     (getattr(c, 'cost', 0) or 0) == 5]
+        if not cost5_now:
+            card.has_rush = True
+            game_state._log(f"  {card.name} gained [Rush]")
+            return
+        cost5_snap = list(cost5_now)
+        from ...game_engine import PendingChoice
+        import uuid as _uuid
+
+        def _trash_cb(selected: list) -> None:
+            target_idx = int(selected[0]) if selected else -1
+            if 0 <= target_idx < len(cost5_snap):
+                target = cost5_snap[target_idx]
+                if target in player.hand:
+                    player.hand.remove(target)
+                    player.trash.append(target)
+                    game_state._log(f"Luffy: Trashed {target.name}")
+            card.has_rush = True
+            game_state._log(f"  {card.name} gained [Rush]")
+
+        game_state.pending_choice = PendingChoice(
+            choice_id=f"op03_070_{_uuid.uuid4().hex[:8]}",
+            choice_type="select_cards",
+            prompt="Luffy: Choose a cost 5 Character to trash for Rush",
+            options=[{"id": str(i), "label": f"{c.name} (Cost: {c.cost or 0})",
+                      "card_id": c.id, "card_name": c.name}
+                     for i, c in enumerate(cost5_snap)],
+            min_selections=1,
+            max_selections=1,
+            source_card_id=card.id,
+            source_card_name=card.name,
+            callback=_trash_cb,
+        )
+
+    result = optional_don_return(game_state, player, 1, source_card=card, post_callback=_luffy_rush_cb)
     if not result:
         return True  # Pending choice
     return True
@@ -1691,9 +1752,15 @@ def op03_070_luffy(game_state, player, card):
 @register_effect("OP03-071", "on_attack", "[When Attacking] DON!! -1: Rest opponent's cost 5 or less")
 def op03_071_lucci(game_state, player, card):
     """When Attacking: Return 1 DON to rest opponent's cost 5 or less."""
-    result = optional_don_return(game_state, player, 1, source_card=card,
-                                 after_callback="op03_071_rest",
-                                 after_callback_data={"source_card_id": card.id})
+    def _lucci_rest_cb():
+        opponent = get_opponent(game_state, player)
+        targets = [c for c in opponent.cards_in_play
+                   if (getattr(c, 'cost', 0) or 0) <= 5 and not getattr(c, 'is_resting', False)]
+        if targets:
+            create_rest_choice(game_state, player, targets, source_card=None,
+                               prompt="Rob Lucci: Choose opponent's cost 5 or less to rest")
+
+    result = optional_don_return(game_state, player, 1, source_card=card, post_callback=_lucci_rest_cb)
     if not result:
         return True  # Pending choice
     return True
@@ -3246,9 +3313,16 @@ def op03_072_jet_gatling(game_state, player, card):
 @register_effect("OP03-073", "on_play", "[Main] DON!! -1: Draw 1 card")
 def op03_073_hull_dismantler(game_state, player, card):
     """Return 1 DON to draw 1 card."""
-    result = optional_don_return(game_state, player, 1, source_card=card,
-                                 after_callback="op03_073_draw",
-                                 after_callback_data={"source_card_id": card.id})
+    def _hull_dismantler_cb():
+        draw_cards(player, 1)
+        game_state._log(f"  Hull Dismantler Slash: Draw 1")
+        opponent = get_opponent(game_state, player)
+        ko_targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 2]
+        if ko_targets:
+            create_ko_choice(game_state, player, ko_targets, source_card=None,
+                             prompt="Hull Dismantler Slash: Choose opponent's cost 2 or less Character to K.O.")
+
+    result = optional_don_return(game_state, player, 1, source_card=card, post_callback=_hull_dismantler_cb)
     if not result:
         return True  # Pending choice
     return True

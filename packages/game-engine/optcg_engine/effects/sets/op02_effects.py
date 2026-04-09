@@ -190,9 +190,16 @@ def op02_071_magellan_leader(game_state, player, card):
 @register_effect("OP02-072", "on_attack", "[When Attacking] DON -4: K.O. cost 3 or less, +1000 power")
 def op02_072_zephyr_leader(game_state, player, card):
     """When Attacking, DON -4: K.O. opponent's cost 3 or less Character, Leader +1000 power."""
-    result = optional_don_return(game_state, player, 4, source_card=card,
-                                 after_callback="op02_072_zephyr_effect",
-                                 after_callback_data={"source_card_id": card.id})
+    def _zephyr_cb():
+        card.power_modifier = getattr(card, 'power_modifier', 0) + 1000
+        game_state._log(f"  {card.name} gained +1000 power")
+        opponent = get_opponent(game_state, player)
+        targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 3]
+        if targets:
+            create_ko_choice(game_state, player, targets, source_card=card,
+                             prompt="Choose opponent's cost 3 or less Character to KO")
+
+    result = optional_don_return(game_state, player, 4, source_card=card, post_callback=_zephyr_cb)
     if not result:
         return True  # Pending choice
     return True  # Can't pay, fizzled
@@ -1348,9 +1355,14 @@ def op02_074_saldeath(game_state, player, card):
 @register_effect("OP02-076", "on_play", "[On Play] DON!! -1: K.O. opponent's cost 1 or less")
 def op02_076_shiryu(game_state, player, card):
     """On Play: Return 1 DON to DON deck to K.O. opponent's cost 1 or less Character."""
-    result = optional_don_return(game_state, player, 1, source_card=card,
-                                 after_callback="op02_076_shiryu_effect",
-                                 after_callback_data={"source_card_id": card.id})
+    def _shiryu_ko_cb():
+        opponent = get_opponent(game_state, player)
+        targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 1]
+        if targets:
+            create_ko_choice(game_state, player, targets, source_card=None,
+                             prompt="Choose opponent's cost 1 or less to KO")
+
+    result = optional_don_return(game_state, player, 1, source_card=card, post_callback=_shiryu_ko_cb)
     if not result:
         return True  # Pending choice
     return True  # Can't pay, fizzled
@@ -1360,9 +1372,17 @@ def op02_076_shiryu(game_state, player, card):
 @register_effect("OP02-078", "on_play", "[On Play] DON!! -2: Play SMILE cost 3 or less from hand")
 def op02_078_daifugo(game_state, player, card):
     """On Play: Return 2 DON to play a SMILE cost 3 or less from hand."""
-    result = optional_don_return(game_state, player, 2, source_card=card,
-                                 after_callback="op02_078_daifugo_effect",
-                                 after_callback_data={"source_card_id": card.id})
+    def _daifugo_cb():
+        playable = [c for c in player.hand
+                    if (getattr(c, 'card_type', '') == 'CHARACTER'
+                        and 'SMILE' in (c.card_origin or '')
+                        and (getattr(c, 'cost', 0) or 0) <= 3
+                        and getattr(c, 'name', '') != 'Daifugo')]
+        if playable:
+            create_play_from_hand_choice(game_state, player, playable, source_card=None,
+                                         prompt="Choose SMILE cost 3 or less to play")
+
+    result = optional_don_return(game_state, player, 2, source_card=card, post_callback=_daifugo_cb)
     if not result:
         return True  # Pending choice
     return True  # Can't pay, fizzled
@@ -1372,9 +1392,15 @@ def op02_078_daifugo(game_state, player, card):
 @register_effect("OP02-079", "on_play", "[On Play] DON!! -1: Rest opponent's cost 4 or less")
 def op02_079_bullet(game_state, player, card):
     """On Play: Return 1 DON to rest opponent's cost 4 or less Character."""
-    result = optional_don_return(game_state, player, 1, source_card=card,
-                                 after_callback="op02_079_bullet_effect",
-                                 after_callback_data={"source_card_id": card.id})
+    def _bullet_rest_cb():
+        opponent = get_opponent(game_state, player)
+        targets = [c for c in opponent.cards_in_play
+                   if (getattr(c, 'cost', 0) or 0) <= 4 and not getattr(c, 'is_resting', False)]
+        if targets:
+            create_rest_choice(game_state, player, targets, source_card=None,
+                               prompt="Choose opponent's cost 4 or less to rest")
+
+    result = optional_don_return(game_state, player, 1, source_card=card, post_callback=_bullet_rest_cb)
     if not result:
         return True  # Pending choice
     return True  # Can't pay, fizzled
@@ -1392,9 +1418,12 @@ def op02_081_domino(game_state, player, card):
 @register_effect("OP02-082", "activate", "[Activate: Main] DON!! -8: Gain +792000 power")
 def op02_082_world(game_state, player, card):
     """Activate: Return 8 DON to gain +792000 power."""
-    result = optional_don_return(game_state, player, 8, source_card=card,
-                                 after_callback="op02_082_world_effect",
-                                 after_callback_data={"source_card_id": card.id})
+    def _world_power_cb():
+        card.power_modifier = getattr(card, 'power_modifier', 0) + 792000
+        card._sticky_power_modifier = getattr(card, '_sticky_power_modifier', 0) + 792000
+        game_state._log(f"  {card.name} gained +792000 power")
+
+    result = optional_don_return(game_state, player, 8, source_card=card, post_callback=_world_power_cb)
     if not result:
         return True  # Pending choice
     return True  # Can't pay, fizzled
@@ -1418,9 +1447,13 @@ def op02_083_hannyabal(game_state, player, card):
 @register_effect("OP02-085", "on_play", "[On Play] DON!! -1: Opponent returns 1 DON")
 def op02_085_magellan_play(game_state, player, card):
     """On Play: Return 1 DON to make opponent return 1 DON."""
-    result = optional_don_return(game_state, player, 1, source_card=card,
-                                 after_callback="op02_085_magellan_effect",
-                                 after_callback_data={"source_card_id": card.id})
+    def _magellan_don_cb():
+        opponent = get_opponent(game_state, player)
+        if opponent.don_pool:
+            opponent.don_pool.pop()
+            game_state._log(f"  Opponent returned 1 DON!! to DON deck")
+
+    result = optional_don_return(game_state, player, 1, source_card=card, post_callback=_magellan_don_cb)
     if not result:
         return True  # Pending choice
     return True  # Can't pay, fizzled
@@ -1945,9 +1978,21 @@ def op02_115_garp(game_state, player, card):
 @register_effect("OP02-120", "on_play", "[On Play] DON!! -2: Leader and all Characters gain +1000 until next turn")
 def op02_120_uta(game_state, player, card):
     """On Play: Return 2 DON to give Leader and all Characters +1000 until next turn."""
-    result = optional_don_return(game_state, player, 2, source_card=card,
-                                 after_callback="op02_120_uta_effect",
-                                 after_callback_data={"source_card_id": card.id})
+    def _uta_power_cb():
+        expire_turn = game_state.turn_count + 1
+        if player.leader:
+            player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 1000
+            player.leader._sticky_power_modifier = getattr(player.leader, '_sticky_power_modifier', 0) + 1000
+            player.leader.power_modifier_expires_on_turn = expire_turn
+            player.leader._sticky_power_modifier_expires_on_turn = expire_turn
+        for c in player.cards_in_play:
+            c.power_modifier = getattr(c, 'power_modifier', 0) + 1000
+            c._sticky_power_modifier = getattr(c, '_sticky_power_modifier', 0) + 1000
+            c.power_modifier_expires_on_turn = expire_turn
+            c._sticky_power_modifier_expires_on_turn = expire_turn
+        game_state._log(f"  Leader and all Characters gained +1000 power until next turn")
+
+    result = optional_don_return(game_state, player, 2, source_card=card, post_callback=_uta_power_cb)
     if not result:
         return True  # Pending choice
     return True  # Can't pay, fizzled
@@ -2340,9 +2385,17 @@ def op02_070_new_kama_land(game_state, player, card):
 def op02_089_judgment_of_hell(game_state, player, card):
     """[Counter] DON!! −1: Give up to a total of 2 of your opponent's Leader or
     Characters −3000 power each during this battle."""
-    result = optional_don_return(game_state, player, 1, source_card=card,
-                                 after_callback="op02_089_judgment_effect",
-                                 after_callback_data={"source_card_id": card.id})
+    def _judgment_cb():
+        opponent = get_opponent(game_state, player)
+        targets = ([opponent.leader] if opponent.leader else []) + opponent.cards_in_play
+        if targets:
+            create_power_effect_choice(
+                game_state, player, targets, -3000, source_card=None,
+                prompt="Judgment of Hell: Choose up to 2 opponent Leader/Characters to give -3000 power",
+                min_selections=0, max_selections=2,
+            )
+
+    result = optional_don_return(game_state, player, 1, source_card=card, post_callback=_judgment_cb)
     if not result:
         return True  # Pending choice
     return True  # Can't pay, fizzled
@@ -2352,9 +2405,17 @@ def op02_089_judgment_of_hell(game_state, player, card):
 @register_effect("OP02-090", "on_play", "[Main] DON!! -1: Give up to 1 opponent char -3000 power")
 def op02_090_hydra(game_state, player, card):
     """[Main] DON!! −1: Give up to 1 of your opponent's Characters −3000 power during this turn."""
-    result = optional_don_return(game_state, player, 1, source_card=card,
-                                 after_callback="op02_090_hydra_effect",
-                                 after_callback_data={"source_card_id": card.id})
+    def _hydra_cb():
+        opponent = get_opponent(game_state, player)
+        targets = opponent.cards_in_play[:]
+        if targets:
+            create_power_effect_choice(
+                game_state, player, targets, -3000, source_card=None,
+                prompt="Hydra: Choose up to 1 opponent Character to give -3000 power",
+                min_selections=0, max_selections=1,
+            )
+
+    result = optional_don_return(game_state, player, 1, source_card=card, post_callback=_hydra_cb)
     if not result:
         return True  # Pending choice
     return True  # Can't pay, fizzled
