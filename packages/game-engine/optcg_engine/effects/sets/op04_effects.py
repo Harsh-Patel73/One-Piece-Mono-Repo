@@ -84,6 +84,28 @@ def _rest_one_opponent_active_don(game_state, player):
     return False
 
 
+def _choose_own_don_by_state(game_state, player, state, count, prompt, callback, source_card=None, min_selections=None):
+    from ...game_engine import PendingChoice
+
+    indices = [idx for idx, don in enumerate(getattr(player, 'don_pool', [])) if don == state]
+    if len(indices) < count:
+        return False
+
+    options = [{"id": str(idx), "label": f"DON!! {idx + 1} ({state})"} for idx in indices]
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"don_{state}_{len(indices)}_{count}",
+        choice_type="select_cards",
+        prompt=prompt,
+        options=options,
+        min_selections=count if min_selections is None else min_selections,
+        max_selections=count,
+        source_card_id=source_card.id if source_card else None,
+        source_card_name=source_card.name if source_card else None,
+        callback=callback,
+    )
+    return True
+
+
 def _trash_top_cards(player, count):
     for _ in range(min(count, len(player.deck))):
         player.trash.append(player.deck.pop(0))
@@ -182,42 +204,65 @@ def op04_001_vivi_activate(game_state, player, card):
     """Once Per Turn, Rest 2: Draw 1 card and up to 1 of your Characters gains Rush this turn."""
     if hasattr(card, 'op04_001_used') and card.op04_001_used:
         return False
-    if _rest_active_don(player, 2):
+    targets = list(player.cards_in_play)
+
+    def rush_callback(selected):
+        target_idx = int(selected[0]) if selected else -1
+        if 0 <= target_idx < len(targets):
+            target = targets[target_idx]
+            target.has_rush = True
+            target._temporary_rush_until_turn = game_state.turn_count
+            game_state._log(f"{target.name} gains Rush during this turn")
+
+    def don_callback(selected):
+        chosen = sorted((int(sel) for sel in selected), reverse=True)
+        if len(chosen) != 2:
+            return
+        for idx in chosen:
+            if 0 <= idx < len(player.don_pool) and player.don_pool[idx] == "active":
+                player.don_pool[idx] = "rested"
         draw_cards(player, 1)
-        targets = list(player.cards_in_play)
-
-        def callback(selected):
-            target_idx = int(selected[0]) if selected else -1
-            if 0 <= target_idx < len(targets):
-                target = targets[target_idx]
-                target.has_rush = True
-                target._temporary_rush_until_turn = game_state.turn_count
-                game_state._log(f"{target.name} gains Rush during this turn")
-
         card.op04_001_used = True
         if targets:
-            return create_target_choice(
+            create_target_choice(
                 game_state, player, targets,
                 "Choose up to 1 of your Characters to gain Rush during this turn",
-                source_card=card, min_selections=0, max_selections=1, callback=callback
+                source_card=card, min_selections=0, max_selections=1, callback=rush_callback
             )
-        return True
-    return False
+
+    return _choose_own_don_by_state(
+        game_state, player, "active", 2,
+        "Choose 2 of your active DON!! cards to rest",
+        don_callback, source_card=card
+    )
 
 
 # --- OP04-019: Donquixote Doflamingo (Leader) ---
 @register_effect("OP04-019", "end_of_turn", "[End of Your Turn] Set up to 2 DON active")
 def op04_019_doffy_leader(game_state, player, card):
     """End of Your Turn: Set up to 2 of your DON cards as active."""
-    _set_rested_don_active(player, 2)
-    return True
+    rested_indices = [idx for idx, don in enumerate(player.don_pool) if don == "rested"]
+    if not rested_indices:
+        return True
+
+    def callback(selected):
+        for sel in selected:
+            idx = int(sel)
+            if 0 <= idx < len(player.don_pool) and player.don_pool[idx] == "rested":
+                player.don_pool[idx] = "active"
+
+    return _choose_own_don_by_state(
+        game_state, player, "rested", min(2, len(rested_indices)),
+        "Choose up to 2 of your rested DON!! cards to set as active",
+        callback, source_card=card, min_selections=0
+    )
 
 
 # --- OP04-020: Issho (Leader) ---
 @register_effect("OP04-020", "continuous", "[DON!! x1] [Your Turn] Opponent chars -1 cost")
 def op04_020_issho_continuous(game_state, player, card):
     """DON x1, Your Turn: Give all opponent's Characters -1 cost."""
-    if getattr(card, 'attached_don', 0) >= 1:
+    if game_state.current_player is player and getattr(card, 'attached_don', 0) >= 1:
         opponent = get_opponent(game_state, player)
         for char in opponent.cards_in_play:
             char.cost_modifier = getattr(char, 'cost_modifier', 0) - 1
@@ -355,11 +400,24 @@ def op04_004_karoo(game_state, player, card):
     if not getattr(card, 'is_resting', False):
         card.is_resting = True
         alabasta_chars = [c for c in player.cards_in_play if 'Alabasta' in (c.card_origin or '')]
-        for char in alabasta_chars:
-            if "rested" in player.don_pool:
-                player.don_pool.remove("rested")
-                char.attached_don = getattr(char, 'attached_don', 0) + 1
-        return True
+        max_targets = min(len(alabasta_chars), player.don_pool.count("rested"))
+        if max_targets <= 0:
+            return True
+
+        def callback(selected):
+            for sel in selected:
+                idx = int(sel)
+                if 0 <= idx < len(alabasta_chars) and "rested" in player.don_pool:
+                    player.don_pool.remove("rested")
+                    target = alabasta_chars[idx]
+                    target.attached_don = getattr(target, 'attached_don', 0) + 1
+                    game_state._log(f"{target.name} received 1 rested DON!!")
+
+        return create_target_choice(
+            game_state, player, alabasta_chars,
+            "Choose any number of your Alabasta Characters to give 1 rested DON!! to",
+            source_card=card, min_selections=0, max_selections=max_targets, callback=callback
+        )
     return False
 
 
@@ -378,7 +436,9 @@ def op04_006_koza(game_state, player, card):
     """When Attacking: Leader -5000 to gain +2000 until next turn."""
     if player.leader:
         player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) - 5000
-        card.power_modifier = getattr(card, 'power_modifier', 0) + 2000
+        add_power_modifier(card, 2000)
+        card.power_modifier_expires_on_turn = game_state.turn_count + 1
+        card._sticky_power_modifier_expires_on_turn = game_state.turn_count + 1
         return True
     return False
 
@@ -409,9 +469,10 @@ def op04_008_chaka(game_state, player, card):
                         prompt="Choose up to 1 Character with 0 power or less to K.O."
                     )
 
-            return create_power_reduction_choice(
-                game_state, player, snapshot, -3000, source_card=card,
-                prompt="Choose up to 1 opponent's Character to give -3000 power", callback=callback
+            return create_target_choice(
+                game_state, player, snapshot,
+                "Choose up to 1 opponent's Character to give -3000 power",
+                source_card=card, min_selections=0, max_selections=1, callback=callback
             )
         return True
     return False
@@ -432,11 +493,22 @@ def op04_009_duck_troops(game_state, player, card):
 @register_effect("OP04-010", "on_play", "[On Play] Play Animal Character with 3000 power or less")
 def op04_010_chopper(game_state, player, card):
     """On Play: Play Animal character with 3000 power or less from hand."""
-    for c in list(player.hand):
-        if 'Animal' in (c.card_origin or '') and (getattr(c, 'power', 0) or 0) <= 3000:
-            player.hand.remove(c)
-            player.cards_in_play.append(c)
-            return True
+    targets = [c for c in player.hand if 'Animal' in (c.card_origin or '') and (getattr(c, 'power', 0) or 0) <= 3000]
+    if targets:
+        return create_target_choice(
+            game_state, player, targets,
+            "Choose up to 1 Animal type Character with 3000 power or less to play",
+            source_card=card, min_selections=0, max_selections=1,
+            callback=lambda selected: (
+                None if not selected else (
+                    player.hand.remove(targets[int(selected[0])]),
+                    player.cards_in_play.append(targets[int(selected[0])]),
+                    setattr(targets[int(selected[0])], 'played_turn', game_state.turn_count),
+                    game_state._apply_keywords(targets[int(selected[0])]),
+                    game_state._log(f"{player.name} played {targets[int(selected[0])].name} from hand")
+                )
+            )
+        )
     return True
 
 
@@ -458,10 +530,12 @@ def op04_011_nami(game_state, player, card):
 @register_effect("OP04-012", "continuous", "[Your Turn] Alabasta Characters gain +1000")
 def op04_012_cobra(game_state, player, card):
     """Your Turn: Alabasta characters other than this gain +1000."""
-    for c in player.cards_in_play:
-        if c != card and 'Alabasta' in (c.card_origin or ''):
-            c.power_modifier = getattr(c, 'power_modifier', 0) + 1000
-    return True
+    if game_state.current_player is player:
+        for c in player.cards_in_play:
+            if c != card and 'Alabasta' in (c.card_origin or ''):
+                c.power_modifier = getattr(c, 'power_modifier', 0) + 1000
+        return True
+    return False
 
 
 # --- OP04-013: Pell ---
@@ -496,6 +570,106 @@ def op04_015_zoro(game_state, player, card):
         return create_power_reduction_choice(game_state, player, list(opponent.cards_in_play), -2000, source_card=card,
                                             prompt="Choose opponent's Character to give -2000 power")
     return True
+
+
+# --- OP04-016: Bad Manners Kick Course ---
+@register_effect("OP04-016", "counter", "[Counter] Trash 1: Leader/Character +3000 during battle")
+def op04_016_bad_manners(game_state, player, card):
+    """Counter: Trash 1 card, then up to 1 Leader or Character gains +3000 during this battle."""
+    if not player.hand:
+        return False
+
+    hand_snapshot = list(player.hand)
+    targets = _own_leader_and_characters(player)
+
+    def power_callback(selected):
+        target_idx = int(selected[0]) if selected else -1
+        if 0 <= target_idx < len(targets):
+            target = targets[target_idx]
+            target.power_modifier = getattr(target, 'power_modifier', 0) + 3000
+            target._battle_power_modifier = getattr(target, '_battle_power_modifier', 0) + 3000
+            game_state._log(f"{target.name} gets +3000 power during this battle")
+
+    def discard_callback(selected):
+        idx = int(selected[0]) if selected else -1
+        if 0 <= idx < len(hand_snapshot):
+            discarded = hand_snapshot[idx]
+            if discarded in player.hand:
+                player.hand.remove(discarded)
+                player.trash.append(discarded)
+                game_state._log(f"{player.name} trashed {discarded.name}")
+        if targets:
+            create_target_choice(
+                game_state, player, targets,
+                "Choose up to 1 of your Leader or Characters to gain +3000 power during this battle",
+                source_card=card, min_selections=0, max_selections=1, callback=power_callback
+            )
+
+    return create_hand_discard_choice(
+        game_state, player, hand_snapshot, source_card=card,
+        prompt="Choose 1 card from your hand to trash",
+        callback=discard_callback
+    )
+
+
+# --- OP04-017: Happiness Punch ---
+@register_effect("OP04-017", "counter", "[Counter] Up to 1 gets -2000, then maybe another gets -1000")
+def op04_017_happiness_punch(game_state, player, card):
+    """Counter: Give up to 1 opponent Leader/Character -2000, then if your Leader is active give up to 1 -1000."""
+    targets = _opponent_leader_and_characters(game_state, player)
+    if not targets:
+        return True
+
+    snapshot = list(targets)
+
+    def second_callback(selected):
+        target_idx = int(selected[0]) if selected else -1
+        if 0 <= target_idx < len(snapshot):
+            add_power_modifier(snapshot[target_idx], -1000)
+            game_state._log(f"{snapshot[target_idx].name} gets -1000 power during this turn")
+
+    def first_callback(selected):
+        target_idx = int(selected[0]) if selected else -1
+        if 0 <= target_idx < len(snapshot):
+            add_power_modifier(snapshot[target_idx], -2000)
+            game_state._log(f"{snapshot[target_idx].name} gets -2000 power during this turn")
+        if player.leader and not getattr(player.leader, 'is_resting', False):
+            create_target_choice(
+                game_state, player, snapshot,
+                "Choose up to 1 opponent Leader or Character to give -1000 power during this turn",
+                source_card=card, min_selections=0, max_selections=1, callback=second_callback
+            )
+
+    return create_target_choice(
+        game_state, player, snapshot,
+        "Choose up to 1 opponent Leader or Character to give -2000 power during this turn",
+        source_card=card, min_selections=0, max_selections=1, callback=first_callback
+    )
+
+
+# --- OP04-018: Enchanting Vertigo Dance ---
+@register_effect("OP04-018", "on_play", "[Main] If Alabasta Leader, up to 2 chars get -2000")
+def op04_018_vertigo_dance(game_state, player, card):
+    """Main: If your Leader has Alabasta type, give up to 2 opponent Characters -2000 during this turn."""
+    if not (player.leader and 'Alabasta' in (player.leader.card_origin or '')):
+        return False
+    opponent = get_opponent(game_state, player)
+    targets = list(opponent.cards_in_play)
+    if not targets:
+        return True
+
+    def callback(selected):
+        for sel in selected:
+            idx = int(sel)
+            if 0 <= idx < len(targets):
+                add_power_modifier(targets[idx], -2000)
+                game_state._log(f"{targets[idx].name} gets -2000 power during this turn")
+
+    return create_target_choice(
+        game_state, player, targets,
+        "Choose up to 2 opponent Characters to give -2000 power during this turn",
+        source_card=card, min_selections=0, max_selections=min(2, len(targets)), callback=callback
+    )
 
 
 # --- OP04-021: Viola ---

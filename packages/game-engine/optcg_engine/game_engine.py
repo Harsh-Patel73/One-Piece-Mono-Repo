@@ -582,6 +582,11 @@ class GameState:
                 self.current_player.trash.append(card)
                 card.trash_at_end_of_turn = False
                 self._log(f"{card.name} is sent to trash at end of turn")
+            if getattr(card, 'return_to_hand_eot', False):
+                self.current_player.cards_in_play.remove(card)
+                self.current_player.hand.append(card)
+                card.return_to_hand_eot = False
+                self._log(f"{card.name} returns to hand at end of turn")
 
         # If an end-of-turn effect created a pending_choice, keep it for the player to resolve.
         # Only clear truly stale leftover choices from before end_of_turn effects.

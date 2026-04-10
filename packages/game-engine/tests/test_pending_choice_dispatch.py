@@ -12,6 +12,10 @@ from optcg_engine.effects.effect_registry import filter_by_cost_range, filter_by
 from optcg_engine.effects.sets.op01_effects import op01_003_luffy_leader
 from optcg_engine.effects.sets.op04_effects import (
     op04_001_vivi_activate,
+    op04_004_karoo,
+    op04_006_koza,
+    op04_009_duck_troops,
+    op04_010_chopper,
     op04_011_nami,
     op04_021_viola,
     op04_020_issho_eot,
@@ -25,6 +29,11 @@ from optcg_engine.effects.sets.op04_effects import (
     op04_084_stussy,
     op04_090_luffy_activate,
     op04_110_pound_ko,
+    op04_016_bad_manners,
+    op04_017_happiness_punch,
+    op04_018_vertigo_dance,
+    op04_019_doffy_leader,
+    op04_020_issho_continuous,
     op04_119_rosinante_play,
 )
 from optcg_engine.game_engine import GameState, PendingChoice, Player
@@ -273,12 +282,50 @@ class OP04RegressionTests(unittest.TestCase):
 
         self.assertTrue(op04_001_vivi_activate(self.game, self.player1, self.player1.leader))
         self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0", "1"]))
+        self.assertIsNotNone(self.game.pending_choice)
         self.assertTrue(self.game.resolve_pending_choice(["0"]))
 
         self.assertTrue(target.has_rush)
         self.assertEqual(self.game.turn_count, getattr(target, "_temporary_rush_until_turn", -1))
         self.assertIn(opp_hand, self.player2.hand)
         self.assertEqual(1, len(self.player1.hand))
+
+    def test_op04_004_karoo_prompts_for_alabasta_targets(self) -> None:
+        karoo = make_card("OP04-004", "Karoo", cost=1)
+        a1 = make_card("a1", "Alabasta 1", cost=2)
+        a1.card_origin = "Alabasta"
+        a2 = make_card("a2", "Alabasta 2", cost=2)
+        a2.card_origin = "Alabasta"
+        self.player1.cards_in_play = [karoo, a1, a2]
+        self.player1.don_pool = ["rested", "rested"]
+
+        self.assertTrue(op04_004_karoo(self.game, self.player1, karoo))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+
+        self.assertEqual(1, a1.attached_don)
+        self.assertEqual(0, a2.attached_don)
+        self.assertEqual(["rested"], self.player1.don_pool)
+
+    def test_op04_006_koza_buff_last_until_next_turn(self) -> None:
+        koza = make_card("OP04-006", "Koza", cost=3, power=5000)
+        self.assertTrue(op04_006_koza(self.game, self.player1, koza))
+        self.assertEqual(2000, getattr(koza, "power_modifier", 0))
+        self.assertEqual(self.game.turn_count + 1, getattr(koza, "power_modifier_expires_on_turn", -1))
+
+    def test_op04_010_chopper_prompts_for_animal_play(self) -> None:
+        chopper = make_card("OP04-010", "Chopper", cost=3)
+        animal = make_card("animal", "Animal", cost=2, power=3000)
+        animal.card_origin = "Animal"
+        self.player1.hand = [animal]
+
+        self.assertTrue(op04_010_chopper(self.game, self.player1, chopper))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+
+        self.assertIn(animal, self.player1.cards_in_play)
+        self.assertNotIn(animal, self.player1.hand)
 
     def test_op04_020_issho_sets_own_character_active(self) -> None:
         self.player1.leader.id = "OP04-020"
@@ -359,6 +406,52 @@ class OP04RegressionTests(unittest.TestCase):
         self.assertEqual(["rested", "rested", "rested"], self.player1.don_pool)
         self.assertEqual(["rested", "rested"], self.player2.don_pool)
 
+    def test_op04_016_bad_manners_discards_then_buffs_for_battle(self) -> None:
+        event = make_card("OP04-016", "Bad Manners", card_type="EVENT", cost=0)
+        discard = make_card("discard", "Discard", cost=1)
+        target = make_card("target", "Target", cost=3)
+        self.player1.hand = [discard]
+        self.player1.cards_in_play = [target]
+
+        self.assertTrue(op04_016_bad_manners(self.game, self.player1, event))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["1"]))
+
+        self.assertIn(discard, self.player1.trash)
+        self.assertEqual(3000, getattr(target, "_battle_power_modifier", 0))
+
+    def test_op04_017_happiness_punch_can_chain_second_debuff(self) -> None:
+        event = make_card("OP04-017", "Happiness Punch", card_type="EVENT", cost=0)
+        opp_leader = self.player2.leader
+        opp_char = make_card("opp-char", "Opp Char", cost=3)
+        self.player2.cards_in_play = [opp_char]
+        self.player1.leader.is_resting = False
+
+        self.assertTrue(op04_017_happiness_punch(self.game, self.player1, event))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["1"]))
+
+        self.assertEqual(-2000, getattr(opp_leader, "power_modifier", 0))
+        self.assertEqual(-1000, getattr(opp_char, "power_modifier", 0))
+
+    def test_op04_018_vertigo_dance_can_hit_two_targets(self) -> None:
+        event = make_card("OP04-018", "Vertigo Dance", card_type="EVENT", cost=1)
+        self.player1.leader.card_origin = "Alabasta"
+        c1 = make_card("c1", "C1", cost=2)
+        c2 = make_card("c2", "C2", cost=3)
+        self.player2.cards_in_play = [c1, c2]
+
+        self.assertTrue(op04_018_vertigo_dance(self.game, self.player1, event))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0", "1"]))
+
+        self.assertEqual(-2000, getattr(c1, "power_modifier", 0))
+        self.assertEqual(-2000, getattr(c2, "power_modifier", 0))
+
     def test_op04_042_ipponmatsu_prompts_for_slash_target(self) -> None:
         ipponmatsu = make_card("OP04-042", "Ipponmatsu", cost=2)
         slash = make_card("p1-field-slash", "Slash Guy", cost=3)
@@ -408,6 +501,28 @@ class OP04RegressionTests(unittest.TestCase):
         self.assertIn(draw, self.player1.hand)
         self.assertEqual("p1-hand-bottom", self.player1.deck[-1].id)
 
+    def test_op04_019_doffy_prompts_to_set_don_active(self) -> None:
+        self.player1.don_pool = ["rested", "rested", "active"]
+        self.assertTrue(op04_019_doffy_leader(self.game, self.player1, self.player1.leader))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0", "1"]))
+        self.assertEqual(["active", "active", "active"], self.player1.don_pool)
+
+    def test_op04_020_issho_continuous_only_on_own_turn(self) -> None:
+        self.player1.leader.id = "OP04-020"
+        self.player1.leader.attached_don = 1
+        target = make_card("opp", "Opponent", cost=4)
+        self.player2.cards_in_play = [target]
+
+        self.game.current_player = self.player1
+        self.assertTrue(op04_020_issho_continuous(self.game, self.player1, self.player1.leader))
+        self.assertEqual(-1, getattr(target, "cost_modifier", 0))
+
+        target.cost_modifier = 0
+        self.game.current_player = self.player2
+        self.assertFalse(op04_020_issho_continuous(self.game, self.player1, self.player1.leader))
+        self.assertEqual(0, getattr(target, "cost_modifier", 0))
+
     def test_op04_069_bon_kurei_uses_pending_attack_power(self) -> None:
         bon = make_card("OP04-069", "Bon Kurei", cost=4, power=4000)
         attacker = make_card("opp-attacker", "Attacker", cost=5, power=5000)
@@ -434,6 +549,16 @@ class OP04RegressionTests(unittest.TestCase):
         self.assertTrue(luffy.skip_next_refresh)
         self.assertEqual(0, len(self.player1.trash))
         self.assertEqual(7, len(self.player1.deck))
+
+    def test_op04_009_duck_troops_returns_to_hand_at_end_of_turn(self) -> None:
+        duck = make_card("OP04-009", "Duck Troops", cost=2)
+        self.player1.cards_in_play = [duck]
+        duck.return_to_hand_eot = True
+
+        self.game._end_phase()
+
+        self.assertIn(duck, self.player1.hand)
+        self.assertNotIn(duck, self.player1.cards_in_play)
 
     def test_op04_110_pound_can_add_target_to_bottom_of_life(self) -> None:
         pound = make_card("OP04-110", "Pound", cost=3)
