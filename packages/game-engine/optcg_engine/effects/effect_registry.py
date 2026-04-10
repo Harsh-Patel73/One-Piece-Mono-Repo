@@ -920,7 +920,8 @@ def create_power_effect_choice(game_state: 'GameState', player: 'Player',
 def create_ko_choice(game_state: 'GameState', player: 'Player',
                       targets: List['Card'], source_card: 'Card' = None,
                       prompt: str = None, callback_action: str = None,
-                      callback_data: dict = None, callback: Callable = None) -> bool:
+                      callback_data: dict = None, callback: Callable = None,
+                      min_selections: int = 1, max_selections: int = 1) -> bool:
     """Create a pending choice for KO'ing a target.
 
     Returns True if choice was created.
@@ -946,18 +947,13 @@ def create_ko_choice(game_state: 'GameState', player: 'Player',
         })
 
     def default_callback(selected: List[str]) -> None:
-        target_idx = int(selected[0]) if selected else -1
-        if 0 <= target_idx < len(snapshot):
-            target = snapshot[target_idx]
-            if getattr(target, 'cannot_be_ko_by_effects', False):
-                game_state._log(f"{target.name} cannot be K.O.'d by effects")
-                return
-            for p in [player, opponent]:
-                if target in p.cards_in_play:
-                    p.cards_in_play.remove(target)
-                    p.trash.append(target)
-                    game_state._log(f"{target.name} was KO'd")
-                    break
+        for sel in selected:
+            target_idx = int(sel) if sel is not None else -1
+            if 0 <= target_idx < len(snapshot):
+                target = snapshot[target_idx]
+                result = game_state._attempt_character_ko(target, by_effect=True)
+                if result == "pending":
+                    return
 
     # Use provided callable; fall back to default; fall back to string dispatch if custom action given
     final_callback = callback if callback is not None else (None if callback_action else default_callback)
@@ -974,8 +970,8 @@ def create_ko_choice(game_state: 'GameState', player: 'Player',
         choice_type="select_target",
         prompt=prompt or "Choose a Character to KO",
         options=options,
-        min_selections=1,
-        max_selections=1,
+        min_selections=min_selections,
+        max_selections=max_selections,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
         callback=final_callback,
@@ -1222,6 +1218,7 @@ def create_cost_reduction_choice(game_state: 'GameState', player: 'Player',
                                   targets: List['Card'], cost_reduction: int,
                                   source_card: 'Card' = None,
                                   prompt: str = None,
+                                  min_selections: int = 1,
                                   max_selections: int = 1,
                                   callback: Callable = None) -> bool:
     """Create a pending choice for applying cost reduction to opponent's character.
@@ -1271,7 +1268,7 @@ def create_cost_reduction_choice(game_state: 'GameState', player: 'Player',
         choice_type="select_target",
         prompt=prompt or f"Choose a Character to give {cost_reduction} cost",
         options=options,
-        min_selections=1,
+        min_selections=min_selections,
         max_selections=max_selections,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
@@ -1464,7 +1461,8 @@ def create_rest_choice(game_state: 'GameState', player: 'Player',
 def create_set_active_choice(game_state: 'GameState', player: 'Player',
                               targets: List['Card'], source_card: 'Card' = None,
                               prompt: str = None, callback_action: str = None,
-                              extra_data: dict = None, callback: Callable = None) -> bool:
+                              extra_data: dict = None, callback: Callable = None,
+                              min_selections: int = 1, max_selections: int = 1) -> bool:
     """Create a pending choice for setting a card active.
 
     Returns True if choice was created.
@@ -1486,12 +1484,13 @@ def create_set_active_choice(game_state: 'GameState', player: 'Player',
         })
 
     def default_callback(selected: List[str]) -> None:
-        target_idx = int(selected[0]) if selected else -1
-        if 0 <= target_idx < len(snapshot):
-            target = snapshot[target_idx]
-            target.is_resting = False
-            target.has_attacked = False
-            game_state._log(f"{target.name} was set active")
+        for sel in selected:
+            target_idx = int(sel) if sel is not None else -1
+            if 0 <= target_idx < len(snapshot):
+                target = snapshot[target_idx]
+                target.is_resting = False
+                target.has_attacked = False
+                game_state._log(f"{target.name} was set active")
 
     final_callback = callback if callback is not None else (None if callback_action else default_callback)
 
@@ -1507,8 +1506,8 @@ def create_set_active_choice(game_state: 'GameState', player: 'Player',
         choice_type="select_target",
         prompt=prompt or "Choose a Character to set active",
         options=options,
-        min_selections=1,
-        max_selections=1,
+        min_selections=min_selections,
+        max_selections=max_selections,
         source_card_id=source_card.id if source_card else None,
         source_card_name=source_card.name if source_card else None,
         callback=final_callback,

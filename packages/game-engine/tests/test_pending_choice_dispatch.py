@@ -12,22 +12,62 @@ from optcg_engine.effects.effect_registry import filter_by_cost_range, filter_by
 from optcg_engine.effects.sets.op01_effects import op01_003_luffy_leader
 from optcg_engine.effects.sets.op04_effects import (
     op04_001_vivi_activate,
+    op04_005_kungfu_jugon,
     op04_004_karoo,
     op04_006_koza,
     op04_009_duck_troops,
     op04_010_chopper,
     op04_011_nami,
     op04_021_viola,
+    op04_024_sugar_play,
+    op04_024_sugar_opp_turn,
+    op04_025_giolla,
+    op04_026_senor_pink,
+    op04_029_dellinger,
+    op04_030_trebol_defense,
+    op04_032_baby5,
+    op04_033_machvise,
+    op04_035_spiderweb_counter,
+    op04_035_spiderweb_trigger,
+    op04_037_flapping_thread,
+    op04_038_the_weak_main,
+    op04_038_the_weak_trigger,
     op04_020_issho_eot,
     op04_039_rebecca_activate,
     op04_040_queen_leader,
+    op04_041_apis,
     op04_042_ipponmatsu,
     op04_050_hanger,
     op04_053_page_one,
+    op04_055_plague_rounds,
+    op04_056_red_roc,
+    op04_057_dragon_twister_counter,
+    op04_057_dragon_twister_trigger,
     op04_066_valentine,
     op04_069_bon_kurei,
+    op04_074_colors_trap,
+    op04_074_colors_trap_trigger,
+    op04_075_nez_palm_cannon,
+    op04_075_nez_palm_cannon_trigger,
+    op04_076_weakness_unforgivable,
+    op04_076_weakness_unforgivable_trigger,
+    op04_086_chinjao,
+    op04_093_king_kong_gun,
+    op04_093_king_kong_gun_trigger,
+    op04_094_trueno_bastardo,
+    op04_094_trueno_bastardo_trigger,
+    op04_095_barrier_counter,
+    op04_095_barrier_trigger,
+    op04_096_corrida_coliseum,
+    op04_083_sabo_play,
     op04_084_stussy,
     op04_090_luffy_activate,
+    op04_112_yamato,
+    op04_115_gun_modoki,
+    op04_117_heavenly_fire,
+    op04_117_heavenly_fire_trigger,
+    op04_098_toko,
+    op04_100_bege,
     op04_110_pound_ko,
     op04_016_bad_manners,
     op04_017_happiness_punch,
@@ -36,7 +76,7 @@ from optcg_engine.effects.sets.op04_effects import (
     op04_020_issho_continuous,
     op04_119_rosinante_play,
 )
-from optcg_engine.game_engine import GameState, PendingChoice, Player
+from optcg_engine.game_engine import GamePhase, GameState, PendingChoice, Player
 from optcg_engine.models.cards import Card
 
 
@@ -311,6 +351,8 @@ class OP04RegressionTests(unittest.TestCase):
     def test_op04_006_koza_buff_last_until_next_turn(self) -> None:
         koza = make_card("OP04-006", "Koza", cost=3, power=5000)
         self.assertTrue(op04_006_koza(self.game, self.player1, koza))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
         self.assertEqual(2000, getattr(koza, "power_modifier", 0))
         self.assertEqual(self.game.turn_count + 1, getattr(koza, "power_modifier_expires_on_turn", -1))
 
@@ -342,6 +384,8 @@ class OP04RegressionTests(unittest.TestCase):
         self.assertTrue(op04_020_issho_eot(self.game, self.player1, self.player1.leader))
         self.assertIsNotNone(self.game.pending_choice)
         self.assertEqual(1, len(self.game.pending_choice.options))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIsNotNone(self.game.pending_choice)
         self.assertTrue(self.game.resolve_pending_choice(["0"]))
 
         self.assertFalse(rested_valid.is_resting)
@@ -392,6 +436,9 @@ class OP04RegressionTests(unittest.TestCase):
         self.player1.deck = [strong_char, second]
 
         self.assertTrue(op04_011_nami(self.game, self.player1, nami))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertEqual("p1-deck-strong", self.game.pending_choice.options[0]["card_id"])
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
 
         self.assertEqual(3000, getattr(nami, "power_modifier", 0))
         self.assertEqual(["p1-deck-second", "p1-deck-strong"], [card.id for card in self.player1.deck])
@@ -402,9 +449,66 @@ class OP04RegressionTests(unittest.TestCase):
         self.player2.don_pool = ["active", "rested"]
 
         self.assertTrue(op04_021_viola(self.game, self.player1, viola))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0", "1"]))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
 
         self.assertEqual(["rested", "rested", "rested"], self.player1.don_pool)
         self.assertEqual(["rested", "rested"], self.player2.don_pool)
+
+    def test_declare_attack_triggers_defender_on_opponent_attack_choice(self) -> None:
+        attacker = make_card("attacker", "Attacker", cost=4, power=6000)
+        attacker.played_turn = 0
+        viola = make_card("OP04-021", "Viola", cost=2)
+        self.player1.cards_in_play = [attacker]
+        self.player1.don_pool = ["active"]
+        self.player2.cards_in_play = [viola]
+        self.player2.don_pool = ["active", "active"]
+
+        self.assertTrue(self.game.declare_attack(0, -1))
+        self.assertIsNotNone(self.game.pending_attack)
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertEqual("OP04-021", self.game.pending_choice.source_card_id)
+
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0", "1"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+
+        self.assertEqual("blocker", self.game.awaiting_response)
+        self.assertEqual(["rested"], self.player1.don_pool)
+        self.assertEqual(["rested", "rested"], self.player2.don_pool)
+
+    def test_on_opponent_attack_effects_queue_in_order_and_refresh_blockers(self) -> None:
+        attacker = make_card("attacker", "Attacker", cost=4, power=6000)
+        attacker.played_turn = 0
+        viola = make_card("OP04-021", "Viola", cost=2)
+        mr4 = make_card("OP04-071", "Mr.4", cost=3, power=5000)
+        self.player1.cards_in_play = [attacker]
+        self.player1.don_pool = ["active"]
+        self.player2.cards_in_play = [viola, mr4]
+        self.player2.don_pool = ["active", "active", "active"]
+
+        self.assertTrue(self.game.declare_attack(0, -1))
+        self.assertEqual("OP04-021", self.game.pending_choice.source_card_id)
+
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0", "1"]))
+        self.assertTrue(self.game.resolve_pending_choice([]))
+
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertEqual("OP04-071", self.game.pending_choice.source_card_id)
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertTrue(self.game.resolve_pending_choice(["2"]))
+
+        self.assertEqual("blocker", self.game.awaiting_response)
+        self.assertTrue(mr4.has_blocker)
+        self.assertEqual(
+            ["Mr.4"],
+            [entry["name"] for entry in self.game.pending_attack["available_blockers"]],
+        )
 
     def test_op04_016_bad_manners_discards_then_buffs_for_battle(self) -> None:
         event = make_card("OP04-016", "Bad Manners", card_type="EVENT", cost=0)
@@ -532,6 +636,8 @@ class OP04RegressionTests(unittest.TestCase):
         self.player1.don_deck = []
 
         self.assertTrue(op04_069_bon_kurei(self.game, self.player1, bon))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
 
         self.assertEqual(3000, getattr(bon, "power_modifier", 0))
         self.assertEqual(self.game.turn_count, getattr(bon, "power_modifier_expires_on_turn", -1))
@@ -575,6 +681,300 @@ class OP04RegressionTests(unittest.TestCase):
 
         self.assertNotIn(target, self.player2.cards_in_play)
         self.assertEqual(["opp-target", "opp-life-top"], [card.id for card in self.player2.life_cards])
+
+    def test_op04_005_second_jugon_updates_both_blockers_when_played(self) -> None:
+        first = make_card("OP04-005", "Kung Fu Jugon", cost=3)
+        second = make_card("OP04-005", "Kung Fu Jugon", cost=3)
+        self.player1.cards_in_play = [first]
+        self.player1.hand = [second]
+        op04_005_kungfu_jugon(self.game, self.player1, first)
+
+        self.game.pending_choice = PendingChoice(
+            choice_id="play-jugon",
+            choice_type="select_target",
+            prompt="Play Jugon",
+            callback_action="play_from_hand",
+            callback_data={"player_index": 0, "target_cards": [{"id": second.id}], "rest_on_play": False},
+        )
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+
+        self.assertTrue(first.has_blocker)
+        self.assertTrue(second.has_blocker)
+
+    def test_op04_009_duck_troops_prompts_for_leader_cost_and_returns_active(self) -> None:
+        duck = make_card("OP04-009", "Duck Troops", cost=2)
+        self.player1.cards_in_play = [duck]
+
+        self.assertTrue(op04_009_duck_troops(self.game, self.player1, duck))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertTrue(getattr(duck, "return_to_hand_eot", False))
+
+        duck.is_resting = True
+        self.game._end_phase()
+
+        self.assertIn(duck, self.player1.hand)
+        self.assertFalse(duck.is_resting)
+
+    def test_op04_024_sugar_only_offers_active_targets_and_only_rests_self_if_used(self) -> None:
+        sugar = make_card("OP04-024", "Sugar", cost=2)
+        self.player1.leader.card_origin = "Donquixote Pirates"
+        active_target = make_card("opp-active", "Opp Active", cost=4)
+        rested_target = make_card("opp-rested", "Opp Rested", cost=4)
+        rested_target.is_resting = True
+        self.player2.cards_in_play = [active_target, rested_target]
+
+        self.assertTrue(op04_024_sugar_play(self.game, self.player1, sugar))
+        self.assertEqual(1, len(self.game.pending_choice.options))
+        self.assertEqual("opp-active", self.game.pending_choice.options[0]["card_id"])
+        self.assertTrue(self.game.resolve_pending_choice([]))
+
+        self.assertTrue(op04_024_sugar_opp_turn(self.game, self.player1, sugar))
+        self.assertEqual(1, len(self.game.pending_choice.options))
+        self.assertTrue(self.game.resolve_pending_choice([]))
+        self.assertFalse(sugar.is_resting)
+
+        sugar.op04_024_used = False
+        self.assertTrue(op04_024_sugar_opp_turn(self.game, self.player1, sugar))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(sugar.is_resting)
+        self.assertTrue(active_target.is_resting)
+
+    def test_op04_025_giolla_prompts_for_don_then_target(self) -> None:
+        giolla = make_card("OP04-025", "Giolla", cost=3)
+        target = make_card("opp-active", "Opp Active", cost=4)
+        self.player1.don_pool = ["active", "active", "rested"]
+        self.player2.cards_in_play = [target]
+
+        self.assertTrue(op04_025_giolla(self.game, self.player1, giolla))
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0", "1"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+
+        self.assertEqual(["rested", "rested", "rested"], self.player1.don_pool)
+        self.assertTrue(target.is_resting)
+
+    def test_op04_026_senor_pink_filters_rested_targets_and_prompts_eot_don(self) -> None:
+        pink = make_card("OP04-026", "Senor Pink", cost=4)
+        active_target = make_card("opp-active", "Opp Active", cost=4)
+        rested_target = make_card("opp-rested", "Opp Rested", cost=4)
+        rested_target.is_resting = True
+        self.player1.leader.card_origin = "Donquixote Pirates"
+        self.player1.don_pool = ["active", "rested"]
+        self.player2.cards_in_play = [active_target, rested_target]
+
+        self.assertTrue(op04_026_senor_pink(self.game, self.player1, pink))
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(1, len(self.game.pending_choice.options))
+        self.assertEqual("opp-active", self.game.pending_choice.options[0]["card_id"])
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+
+        self.game._end_phase()
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["1"]))
+        self.assertEqual(["rested", "active"], self.player1.don_pool)
+
+    def test_op04_030_trebol_defense_prompts_for_don_then_target(self) -> None:
+        trebol = make_card("OP04-030", "Trebol", cost=4)
+        target = make_card("opp-active", "Opp Active", cost=4)
+        self.player1.don_pool = ["active", "active"]
+        self.player2.cards_in_play = [target]
+
+        self.assertTrue(op04_030_trebol_defense(self.game, self.player1, trebol))
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0", "1"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+
+        self.assertEqual(["rested", "rested"], self.player1.don_pool)
+        self.assertTrue(target.is_resting)
+
+    def test_op04_032_baby5_prompts_for_specific_don_after_trashing(self) -> None:
+        baby5 = make_card("OP04-032", "Baby 5", cost=3)
+        self.player1.cards_in_play = [baby5]
+        self.player1.don_pool = ["rested", "active", "rested"]
+        self.game.phase = GamePhase.END
+
+        self.assertTrue(op04_032_baby5(self.game, self.player1, baby5))
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+
+        self.assertIn(baby5, self.player1.trash)
+        self.assertEqual(["active", "active", "rested"], self.player1.don_pool)
+
+    def test_op04_033_machvise_filters_rested_targets(self) -> None:
+        machvise = make_card("OP04-033", "Machvise", cost=4)
+        active_target = make_card("opp-active", "Opp Active", cost=5)
+        rested_target = make_card("opp-rested", "Opp Rested", cost=5)
+        rested_target.is_resting = True
+        self.player1.leader.card_origin = "Donquixote Pirates"
+        self.player2.cards_in_play = [active_target, rested_target]
+
+        self.assertTrue(op04_033_machvise(self.game, self.player1, machvise))
+        self.assertEqual(1, len(self.game.pending_choice.options))
+        self.assertEqual("opp-active", self.game.pending_choice.options[0]["card_id"])
+
+    def test_op04_035_spiderweb_counter_and_trigger_prompt_for_set_active(self) -> None:
+        event = make_card("OP04-035", "Spiderweb", card_type="EVENT", cost=1)
+        rested_char = make_card("rested-char", "Rested Char", cost=3)
+        self.player1.leader.is_resting = True
+        rested_char.is_resting = True
+        self.player1.cards_in_play = [rested_char]
+
+        self.assertTrue(op04_035_spiderweb_trigger(self.game, self.player1, event))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(2000, getattr(self.player1.leader, "power_modifier", 0))
+
+        rested_char.is_resting = True
+        self.assertTrue(op04_035_spiderweb_counter(self.game, self.player1, event))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(4000, getattr(self.player1.leader, "_battle_power_modifier", 0))
+        self.assertFalse(rested_char.is_resting)
+
+    def test_op04_038_trigger_sets_only_selected_rested_don_active(self) -> None:
+        event = make_card("OP04-038", "The Weak Do Not Have the Right to Choose How They Die!!!", card_type="EVENT", cost=5)
+        self.player1.don_pool = ["rested", "rested", "active"]
+
+        self.assertTrue(op04_038_the_weak_trigger(self.game, self.player1, event))
+        self.assertTrue(self.game.resolve_pending_choice(["1"]))
+
+        self.assertEqual(["rested", "active", "active"], self.player1.don_pool)
+
+    def test_op04_055_plague_rounds_trashes_ice_oni_then_bottom_decks_and_plays_from_trash(self) -> None:
+        event = make_card("OP04-055", "Plague Rounds", card_type="EVENT", cost=2)
+        ice_oni = make_card("OP04-047", "Ice Oni", cost=2)
+        filler = make_card("filler", "Filler", cost=3)
+        target = make_card("target", "Target", cost=4)
+        self.player1.hand = [ice_oni, filler]
+        self.player2.cards_in_play = [target]
+
+        self.assertTrue(op04_055_plague_rounds(self.game, self.player1, event))
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+
+        self.assertNotIn(target, self.player2.cards_in_play)
+        self.assertIn(target, self.player2.deck)
+        self.assertIn(ice_oni, self.player1.cards_in_play)
+        self.assertNotIn(ice_oni, self.player1.trash)
+
+    def test_op04_056_and_057_event_followups_prompt_for_targets(self) -> None:
+        red_roc = make_card("OP04-056", "Gum-Gum Red Roc", card_type="EVENT", cost=6)
+        demolition = make_card("OP04-057", "Dragon Twister Demolition Breath", card_type="EVENT", cost=2)
+        low_char = make_card("low-char", "Low Char", cost=1)
+        big_char = make_card("big-char", "Big Char", cost=6)
+        self.player1.cards_in_play = [low_char]
+        self.player2.cards_in_play = [big_char]
+
+        self.assertTrue(op04_056_red_roc(self.game, self.player1, red_roc))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn(low_char, self.player1.deck)
+
+        self.player1.cards_in_play = [make_card("ally", "Ally", cost=3)]
+        self.player2.cards_in_play = [big_char]
+        self.assertTrue(op04_057_dragon_twister_counter(self.game, self.player1, demolition))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(4000, getattr(self.player1.leader, "_battle_power_modifier", 0))
+        self.assertIsNone(self.game.pending_choice)
+
+        self.player1.cards_in_play = [make_card("small", "Small", cost=2)]
+        self.player2.cards_in_play = [big_char]
+        self.assertTrue(op04_057_dragon_twister_trigger(self.game, self.player1, demolition))
+        self.assertTrue(self.game.resolve_pending_choice(["1"]))
+        self.assertIn(big_char, self.player2.hand)
+
+    def test_op04_074_075_and_076_counters_use_prompted_followups(self) -> None:
+        colors_trap = make_card("OP04-074", "Colors Trap", card_type="EVENT", cost=1)
+        nez_palm = make_card("OP04-075", "Nez-Palm Cannon", card_type="EVENT", cost=2)
+        weakness = make_card("OP04-076", "Weakness...Is an Unforgivable Sin.", card_type="EVENT", cost=1)
+        rest_target = make_card("rest-target", "Rest Target", cost=4)
+        self.player1.don_pool = ["active"]
+        self.player2.cards_in_play = [rest_target]
+
+        self.assertTrue(op04_074_colors_trap(self.game, self.player1, colors_trap))
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(rest_target.is_resting)
+
+        self.player1.life_cards = [make_card("life-1", "Life 1", cost=1), make_card("life-2", "Life 2", cost=1)]
+        self.assertTrue(op04_075_nez_palm_cannon(self.game, self.player1, nez_palm))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn("rested", self.player1.don_pool)
+
+        self.player1.don_pool = ["active"]
+        self.assertTrue(op04_076_weakness_unforgivable(self.game, self.player1, weakness))
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(self.game.turn_count, getattr(self.player1.leader, "power_modifier_expires_on_turn", -1))
+
+        self.assertTrue(op04_074_colors_trap_trigger(self.game, self.player1, colors_trap))
+        self.assertIn("active", self.player1.don_pool)
+
+    def test_op04_037_flapping_thread_targets_selected_card_for_turn(self) -> None:
+        event = make_card("OP04-037", "Flapping Thread", card_type="EVENT", cost=1)
+        target = make_card("target", "Target", cost=4)
+        other = make_card("other", "Other", cost=4)
+        self.player1.leader.card_origin = "Donquixote Pirates"
+        self.player1.cards_in_play = [target, other]
+
+        self.assertTrue(op04_037_flapping_thread(self.game, self.player1, event))
+        self.assertTrue(self.game.resolve_pending_choice(["1"]))
+
+        self.assertEqual(2000, getattr(target, "power_modifier", 0))
+        self.assertEqual(self.game.turn_count, getattr(target, "power_modifier_expires_on_turn", -1))
+        self.assertEqual(0, getattr(other, "power_modifier", 0))
+
+    def test_op04_038_the_weak_chains_rest_then_ko(self) -> None:
+        event = make_card("OP04-038", "The Weak Do Not Have the Right to Choose How They Die!!!", card_type="EVENT", cost=3)
+        leader = self.player2.leader
+        target = make_card("opp-char", "Opp Char", cost=6)
+        self.player2.cards_in_play = [target]
+
+        self.assertTrue(op04_038_the_weak_main(self.game, self.player1, event))
+        self.assertEqual(2, len(self.game.pending_choice.options))
+        self.assertTrue(self.game.resolve_pending_choice(["1"]))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+
+        self.assertTrue(target.is_resting)
+        self.assertNotIn(target, self.player2.cards_in_play)
+        self.assertIn(target, self.player2.trash)
+
+    def test_op04_040_queen_prompts_even_when_only_draw_is_available(self) -> None:
+        self.player1.leader.id = "OP04-040"
+        self.player1.leader.attached_don = 1
+        self.player1.hand = [make_card("p1-hand", "Hand Card")]
+        self.player1.life_cards = [make_card("p1-life-1", "Life 1"), make_card("p1-life-2", "Life 2")]
+        self.player1.deck = [make_card("draw-card", "Draw Card")]
+
+        self.assertTrue(op04_040_queen_leader(self.game, self.player1, self.player1.leader))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertEqual(["draw"], [option["id"] for option in self.game.pending_choice.options])
+        self.assertTrue(self.game.resolve_pending_choice(["draw"]))
+        self.assertEqual(2, len(self.player1.hand))
+
+    def test_op04_041_apis_prompts_for_exact_two_discards_even_with_two_cards(self) -> None:
+        apis = make_card("OP04-041", "Apis", cost=2)
+        first = make_card("first", "First", cost=1)
+        second = make_card("second", "Second", cost=2)
+        match = make_card("match", "East Blue Match", cost=1)
+        match.card_origin = "East Blue"
+        self.player1.hand = [first, second]
+        self.player1.deck = [match]
+
+        self.assertTrue(op04_041_apis(self.game, self.player1, apis))
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertEqual(2, self.game.pending_choice.min_selections)
+        self.assertTrue(self.game.resolve_pending_choice(["0", "1"]))
+
+        self.assertIn(first, self.player1.trash)
+        self.assertIn(second, self.player1.trash)
 
     def test_op04_066_valentine_uses_search_choice_flow(self) -> None:
         valentine = make_card("OP04-066", "Miss Valentine", cost=2)
@@ -623,6 +1023,285 @@ class OP04RegressionTests(unittest.TestCase):
         self.assertTrue(rosinante.is_resting)
         self.assertIn(green_five, self.player1.cards_in_play)
         self.assertNotIn(green_five, self.player1.hand)
+
+    def test_op04_018_noop_without_alabasta_leader_still_counts_as_handled(self) -> None:
+        event = make_card("OP04-018", "Vertigo Dance", card_type="EVENT", cost=1)
+        self.player1.leader.card_origin = "Dressrosa"
+
+        self.assertTrue(op04_018_vertigo_dance(self.game, self.player1, event))
+        self.assertIsNone(self.game.pending_choice)
+
+    def test_op04_098_toko_prompts_for_optional_wano_cost(self) -> None:
+        toko = make_card("OP04-098", "Toko", cost=2)
+        wano_one = make_card("wano-1", "Wano 1", cost=1)
+        wano_one.card_origin = "Land of Wano"
+        wano_two = make_card("wano-2", "Wano 2", cost=2)
+        wano_two.card_origin = "Land of Wano"
+        top_life = make_card("deck-life", "Deck Life", cost=1)
+        self.player1.hand = [wano_one, wano_two]
+        self.player1.life_cards = [make_card("life", "Life", cost=1)]
+        self.player1.deck = [top_life]
+
+        self.assertTrue(op04_098_toko(self.game, self.player1, toko))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertEqual("select_mode", self.game.pending_choice.choice_type)
+        self.assertTrue(self.game.resolve_pending_choice(["no"]))
+
+        self.assertIn(wano_one, self.player1.hand)
+        self.assertIn(wano_two, self.player1.hand)
+        self.assertEqual([top_life], self.player1.deck)
+        self.assertEqual(1, len(self.player1.life_cards))
+
+    def test_op04_100_bege_only_lasts_for_current_turn(self) -> None:
+        bege = make_card("OP04-100", 'Capone "Gang" Bege', card_type="EVENT", cost=0)
+        leader = self.player2.leader
+
+        self.assertTrue(op04_100_bege(self.game, self.player1, bege))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+
+        self.assertTrue(leader.cannot_attack)
+        self.assertEqual(self.game.turn_count, getattr(leader, "cannot_attack_until_turn", -1))
+
+        self.game._clear_temporary_effects(self.player2)
+
+        self.assertFalse(leader.cannot_attack)
+
+class OP04EngineRegressionTests(unittest.TestCase):
+    def test_op04_086_chinjao_draws_then_prompts_to_trash_two(self) -> None:
+        chinjao = make_card("OP04-086", "Chinjao", cost=5)
+        chinjao.attached_don = 1
+        keep = make_card("keep", "Keep", cost=1)
+        draw_one = make_card("draw-one", "Draw One", cost=2)
+        draw_two = make_card("draw-two", "Draw Two", cost=3)
+        self.player1.hand = [keep]
+        self.player1.deck = [draw_one, draw_two]
+
+        self.assertTrue(op04_086_chinjao(self.game, self.player1, chinjao))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0", "1"]))
+        self.assertEqual([draw_two], self.player1.hand)
+
+    def test_op04_093_094_and_095_use_trash_threshold_correctly(self) -> None:
+        king_kong = make_card("OP04-093", "Gum-Gum King Kong Gun", card_type="EVENT", cost=3)
+        trueno = make_card("OP04-094", "Trueno Bastardo", card_type="EVENT", cost=4)
+        barrier = make_card("OP04-095", "Barrier!!", card_type="EVENT", cost=1)
+        dressrosa = make_card("dressrosa", "Dressrosa", cost=5, power=6000)
+        dressrosa.card_origin = "Dressrosa"
+        opp_six = make_card("opp-six", "Opp Six", cost=6, power=6000)
+        self.player1.cards_in_play = [dressrosa]
+        self.player2.cards_in_play = [opp_six]
+        self.player1.trash = [make_card(f"trash-{idx}", f"Trash {idx}", cost=1) for idx in range(15)]
+
+        self.assertTrue(op04_093_king_kong_gun(self.game, self.player1, king_kong))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(6000, getattr(dressrosa, "power_modifier", 0))
+        self.assertTrue(dressrosa.has_doubleattack)
+
+        self.assertTrue(op04_094_trueno_bastardo(self.game, self.player1, trueno))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn(opp_six, self.player2.trash)
+
+        self.assertTrue(op04_095_barrier_counter(self.game, self.player1, barrier))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(4000, getattr(self.player1.leader, "_battle_power_modifier", 0))
+
+    def test_op04_093_and_095_triggers_prompt_for_hand_trash(self) -> None:
+        king_kong = make_card("OP04-093", "Gum-Gum King Kong Gun", card_type="EVENT", cost=3)
+        barrier = make_card("OP04-095", "Barrier!!", card_type="EVENT", cost=1)
+        self.player1.hand = [make_card("h1", "H1", cost=1)]
+        self.player1.deck = [make_card("d1", "D1", cost=1), make_card("d2", "D2", cost=1), make_card("d3", "D3", cost=1)]
+
+        self.assertTrue(op04_093_king_kong_gun_trigger(self.game, self.player1, king_kong))
+        self.assertTrue(self.game.resolve_pending_choice(["0", "1"]))
+        self.assertEqual(2, len(self.player1.trash))
+
+        self.player1.hand = [make_card("h2", "H2", cost=1)]
+        self.player1.deck = [make_card("d4", "D4", cost=1), make_card("d5", "D5", cost=1)]
+        self.assertTrue(op04_095_barrier_trigger(self.game, self.player1, barrier))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(3, len(self.player1.trash))
+
+    def test_op04_112_yamato_prompts_before_adding_life(self) -> None:
+        yamato = make_card("OP04-112", "Yamato", cost=9, power=9000)
+        target = make_card("opp-target", "Opp Target", cost=2)
+        life_gain = make_card("life-gain", "Life Gain", cost=1)
+        self.player1.life_cards = [make_card("only-life", "Only Life", cost=1)]
+        self.player2.life_cards = [make_card("opp-life", "Opp Life", cost=1)]
+        self.player2.cards_in_play = [target]
+        self.player1.deck = [life_gain]
+
+        self.assertTrue(op04_112_yamato(self.game, self.player1, yamato))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertEqual(life_gain, self.player1.life_cards[-1])
+
+    def test_op04_115_and_117_life_effects_follow_the_selected_order(self) -> None:
+        gun_modoki = make_card("OP04-115", "Gun Modoki", card_type="EVENT", cost=1)
+        heavenly_fire = make_card("OP04-117", "Heavenly Fire", card_type="EVENT", cost=1)
+        wano = make_card("wano", "Wano Target", cost=3)
+        wano.card_origin = "Land of Wano"
+        opp_target = make_card("opp-target", "Opp Target", cost=3)
+        top_life = make_card("top-life", "Top Life", cost=1)
+        bottom_life = make_card("bottom-life", "Bottom Life", cost=1)
+        self.player1.cards_in_play = [wano]
+        self.player1.life_cards = [bottom_life, top_life]
+        self.player2.cards_in_play = [opp_target]
+
+        self.assertTrue(op04_115_gun_modoki(self.game, self.player1, gun_modoki))
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertTrue(self.game.resolve_pending_choice(["bottom"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn(bottom_life, self.player1.hand)
+        self.assertTrue(wano.has_doubleattack)
+
+        self.assertTrue(op04_117_heavenly_fire(self.game, self.player1, heavenly_fire))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(self.game.resolve_pending_choice(["bottom"]))
+        self.assertEqual(opp_target, self.player2.life_cards[0])
+        self.assertTrue(getattr(opp_target, "is_face_up", False))
+
+    def test_op04_117_trigger_can_take_life_and_put_hand_back(self) -> None:
+        heavenly_fire = make_card("OP04-117", "Heavenly Fire", card_type="EVENT", cost=1)
+        top_life = make_card("top-life", "Top Life", cost=1)
+        bottom_life = make_card("bottom-life", "Bottom Life", cost=1)
+        hand_card = make_card("hand-card", "Hand Card", cost=2)
+        self.player1.life_cards = [bottom_life, top_life]
+        self.player1.hand = [hand_card]
+
+        self.assertTrue(op04_117_heavenly_fire_trigger(self.game, self.player1, heavenly_fire))
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertTrue(self.game.resolve_pending_choice(["top"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+
+        self.assertIn(top_life, self.player1.hand)
+        self.assertEqual(hand_card, self.player1.life_cards[-1])
+
+
+class OP04EngineRegressionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.player1 = make_player("P1", "p1")
+        self.player2 = make_player("P2", "p2")
+        self.game = GameState(self.player1, self.player2)
+        self.player1.hand = []
+        self.player2.hand = []
+        self.player1.cards_in_play = []
+        self.player2.cards_in_play = []
+        self.player1.life_cards = []
+        self.player2.life_cards = []
+        self.player1.deck = []
+        self.player2.deck = []
+        self.player1.don_pool = []
+        self.player2.don_pool = []
+
+    def test_end_phase_prompts_for_deferred_don_activation(self) -> None:
+        self.player1.don_pool = ["rested", "active", "rested"]
+        self.player1.activate_don_eot_count = 2
+
+        self.game._end_phase()
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0", "2"]))
+
+        self.assertEqual(["active", "active", "active"], self.player1.don_pool)
+        self.assertEqual(0, getattr(self.player1, "activate_don_eot_count", 0))
+
+    def test_skip_next_refresh_keeps_character_rested_once(self) -> None:
+        luffy = make_card("OP04-090", "Luffy", cost=8)
+        luffy.is_resting = True
+        luffy.skip_next_refresh = True
+        self.player1.cards_in_play = [luffy]
+
+        self.player1.reset_for_new_turn()
+
+        self.assertTrue(luffy.is_resting)
+        self.assertFalse(getattr(luffy, "skip_next_refresh", False))
+
+    def test_sabo_protection_applies_to_new_character_and_expires(self) -> None:
+        sabo = make_card("OP04-083", "Sabo", cost=5)
+        discard_one = make_card("discard-1", "Discard 1", cost=1)
+        discard_two = make_card("discard-2", "Discard 2", cost=2)
+        new_char = make_card("new-char", "New Character", cost=4)
+        self.player1.cards_in_play = [sabo]
+        self.player1.hand = [discard_one, discard_two]
+
+        self.assertTrue(op04_083_sabo_play(self.game, self.player1, sabo))
+        self.assertTrue(sabo.cannot_be_ko_by_effects)
+
+        self.player1.cards_in_play.append(new_char)
+        self.game._apply_keywords(new_char)
+        self.assertTrue(new_char.cannot_be_ko_by_effects)
+
+        self.game._clear_temporary_effects(self.player1)
+        self.assertTrue(new_char.cannot_be_ko_by_effects)
+
+        self.game.turn_count += 1
+        self.game._clear_temporary_effects(self.player1)
+        self.assertFalse(new_char.cannot_be_ko_by_effects)
+
+    def test_kyros_effect_ko_prompts_for_replacement_and_can_prevent_ko(self) -> None:
+        kyros = make_card("OP04-082", "Kyros", cost=3, power=5000)
+        corrida = make_card("OP04-096", "Corrida Coliseum", card_type="STAGE", cost=1)
+        self.player2.cards_in_play = [kyros, corrida]
+
+        self.assertEqual("pending", self.game._attempt_character_ko(kyros, by_effect=True))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["1"]))
+
+        self.assertIn(kyros, self.player2.cards_in_play)
+        self.assertTrue(corrida.is_resting)
+        self.assertNotIn(kyros, self.player2.trash)
+
+    def test_kyros_decline_or_no_replacement_allows_ko(self) -> None:
+        kyros = make_card("OP04-082", "Kyros", cost=3, power=5000)
+        self.player2.cards_in_play = [kyros]
+        self.player2.leader.is_resting = True
+
+        self.assertEqual("ko", self.game._attempt_character_ko(kyros, by_effect=True))
+        self.assertIn(kyros, self.player2.trash)
+
+    def test_corrida_coliseum_allows_dressrosa_character_to_attack_character_on_play_turn(self) -> None:
+        stage = make_card("OP04-096", "Corrida Coliseum", card_type="STAGE", cost=1)
+        attacker = make_card("dressrosa-attacker", "Dressrosa Attacker", cost=4, power=5000)
+        defender = make_card("defender", "Defender", cost=3, power=1000)
+        attacker.card_origin = "Dressrosa"
+        defender.is_resting = True
+        attacker.played_turn = self.game.turn_count
+        self.player1.leader.card_origin = "Dressrosa"
+        self.player1.cards_in_play = [stage, attacker]
+        self.player2.cards_in_play = [defender]
+
+        self.assertTrue(op04_096_corrida_coliseum(self.game, self.player1, stage))
+        self.assertTrue(self.game.declare_attack(1, 0))
+
+    def test_corrida_coliseum_does_not_let_new_character_attack_leader(self) -> None:
+        stage = make_card("OP04-096", "Corrida Coliseum", card_type="STAGE", cost=1)
+        attacker = make_card("dressrosa-attacker", "Dressrosa Attacker", cost=4, power=5000)
+        attacker.card_origin = "Dressrosa"
+        attacker.played_turn = self.game.turn_count
+        self.player1.leader.card_origin = "Dressrosa"
+        self.player1.cards_in_play = [stage, attacker]
+
+        self.assertTrue(op04_096_corrida_coliseum(self.game, self.player1, stage))
+        self.assertFalse(self.game.declare_attack(1, -1))
+
+    def test_ice_oni_bottom_decks_cost_five_or_less_target_after_battle(self) -> None:
+        attacker = make_card("OP04-047", "Ice Oni", cost=4, power=5000)
+        attacker.ice_oni_effect = True
+        defender = make_card("defender", "Defender", cost=5, power=4000)
+        self.player1.cards_in_play = [attacker]
+        self.player2.cards_in_play = [defender]
+        self.game.pending_attack = {
+            "attacker": attacker,
+            "attacker_player": self.player1,
+            "current_target": defender,
+            "defender_player": self.player2,
+        }
+
+        self.game._finish_attack()
+
+        self.assertNotIn(defender, self.player2.cards_in_play)
+        self.assertEqual([defender], self.player2.deck)
 
 
 if __name__ == "__main__":

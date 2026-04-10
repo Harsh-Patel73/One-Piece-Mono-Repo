@@ -286,7 +286,10 @@ class Player:
     def reset_for_new_turn(self):
         """Reset cards and DON for a new turn (Refresh Phase)."""
         # Unrest leader (unless prevented by an effect)
-        if not getattr(self.leader, 'cannot_unrest', False):
+        if getattr(self.leader, 'skip_next_refresh', False):
+            self.leader.skip_next_refresh = False
+            print(f"{self.leader.name} does not become active during this Refresh Phase")
+        elif not getattr(self.leader, 'cannot_unrest', False):
             self.leader.is_resting = False
         else:
             # Clear the one-time prevention flag after it takes effect
@@ -300,7 +303,10 @@ class Player:
         # Unrest all characters and return attached DON
         for c in self.cards_in_play:
             # Check if this card is prevented from unresting
-            if not getattr(c, 'cannot_unrest', False):
+            if getattr(c, 'skip_next_refresh', False):
+                c.skip_next_refresh = False
+                print(f"{c.name} does not become active during this Refresh Phase")
+            elif not getattr(c, 'cannot_unrest', False):
                 c.is_resting = False
             else:
                 # Clear the one-time prevention flag after it takes effect
@@ -584,9 +590,13 @@ class GameState:
                 self._log(f"{card.name} is sent to trash at end of turn")
             if getattr(card, 'return_to_hand_eot', False):
                 self.current_player.cards_in_play.remove(card)
+                card.is_resting = False
+                card.has_attacked = False
                 self.current_player.hand.append(card)
                 card.return_to_hand_eot = False
                 self._log(f"{card.name} returns to hand at end of turn")
+
+        self._queue_end_of_turn_don_activation_choice()
 
         # If an end-of-turn effect created a pending_choice, keep it for the player to resolve.
         # Only clear truly stale leftover choices from before end_of_turn effects.
@@ -602,6 +612,44 @@ class GameState:
 
         # Hand limit removed - players can have unlimited cards in hand
 
+    def _queue_end_of_turn_don_activation_choice(self) -> bool:
+        """Prompt the current player to set up to N rested DON!! cards as active."""
+        activate_don_eot_count = getattr(self.current_player, 'activate_don_eot_count', 0)
+        if activate_don_eot_count <= 0 or self.pending_choice:
+            return False
+
+        rested_indices = [idx for idx, don in enumerate(self.current_player.don_pool) if don == "rested"]
+        if not rested_indices:
+            self.current_player.activate_don_eot_count = 0
+            return False
+
+        max_selections = min(activate_don_eot_count, len(rested_indices))
+        self.pending_choice = PendingChoice(
+            choice_id=f"eot_don_{self.turn_count}_{len(rested_indices)}",
+            choice_type="select_cards",
+            prompt=f"Choose up to {max_selections} of your rested DON!! cards to set as active",
+            options=[
+                {"id": str(idx), "label": f"DON!! {idx + 1} (rested)"}
+                for idx in rested_indices
+            ],
+            min_selections=0,
+            max_selections=max_selections,
+            callback=self._resolve_end_of_turn_don_activation_choice,
+        )
+        return True
+
+    def _resolve_end_of_turn_don_activation_choice(self, selected: List[str]) -> None:
+        """Resolve an end-of-turn DON!! activation prompt."""
+        activated = 0
+        for sel in selected:
+            idx = int(sel) if sel is not None else -1
+            if 0 <= idx < len(self.current_player.don_pool) and self.current_player.don_pool[idx] == "rested":
+                self.current_player.don_pool[idx] = "active"
+                activated += 1
+        if activated > 0:
+            self._log(f"{self.current_player.name} set {activated} DON!! card(s) as active at end of turn")
+        self.current_player.activate_don_eot_count = 0
+
     def _apply_continuous_effects(self):
         """Apply continuous/passive effects at the start of the Main phase.
 
@@ -616,6 +664,18 @@ class GameState:
             for card in list(player.cards_in_play):
                 if has_hardcoded_effect(card.id, "continuous"):
                     execute_hardcoded_effect(self, player, card, "continuous")
+
+    def _has_active_character_ko_protection(self, player: Player) -> bool:
+        """Return whether the player's Characters are protected from effect K.O. right now."""
+        return getattr(player, 'characters_cannot_be_ko_by_effects_until_turn', -1) >= self.turn_count
+
+    def _apply_character_ko_protection(self, player: Player) -> None:
+        """Apply player-wide temporary effect-K.O. protection to all of a player's Characters."""
+        if not self._has_active_character_ko_protection(player):
+            return
+        for card in player.cards_in_play:
+            if getattr(card, 'card_type', '').upper() == "CHARACTER":
+                card.cannot_be_ko_by_effects = True
 
     def _recalc_continuous_effects(self):
         """Clear power_modifiers and reapply continuous effects mid-turn.
@@ -636,6 +696,8 @@ class GameState:
                 # Reset DON-gated continuous flags so they're re-evaluated
                 if hasattr(card, 'can_attack_active'):
                     card.can_attack_active = False
+                if hasattr(card, 'can_attack_characters_on_play_turn'):
+                    card.can_attack_characters_on_play_turn = False
                 if hasattr(card, 'has_taunt'):
                     card.has_taunt = False
                 if hasattr(card, 'cannot_be_ko_by_strike'):
@@ -646,6 +708,8 @@ class GameState:
                     card.has_banish = getattr(card, '_innate_banish', False)
                 if hasattr(card, 'blocker_disabled'):
                     card.blocker_disabled = False
+                if hasattr(card, 'cannot_be_ko_by_effects'):
+                    card.cannot_be_ko_by_effects = False
                 # Reset conditional Rush (continuous effects re-set if conditions met)
                 if hasattr(card, 'has_rush') and not getattr(card, '_innate_rush', False):
                     card.has_rush = getattr(card, '_temporary_rush_until_turn', -1) >= self.turn_count
@@ -674,6 +738,8 @@ class GameState:
                 if hasattr(card, 'cost_modifier'):
                     card.cost_modifier = 0
         self._apply_continuous_effects()
+        for player in [self.current_player, self.opponent_player]:
+            self._apply_character_ko_protection(player)
 
     def _clear_temporary_effects(self, player: Player):
         """Clear temporary effects that expire at end of turn."""
@@ -722,10 +788,15 @@ class GameState:
                 card.cost_modifier = 0
             if hasattr(card, 'can_attack_active'):
                 card.can_attack_active = False
+            if hasattr(card, 'can_attack_characters_on_play_turn'):
+                card.can_attack_characters_on_play_turn = False
             if hasattr(card, 'has_taunt'):
                 card.has_taunt = False
             if hasattr(card, 'has_banish'):
                 card.has_banish = getattr(card, '_innate_banish', False)
+            if getattr(card, '_temp_doubleattack', False):
+                card.has_doubleattack = False
+                card._temp_doubleattack = False
             if hasattr(card, 'blocker_disabled'):
                 card.blocker_disabled = False
             if hasattr(card, '_temporary_rush_until_turn') and card._temporary_rush_until_turn < self.turn_count:
@@ -733,6 +804,12 @@ class GameState:
             if hasattr(card, '_temporary_blocker_until_turn') and card._temporary_blocker_until_turn < self.turn_count:
                 if not getattr(card, '_innate_blocker', False):
                     card.has_blocker = False
+        protection_expire_turn = getattr(player, 'characters_cannot_be_ko_by_effects_until_turn', -1)
+        if protection_expire_turn >= 0 and self.turn_count >= protection_expire_turn:
+            del player.characters_cannot_be_ko_by_effects_until_turn
+            for card in player.cards_in_play:
+                if hasattr(card, 'cannot_be_ko_by_effects'):
+                    card.cannot_be_ko_by_effects = False
         # Clear cost_modifier on hand cards (e.g. Crocodile -1 cost for blue events)
         for card in player.hand:
             if hasattr(card, 'cost_modifier'):
@@ -793,27 +870,152 @@ class GameState:
 
     def _apply_keywords(self, card: Card):
         """Apply keyword effects from a card's effect text."""
-        if not card.effect:
-            return
+        if card.effect:
+            lines = []
+            for raw in re.sub(r'<br\s*/?>', '\n', card.effect, flags=re.IGNORECASE).splitlines():
+                line = raw.strip()
+                if line:
+                    lines.append(line)
+            for line in lines:
+                if line.startswith('[Rush]'):
+                    card.has_rush = True
+                    card._innate_rush = True
+                elif line.startswith('[Blocker]'):
+                    card.has_blocker = True
+                    card._innate_blocker = True
+                elif line.startswith('[Banish]'):
+                    card.has_banish = True
+                    card._innate_banish = True
+                elif line.startswith('[Double Attack]'):
+                    card.has_doubleattack = True
+                    card._innate_doubleattack = True
 
-        lines = []
-        for raw in re.sub(r'<br\s*/?>', '\n', card.effect, flags=re.IGNORECASE).splitlines():
-            line = raw.strip()
-            if line:
-                lines.append(line)
-        for line in lines:
-            if line.startswith('[Rush]'):
-                card.has_rush = True
-                card._innate_rush = True
-            elif line.startswith('[Blocker]'):
-                card.has_blocker = True
-                card._innate_blocker = True
-            elif line.startswith('[Banish]'):
-                card.has_banish = True
-                card._innate_banish = True
-            elif line.startswith('[Double Attack]'):
-                card.has_doubleattack = True
-                card._innate_doubleattack = True
+        for owner, opponent in ((self.player1, self.player2), (self.player2, self.player1)):
+            if card not in owner.cards_in_play or getattr(card, 'card_type', '').upper() != "CHARACTER":
+                continue
+            if self._has_active_character_ko_protection(owner):
+                card.cannot_be_ko_by_effects = True
+                break
+            if self.current_player is opponent:
+                for protector in owner.cards_in_play:
+                    if protector is card or protector.id != "OP04-119":
+                        continue
+                    if getattr(protector, 'is_resting', False) and not getattr(card, 'is_resting', False) and (getattr(card, 'cost', 0) or 0) == 5:
+                        card.cannot_be_ko_by_effects = True
+                        break
+            break
+
+    def _find_card_owner(self, target: Card) -> Optional[Player]:
+        """Return the player who currently controls an in-play card."""
+        for participant in (self.player1, self.player2):
+            if target in participant.cards_in_play:
+                return participant
+        return None
+
+    def _complete_character_ko(
+        self,
+        owner: Player,
+        target: Card,
+        *,
+        log_message: Optional[str] = None,
+        on_ko: Optional[Callable[[], None]] = None,
+    ) -> bool:
+        """Move a Character from the field to trash and run any follow-up callback."""
+        if target not in owner.cards_in_play:
+            return False
+        owner.cards_in_play.remove(target)
+        owner.trash.append(target)
+        self._log(log_message or f"{target.name} was KO'd")
+        if on_ko:
+            on_ko()
+        return True
+
+    def _queue_kyros_ko_prevention(
+        self,
+        owner: Player,
+        target: Card,
+        *,
+        on_decline: Callable[[], None],
+        on_prevent: Optional[Callable[[], None]] = None,
+    ) -> bool:
+        """Prompt for Kyros's replacement effect when it would be K.O.'d."""
+        from .effects.effect_registry import create_target_choice
+
+        protectors: List[Card] = []
+        if owner.leader and not getattr(owner.leader, 'is_resting', False):
+            protectors.append(owner.leader)
+        protectors.extend(
+            card for card in owner.cards_in_play
+            if getattr(card, 'name', '') == 'Corrida Coliseum' and not getattr(card, 'is_resting', False)
+        )
+        if not protectors:
+            return False
+
+        snapshot = list(protectors)
+
+        def callback(selected: List[str]) -> None:
+            if not selected:
+                on_decline()
+                return
+            idx = int(selected[0]) if selected else -1
+            if not (0 <= idx < len(snapshot)):
+                on_decline()
+                return
+            protector = snapshot[idx]
+            if protector is owner.leader:
+                if getattr(owner.leader, 'is_resting', False):
+                    on_decline()
+                    return
+                owner.leader.is_resting = True
+                self._log(f"{owner.leader.name} was rested instead of {target.name} being K.O.'d")
+            else:
+                if protector not in owner.cards_in_play or getattr(protector, 'is_resting', False):
+                    on_decline()
+                    return
+                protector.is_resting = True
+                self._log(f"{protector.name} was rested instead of {target.name} being K.O.'d")
+            self._recalc_continuous_effects()
+            if on_prevent:
+                on_prevent()
+
+        return create_target_choice(
+            self,
+            owner,
+            snapshot,
+            "Choose your Leader or Corrida Coliseum to rest instead, or skip to let Kyros be K.O.'d",
+            source_card=target,
+            min_selections=0,
+            max_selections=1,
+            callback=callback,
+        )
+
+    def _attempt_character_ko(
+        self,
+        target: Card,
+        *,
+        by_effect: bool,
+        log_message: Optional[str] = None,
+        on_ko: Optional[Callable[[], None]] = None,
+        on_prevent: Optional[Callable[[], None]] = None,
+    ) -> str:
+        """Attempt to K.O. a Character, handling protections and Kyros's replacement effect."""
+        owner = self._find_card_owner(target)
+        if owner is None:
+            return "missing"
+        if by_effect and getattr(target, 'cannot_be_ko_by_effects', False):
+            self._log(f"{target.name} cannot be K.O.'d by effects")
+            return "prevented"
+        if target.id == "OP04-082":
+            queued = self._queue_kyros_ko_prevention(
+                owner,
+                target,
+                on_decline=lambda: self._complete_character_ko(owner, target, log_message=log_message, on_ko=on_ko),
+                on_prevent=on_prevent,
+            )
+            if queued:
+                return "pending"
+        self._complete_character_ko(owner, target, log_message=log_message, on_ko=on_ko)
+        return "ko"
 
     def _trigger_on_play_effects(self, card: Card):
         """Trigger On Play effects for a card using the effect system."""
@@ -992,7 +1194,8 @@ class GameState:
         if attacker_index >= 0:
             played_turn = getattr(attacker, 'played_turn', 0)
             has_rush = getattr(attacker, 'has_rush', False)
-            if played_turn == self.turn_count and not has_rush:
+            can_attack_chars_on_play_turn = getattr(attacker, 'can_attack_characters_on_play_turn', False)
+            if played_turn == self.turn_count and not has_rush and (target_index == -1 or not can_attack_chars_on_play_turn):
                 self._log(f"{attacker.name} was just played and doesn't have Rush.")
                 return False
 
@@ -1027,6 +1230,113 @@ class GameState:
         self.phase = GamePhase.BLOCKER_STEP
         self.awaiting_response = "blocker"
         return True
+
+    def _queue_on_opponent_attack_effects(self, attacker_player: Player, defender_player: Player, attacker: Card, defender: Card) -> None:
+        """Queue and resolve the defending side's on_opponent_attack effects in order."""
+        from .effects.effect_registry import has_hardcoded_effect
+
+        hardcoded_sources = []
+        if defender_player.leader and has_hardcoded_effect(defender_player.leader.id, 'on_opponent_attack'):
+            hardcoded_sources.append((defender_player, defender_player.leader))
+        for card in list(defender_player.cards_in_play):
+            if has_hardcoded_effect(card.id, 'on_opponent_attack'):
+                hardcoded_sources.append((defender_player, card))
+
+        self._queued_on_opponent_attack_sources = hardcoded_sources
+        self._pending_on_opponent_attack_parsed = True
+        self._advance_on_opponent_attack_effects(
+            attacker_player=attacker_player,
+            defender_player=defender_player,
+            attacker=attacker,
+            defender=defender,
+        )
+
+    def _advance_on_opponent_attack_effects(
+        self,
+        *,
+        attacker_player: Optional[Player] = None,
+        defender_player: Optional[Player] = None,
+        attacker: Optional[Card] = None,
+        defender: Optional[Card] = None,
+    ) -> None:
+        """Continue resolving queued on_opponent_attack effects until one needs input or blocker step begins."""
+        attack = self.pending_attack or {}
+        attacker_player = attacker_player or attack.get('attacker_player')
+        defender_player = defender_player or attack.get('defender_player')
+        attacker = attacker or attack.get('attacker')
+        defender = defender or attack.get('current_target')
+
+        if not attacker_player or not defender_player or not attacker or not defender:
+            self.phase = GamePhase.BLOCKER_STEP
+            self.awaiting_response = "blocker"
+            return
+
+        from .effects.effect_registry import execute_hardcoded_effect
+        effect_manager = get_effect_manager()
+
+        while not self.pending_choice:
+            queued_sources = getattr(self, '_queued_on_opponent_attack_sources', [])
+            if queued_sources:
+                owner, source_card = queued_sources.pop(0)
+                execute_hardcoded_effect(self, owner, source_card, 'on_opponent_attack')
+                continue
+
+            if getattr(self, '_pending_on_opponent_attack_parsed', False):
+                self._pending_on_opponent_attack_parsed = False
+                parsed_results = effect_manager.on_opponent_attack_parsed_only(
+                    self,
+                    attacker_player,
+                    defender_player,
+                    attacker,
+                    defender,
+                )
+                for result in parsed_results:
+                    if result.success and result.message:
+                        self._log(f"  [ON OPPONENT'S ATTACK] {result.message}")
+                continue
+
+            break
+
+        if not self.pending_choice:
+            self._refresh_pending_attack_response_windows()
+            self.phase = GamePhase.BLOCKER_STEP
+            self.awaiting_response = "blocker"
+
+    def _refresh_pending_attack_response_windows(self) -> None:
+        """Refresh blocker/counter options after pre-blocker combat effects resolve."""
+        if not self.pending_attack:
+            return
+
+        attacker = self.pending_attack.get('attacker')
+        defender_player = self.pending_attack.get('defender_player')
+        if attacker is not None:
+            don = self.card_don_assignments.get(attacker, getattr(attacker, 'attached_don', 0))
+            self.pending_attack['attacker_power'] = (
+                (attacker.power or 0) + don * 1000 + getattr(attacker, 'power_modifier', 0)
+            )
+
+        if defender_player is None:
+            return
+
+        available_blockers = defender_player.get_available_blockers()
+        bpm = getattr(self, 'blocker_power_minimum', 0)
+        if bpm:
+            available_blockers = [
+                (i, b) for i, b in available_blockers
+                if (b.power or 0) + getattr(b, 'power_modifier', 0) > bpm - 1
+            ]
+        bcl = getattr(self, 'blocker_cost_limit', None)
+        if bcl is not None:
+            available_blockers = [
+                (i, b) for i, b in available_blockers
+                if (getattr(b, 'cost', 0) or 0) > bcl
+            ]
+
+        self.pending_attack['available_blockers'] = [
+            {'index': i, 'name': b.name, 'power': (b.power or 0) + getattr(b, 'power_modifier', 0)}
+            for i, b in available_blockers
+        ]
+        self.pending_attack['available_counters'] = self._get_available_counters(defender_player)
 
     def respond_blocker(self, blocker_index: Optional[int]) -> bool:
         """Respond with a blocker or pass. Used by socket handlers.
@@ -1330,11 +1640,11 @@ class GameState:
             return
 
         # Validate attacker can attack
+        played_this_turn_without_rush = False
         if attacker.card_type == 'CHARACTER':
             if not getattr(attacker, 'has_rush', False):
                 if getattr(attacker, 'played_turn', None) == self.turn_count:
-                    self._log(f"{attacker.name} can't attack on the turn it was played.")
-                    return
+                    played_this_turn_without_rush = True
 
         if attacker.card_type == 'LEADER' and not self.can_attack_with_leader():
             req = 3 if p is self.player1 else 4
@@ -1361,6 +1671,12 @@ class GameState:
                     return
 
         # Block attacking the leader on the turn the card was played (e.g. OP03-004 Curiel)
+        if played_this_turn_without_rush and (
+            target_index == -1 or not getattr(attacker, 'can_attack_characters_on_play_turn', False)
+        ):
+            self._log(f"{attacker.name} can't attack on the turn it was played.")
+            return
+
         if target_index == -1 and getattr(attacker, 'cannot_attack_leader_on_play_turn', False):
             if getattr(attacker, 'played_turn', None) == self.turn_count:
                 self._log(f"{attacker.name} cannot attack the Leader on the turn it was played.")
@@ -1392,15 +1708,6 @@ class GameState:
             if result.success and result.message:
                 self._log(f"  [WHEN ATTACKING] {result.message}")
         attacker_power = (attacker.power or 0) + don * 1000 + getattr(attacker, 'power_modifier', 0)
-
-        # Check if defending leader has an [On Opponent's Attack] / leader effect
-        # (fires interactively during LEADER_EFFECT_STEP before blockers)
-        from .effects.effect_registry import has_hardcoded_effect as _has_hce
-        leader_has_effect = bool(
-            o.leader and _has_hce(o.leader.id, 'on_opponent_attack')
-        )
-        # Also capture any on_opponent_attack effects for fields cards — used in
-        # the leader_effect step for now to keep things simple.
 
         # Get available blockers for defender
         available_blockers = o.get_available_blockers()
@@ -1443,19 +1750,17 @@ class GameState:
             'available_counters': available_counters,
             'counter_power': 0,
             'counters_used': [],
-            'leader_has_effect': leader_has_effect,
+            'leader_has_effect': False,
         }
 
-        # Enter leader effect step if defender's leader has a combat ability;
-        # otherwise skip straight to the blocker step.
-        if leader_has_effect:
-            self.phase = GamePhase.LEADER_EFFECT_STEP
-            self.awaiting_response = "leader_effect"
-        else:
-            self.phase = GamePhase.BLOCKER_STEP
-            self.awaiting_response = "blocker"
-        # Attack flow pauses here - will continue when respond_leader_effect() or
-        # respond_blocker() is called.
+        self._queue_on_opponent_attack_effects(
+            attacker_player=p,
+            defender_player=o,
+            attacker=attacker,
+            defender=defender,
+        )
+        # Attack flow pauses here. On-opponent-attack prompts resolve first, then
+        # the combat flow continues at the blocker step.
 
     def _get_available_counters(self, player: Player) -> List[Dict]:
         """Get available counter cards for a player."""
@@ -1593,24 +1898,29 @@ class GameState:
                     self._finish_attack()
                     return
 
-                # KO character
-                o.cards_in_play.remove(defender)
-                o.trash.append(defender)
-                self._log(f"{attacker.name} KO's {defender.name}!")
-                if getattr(attacker, 'set_active_on_ko', False) and not getattr(attacker, 'op02_094_used', False):
-                    attacker._set_active_after_battle_resolution = True
-                    attacker.op02_094_used = True
+                def finish_character_ko() -> None:
+                    self._log(f"{attacker.name} KO's {defender.name}!")
+                    if getattr(attacker, 'set_active_on_ko', False) and not getattr(attacker, 'op02_094_used', False):
+                        attacker._set_active_after_battle_resolution = True
+                        attacker.op02_094_used = True
 
-                # Trigger ON_KO effects
-                effect_manager = get_effect_manager()
-                effect_manager.on_ko(self, o, defender)
+                    effect_manager = get_effect_manager()
+                    effect_manager.on_ko(self, o, defender)
 
-                # Trigger on_opponent_ko for the attacking player's leader (e.g. Kaido)
-                from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
-                if p.leader and has_hardcoded_effect(p.leader.id, 'on_opponent_ko'):
-                    execute_hardcoded_effect(self, p, p.leader, 'on_opponent_ko')
+                    from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
+                    if p.leader and has_hardcoded_effect(p.leader.id, 'on_opponent_ko'):
+                        execute_hardcoded_effect(self, p, p.leader, 'on_opponent_ko')
 
-                self._finish_attack()
+                    self._finish_attack()
+
+                ko_result = self._attempt_character_ko(
+                    defender,
+                    by_effect=False,
+                    on_ko=finish_character_ko,
+                    on_prevent=self._finish_attack,
+                )
+                if ko_result in {"ko", "pending", "prevented"}:
+                    return
         else:
             self._log(f"{attacker.name}'s attack is defended (Defense: {total_defense}).")
             self._finish_attack()
@@ -1765,6 +2075,8 @@ class GameState:
         if self.pending_attack:
             attacker = self.pending_attack['attacker']
             attacker_player = self.pending_attack['attacker_player']
+            defender = self.pending_attack['current_target']
+            defender_player = self.pending_attack['defender_player']
             # attacker.is_resting already set at attack declaration
             attacker.has_attacked = True
             if getattr(attacker, '_set_active_after_battle_resolution', False):
@@ -1781,8 +2093,19 @@ class GameState:
                     attacker_player.deck.append(attacker)
                     self._log(f"{attacker.name} returns to bottom of deck after battle")
                 attacker.return_to_bottom_after_battle = False
+            if (
+                getattr(attacker, 'ice_oni_effect', False)
+                and defender in defender_player.cards_in_play
+                and getattr(defender, 'card_type', '').upper() == "CHARACTER"
+                and (getattr(defender, 'cost', 0) or 0) <= 5
+            ):
+                defender_player.cards_in_play.remove(defender)
+                defender_player.deck.append(defender)
+                self._log(f"{defender.name} was placed at the bottom of the deck by {attacker.name}")
 
         self.pending_attack = None
+        self._queued_on_opponent_attack_sources = []
+        self._pending_on_opponent_attack_parsed = False
         self.awaiting_response = None
         for p in [self.player1, self.player2]:
             for c in p.cards_in_play:
@@ -3119,6 +3442,16 @@ class GameState:
             return
 
         self.pending_choice = None
+        queued_attack_effects = getattr(self, '_queued_on_opponent_attack_sources', [])
+        if (
+            self.pending_attack
+            and (queued_attack_effects or getattr(self, '_pending_on_opponent_attack_parsed', False))
+        ):
+            self._advance_on_opponent_attack_effects()
+            if self.pending_choice:
+                return
+        if not self.pending_choice and self.phase == GamePhase.END:
+            self._queue_end_of_turn_don_activation_choice()
         queued = getattr(self, '_queued_counter_effects', [])
         if queued:
             defender_player, counter_card = queued.pop(0)
@@ -3339,12 +3672,7 @@ class GameState:
             for card in participant.cards_in_play[:]:
                 if card.id != target_info["id"]:
                     continue
-                if getattr(card, 'cannot_be_ko_by_effects', False):
-                    self._log(f"{card.name} cannot be K.O.'d by effects")
-                    return
-                participant.cards_in_play.remove(card)
-                participant.trash.append(card)
-                self._log(f"{card.name} was KO'd")
+                self._attempt_character_ko(card, by_effect=True)
                 return
 
     def _handle_trash_own_character_choice(self, selected: List[str], player: Player, data: Dict[str, Any]) -> None:
@@ -3440,6 +3768,8 @@ class GameState:
                 player.trash.remove(card)
                 card.is_resting = rest_on_play
                 player.cards_in_play.append(card)
+                self._apply_keywords(card)
+                self._recalc_continuous_effects()
                 self._log(f"{player.name} played {card.name} from trash")
                 return
 
@@ -3533,6 +3863,7 @@ class GameState:
                 setattr(card, 'played_turn', self.turn_count)
                 player.cards_in_play.append(card)
                 self._apply_keywords(card)
+                self._recalc_continuous_effects()
                 self._log(f"{player.name} played {card.name} from hand")
                 if card.effect and '[On Play]' in card.effect:
                     self._trigger_on_play_effects(card)
