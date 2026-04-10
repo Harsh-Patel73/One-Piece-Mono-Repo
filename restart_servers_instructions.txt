@@ -1,0 +1,85 @@
+OPTCG SERVER RESTART INSTRUCTIONS
+================================
+
+This file is intentionally outside the repo so it is easy to find:
+C:\Users\harsh\OPTCG-Monorepo\restart_servers_instructions.txt
+
+Ports used
+----------
+Frontend: http://127.0.0.1:3000
+Backend:  http://127.0.0.1:8000
+Health:   http://127.0.0.1:8000/health
+
+Open PowerShell in:
+C:\Users\harsh\OPTCG-Monorepo\repo
+
+1. Stop old servers if they are still running
+---------------------------------------------
+Run these commands in PowerShell:
+
+Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force }
+Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force }
+
+2. Start the backend
+--------------------
+Use a new PowerShell window and run:
+
+cd C:\Users\harsh\OPTCG-Monorepo\repo\packages\simulator\backend
+python -m uvicorn main:socket_app --host 127.0.0.1 --port 8000 --reload
+
+If you want to capture logs to the repo root instead, use this version:
+
+cd C:\Users\harsh\OPTCG-Monorepo\repo\packages\simulator\backend
+python -m uvicorn main:socket_app --host 127.0.0.1 --port 8000 --reload *> C:\Users\harsh\OPTCG-Monorepo\repo\backend-dev.log
+
+3. Start the frontend
+---------------------
+Use another new PowerShell window and run:
+
+cd C:\Users\harsh\OPTCG-Monorepo\repo\packages\simulator\frontend
+npm run dev -- --host 127.0.0.1 --port 3000
+
+If you want to capture logs to the repo root instead, use this version:
+
+cd C:\Users\harsh\OPTCG-Monorepo\repo\packages\simulator\frontend
+npm run dev -- --host 127.0.0.1 --port 3000 *> C:\Users\harsh\OPTCG-Monorepo\repo\frontend-dev.log
+
+4. Verify both servers are up
+-----------------------------
+Backend health:
+
+Invoke-WebRequest http://127.0.0.1:8000/health | Select-Object -ExpandProperty Content
+
+Frontend check:
+
+Invoke-WebRequest http://127.0.0.1:3000 | Select-Object -ExpandProperty StatusCode
+
+Expected result:
+- Backend health returns JSON with "status": "healthy"
+- Frontend returns status code 200
+
+5. If one of them does not start
+--------------------------------
+Common checks:
+- Make sure you opened separate PowerShell windows for backend and frontend.
+- Make sure the frontend command is run from:
+  C:\Users\harsh\OPTCG-Monorepo\repo\packages\simulator\frontend
+- Make sure the backend command is run from:
+  C:\Users\harsh\OPTCG-Monorepo\repo\packages\simulator\backend
+- If port 3000 or 8000 is already busy, run the stop commands again.
+- If the frontend fails immediately, run:
+  npm install
+  from the frontend folder.
+- If the backend fails on imports, run:
+  pip install -r requirements.txt
+  from the backend folder.
+
+6. How to shut them down later
+------------------------------
+In each PowerShell window running a server, press:
+Ctrl+C
+
+If that does not work, use:
+
+Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force }
+Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force }
