@@ -275,6 +275,28 @@ class CardEffectManager:
             if has_hardcoded_effect(card.id, 'ON_OPPONENT_ATTACK'):
                 execute_hardcoded_effect(game_state, defending_player, card, 'ON_OPPONENT_ATTACK')
 
+        results.extend(
+            self.on_opponent_attack_parsed_only(
+                game_state,
+                attacking_player,
+                defending_player,
+                attacker,
+                target,
+            )
+        )
+        return results
+
+    def on_opponent_attack_parsed_only(
+        self,
+        game_state: 'GameState',
+        attacking_player: 'Player',
+        defending_player: 'Player',
+        attacker: 'Card',
+        target: 'Card'
+    ) -> List[EffectResult]:
+        """Resolve only parser-based ON_OPPONENT_ATTACK effects for the defending player."""
+        results = []
+
         # Check parsed effects on leader
         if defending_player.leader:
             effects = get_effects_by_timing(defending_player.leader, EffectTiming.ON_OPPONENT_ATTACK)
