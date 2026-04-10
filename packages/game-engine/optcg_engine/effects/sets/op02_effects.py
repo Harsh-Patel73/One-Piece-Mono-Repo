@@ -5,7 +5,7 @@ Hardcoded effects for OP02 cards.
 import random
 import re
 
-from ..hardcoded import (
+from ..effect_registry import (
     add_don_from_deck, create_add_from_trash_choice, create_bottom_deck_choice, create_cost_reduction_choice,
     create_dual_target_choice, create_hand_discard_choice, create_ko_choice, create_multi_target_choice,
     create_play_from_hand_choice, create_power_effect_choice, create_rest_choice,

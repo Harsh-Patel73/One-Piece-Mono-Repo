@@ -50,7 +50,7 @@ from optcg_engine.models.cards import Card  # noqa: E402
 from optcg_engine.models.enums import GamePhase  # noqa: E402
 
 # Importing hardcoded also auto-imports all set effect files (triggers registration)
-from optcg_engine.effects.hardcoded import (  # noqa: E402
+from optcg_engine.effects.effect_registry import (  # noqa: E402
     _hardcoded_effects,
     execute_hardcoded_effect,
 )

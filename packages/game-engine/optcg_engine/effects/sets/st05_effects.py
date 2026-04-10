@@ -4,7 +4,7 @@ Hardcoded effects for ST05 cards.
 
 import random
 
-from ..hardcoded import (
+from ..effect_registry import (
     add_don_from_deck, create_target_choice, draw_cards, get_characters_by_type,
     get_opponent, register_effect,
 )

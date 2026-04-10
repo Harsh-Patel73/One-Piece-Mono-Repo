@@ -2,7 +2,7 @@
 Hardcoded effects for ST01 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_don_assignment_choice, create_power_effect_choice, register_effect,
 )
 

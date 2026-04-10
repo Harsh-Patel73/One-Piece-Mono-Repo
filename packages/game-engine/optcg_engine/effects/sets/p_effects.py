@@ -4,7 +4,7 @@ Hardcoded effects for P cards.
 
 import random
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_power_effect_choice, draw_cards, get_opponent, register_effect,
     reorder_top_cards,
 )

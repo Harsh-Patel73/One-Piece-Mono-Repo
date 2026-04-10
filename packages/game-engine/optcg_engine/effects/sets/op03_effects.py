@@ -2,7 +2,7 @@
 Hardcoded effects for OP03 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     _player_index,
     add_don_from_deck, add_power_modifier, check_leader_type, check_life_count,
     create_add_to_life_choice, create_bottom_deck_choice, create_cost_reduction_choice,
@@ -181,7 +181,7 @@ def op03_077_linlin_leader(game_state, player, card):
 @register_effect("OP03-001", "on_opponent_attack", "[When Attack/Attacked] Trash Events/Stages: +1000 per card")
 def op03_001_ace_leader(game_state, player, card):
     """When attacking or attacked: Trash any number of Event/Stage cards from hand, +1000 power per card."""
-    from ..hardcoded import _player_index
+    from ..effect_registry import _player_index
     from ...game_engine import PendingChoice
     import uuid as _uuid
 
@@ -635,7 +635,7 @@ def op03_012_teach(game_state, player, card):
     """When Attacking: Trash a red 4000+ power Character from hand or field to gain +1000 and draw 1."""
     from ...game_engine import PendingChoice
     import uuid as _uuid
-    from ..hardcoded import _player_index
+    from ..effect_registry import _player_index
 
     # Include both hand and field characters
     hand_targets = [c for c in player.hand
@@ -932,7 +932,7 @@ def op03_027_sham(game_state, player, card):
         hand_buchi = [c for c in player.hand if getattr(c, 'name', '') == 'Buchi']
         has_buchi = any(getattr(c, 'name', '') == 'Buchi' for c in player.cards_in_play)
         if hand_buchi and not has_buchi:
-            from ..hardcoded import create_play_from_hand_choice
+            from ..effect_registry import create_play_from_hand_choice
             return create_play_from_hand_choice(
                 game_state, player, hand_buchi, source_card=card,
                 prompt="Sham: You may play 1 Buchi from your hand"
@@ -1951,7 +1951,7 @@ def op03_081_kalifa(game_state, player, card):
 @register_effect("OP03-083", "on_play", "[On Play] Look at 5, trash up to 2, rest at bottom")
 def op03_083_corgy(game_state, player, card):
     """On Play: Look at top 5 cards, trash up to 2, place rest at bottom in any order."""
-    from ..hardcoded import _player_index
+    from ..effect_registry import _player_index
     from ...game_engine import PendingChoice
     import uuid
 

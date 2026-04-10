@@ -15,7 +15,7 @@ import copy
 from .effects import Effect, EffectType, EffectTiming, Duration, ParsedCard
 from .parser import EffectParser
 from .resolver import EffectResolver, EffectContext, EffectResult, get_resolver
-from .hardcoded import has_hardcoded_effect, execute_hardcoded_effect
+from .effect_registry import has_hardcoded_effect, execute_hardcoded_effect
 
 if TYPE_CHECKING:
     from game_engine import GameState, Player

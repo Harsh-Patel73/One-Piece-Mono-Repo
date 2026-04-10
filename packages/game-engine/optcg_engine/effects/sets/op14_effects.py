@@ -2,7 +2,7 @@
 Hardcoded effects for OP14 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     add_don_from_deck, add_power_modifier, check_leader_type,
     create_ko_choice, create_multi_target_choice, create_own_character_choice,
     create_power_effect_choice, create_target_choice, draw_cards, get_opponent, give_don_to_card,
@@ -159,7 +159,7 @@ def perona_ko(game_state, player, card):
     if active and green_chars:
         active_snap = list(active)
         def perona_ko_cb(selected: list) -> None:
-            from ..hardcoded import create_play_from_hand_choice
+            from ..effect_registry import create_play_from_hand_choice
             target_idx = int(selected[0]) if selected else -1
             if 0 <= target_idx < len(active_snap):
                 target = active_snap[target_idx]

@@ -4,7 +4,7 @@ Hardcoded effects for ST03 cards.
 
 import random
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_return_to_hand_choice, draw_cards, get_opponent, register_effect,
     trash_from_hand,
 )

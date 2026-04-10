@@ -2,7 +2,7 @@
 Hardcoded effects for ST27 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_rest_choice, register_effect,
 )
 

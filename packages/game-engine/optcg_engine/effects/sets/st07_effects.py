@@ -2,7 +2,7 @@
 Hardcoded effects for ST07 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_ko_choice, create_mode_choice, create_target_choice, get_opponent,
     register_effect,
 )

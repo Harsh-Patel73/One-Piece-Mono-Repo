@@ -568,7 +568,7 @@ class GameState:
         self.phase = GamePhase.END
 
         # Fire end_of_turn hardcoded effects for current player's leader and cards
-        from .effects.hardcoded import has_hardcoded_effect, execute_hardcoded_effect
+        from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
         if self.current_player.leader and has_hardcoded_effect(self.current_player.leader.id, "end_of_turn"):
             execute_hardcoded_effect(self, self.current_player, self.current_player.leader, "end_of_turn")
         for card in list(self.current_player.cards_in_play):
@@ -604,7 +604,7 @@ class GameState:
         handlers use `game_state.current_player is player` to determine
         whether it's 'Your Turn' or 'Opponent's Turn'.
         """
-        from .effects.hardcoded import has_hardcoded_effect, execute_hardcoded_effect
+        from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
         for player in [self.current_player, self.opponent_player]:
             if player.leader and has_hardcoded_effect(player.leader.id, "continuous"):
                 execute_hardcoded_effect(self, player, player.leader, "continuous")
@@ -648,6 +648,10 @@ class GameState:
                 if hasattr(card, '_continuous_blocker'):
                     card.has_blocker = False
                     card._continuous_blocker = False
+                if hasattr(card, 'has_blocker') and not getattr(card, '_innate_blocker', False) and not getattr(card, '_continuous_blocker', False):
+                    keep_temp_blocker = getattr(card, '_temporary_blocker_until_turn', -1) >= self.turn_count
+                    keep_battle_blocker = getattr(card, '_temporary_blocker_for_battle', False)
+                    card.has_blocker = keep_temp_blocker or keep_battle_blocker
                 if hasattr(card, 'has_doubleattack'):
                     # Reset to False; continuous effects will re-set if conditions met.
                     # Cards with innate Double Attack get it re-applied via _apply_keywords-style check below.
@@ -721,6 +725,9 @@ class GameState:
                 card.blocker_disabled = False
             if hasattr(card, '_temporary_rush_until_turn') and card._temporary_rush_until_turn < self.turn_count:
                 card.has_rush = False
+            if hasattr(card, '_temporary_blocker_until_turn') and card._temporary_blocker_until_turn < self.turn_count:
+                if not getattr(card, '_innate_blocker', False):
+                    card.has_blocker = False
         # Clear cost_modifier on hand cards (e.g. Crocodile -1 cost for blue events)
         for card in player.hand:
             if hasattr(card, 'cost_modifier'):
@@ -902,7 +909,7 @@ class GameState:
                 if card.effect:
                     self._trigger_on_play_effects(card)
                 # Fire on_event triggers (e.g. Crocodile leader: draw 1 when you activate Event)
-                from .effects.hardcoded import has_hardcoded_effect, execute_hardcoded_effect
+                from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
                 if self.current_player.leader and has_hardcoded_effect(self.current_player.leader.id, 'on_event'):
                     execute_hardcoded_effect(self, self.current_player, self.current_player.leader, 'on_event')
             else:
@@ -920,7 +927,7 @@ class GameState:
                 # Trigger On Play effects
                 if card.effect and '[On Play]' in card.effect:
                     self._trigger_on_play_effects(card)
-                from .effects.hardcoded import has_hardcoded_effect, execute_hardcoded_effect
+                from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
                 if card.card_type == "CHARACTER" and self.current_player.leader and has_hardcoded_effect(self.current_player.leader.id, 'on_play_character'):
                     execute_hardcoded_effect(self, self.current_player, self.current_player.leader, 'on_play_character')
         else:
@@ -1056,7 +1063,7 @@ class GameState:
             self._log(f"  [BLOCKER] {blocker.name} intercepts the attack!")
 
             # Trigger [On Block] effects
-            from .effects.hardcoded import has_hardcoded_effect, execute_hardcoded_effect
+            from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
             if has_hardcoded_effect(blocker.id, 'on_block'):
                 execute_hardcoded_effect(self, defender_player, blocker, 'on_block')
 
@@ -1122,12 +1129,12 @@ class GameState:
                         effect_manager.on_opponent_event_play(self, attacker_player, card)
 
                     # Fire on_event for defender's leader (e.g. Crocodile OP01-062: draw 1 when you activate Event)
-                    from .effects.hardcoded import has_hardcoded_effect as _has_he, execute_hardcoded_effect as _exec_he
+                    from .effects.effect_registry import has_hardcoded_effect as _has_he, execute_hardcoded_effect as _exec_he
                     if defender_player.leader and _has_he(defender_player.leader.id, 'on_event'):
                         _exec_he(self, defender_player, defender_player.leader, 'on_event')
 
                     # Check if card has a hardcoded counter effect
-                    from .effects.hardcoded import has_hardcoded_effect
+                    from .effects.effect_registry import has_hardcoded_effect
                     has_hardcoded = has_hardcoded_effect(card.id, 'counter')
 
                     if has_hardcoded:
@@ -1171,7 +1178,7 @@ class GameState:
         Effects that need PendingChoice (target selection) pause here;
         attack resolution resumes after the choice via _needs_attack_resolution flag.
         """
-        from .effects.hardcoded import execute_hardcoded_effect
+        from .effects.effect_registry import execute_hardcoded_effect
         for card in counter_event_cards:
             if self.pending_choice:
                 if not hasattr(self, '_queued_counter_effects'):
@@ -1207,7 +1214,7 @@ class GameState:
             # DON count changed — recheck continuous effects (e.g. Zoro: DON!!x1 grants +1000)
             self._recalc_continuous_effects()
             # Fire on_don_attached effects for leader (e.g. Garp OP02-002)
-            from .effects.hardcoded import has_hardcoded_effect, execute_hardcoded_effect
+            from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
             if self.current_player.leader and has_hardcoded_effect(self.current_player.leader.id, "on_don_attached"):
                 execute_hardcoded_effect(self, self.current_player, self.current_player.leader, "on_don_attached")
             return True
@@ -1383,7 +1390,7 @@ class GameState:
 
         # Check if defending leader has an [On Opponent's Attack] / leader effect
         # (fires interactively during LEADER_EFFECT_STEP before blockers)
-        from .effects.hardcoded import has_hardcoded_effect as _has_hce
+        from .effects.effect_registry import has_hardcoded_effect as _has_hce
         leader_has_effect = bool(
             o.leader and _has_hce(o.leader.id, 'on_opponent_attack')
         )
@@ -1523,7 +1530,7 @@ class GameState:
 
                 # Trigger on_damage_dealt effects for the attacker (e.g. OP03-041 Usopp, OP03-043 Gaimon, OP03-051 Bell-mère)
                 if life_card is not None:
-                    from .effects.hardcoded import has_hardcoded_effect, execute_hardcoded_effect
+                    from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
                     if has_hardcoded_effect(attacker.id, 'on_damage_dealt'):
                         execute_hardcoded_effect(self, p, attacker, 'on_damage_dealt')
                     # Also check all of the attacker's player's field cards for leader-side on_damage_dealt
@@ -1594,7 +1601,7 @@ class GameState:
                 effect_manager.on_ko(self, o, defender)
 
                 # Trigger on_opponent_ko for the attacking player's leader (e.g. Kaido)
-                from .effects.hardcoded import has_hardcoded_effect, execute_hardcoded_effect
+                from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
                 if p.leader and has_hardcoded_effect(p.leader.id, 'on_opponent_ko'):
                     execute_hardcoded_effect(self, p, p.leader, 'on_opponent_ko')
 
@@ -1717,7 +1724,7 @@ class GameState:
             self._log(f"  [TRIGGER] {life_card.name}: Activating trigger — {trigger_text}")
 
             # Try hardcoded trigger effects first (e.g. OP01-009 Carrot "Play this card")
-            from .effects.hardcoded import has_hardcoded_effect, execute_hardcoded_effect
+            from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
             card_was_played = False
             hardcoded_ran = False
             if has_hardcoded_effect(life_card.id, "trigger"):
@@ -1776,6 +1783,20 @@ class GameState:
             for c in p.cards_in_play:
                 if hasattr(c, '_ko_protected_for_attack'):
                     c._ko_protected_for_attack = False
+                if getattr(c, '_temporary_blocker_for_battle', False):
+                    c._temporary_blocker_for_battle = False
+                    if not getattr(c, '_innate_blocker', False) and getattr(c, '_temporary_blocker_until_turn', -1) < self.turn_count:
+                        c.has_blocker = False
+                battle_power = getattr(c, '_battle_power_modifier', 0)
+                if battle_power:
+                    c.power_modifier = getattr(c, 'power_modifier', 0) - battle_power
+                    c._battle_power_modifier = 0
+        for leader in [self.player1.leader, self.player2.leader]:
+            if leader:
+                battle_power = getattr(leader, '_battle_power_modifier', 0)
+                if battle_power:
+                    leader.power_modifier = getattr(leader, 'power_modifier', 0) - battle_power
+                    leader._battle_power_modifier = 0
         # Clear per-battle blocker restrictions
         self.blocker_power_minimum = 0
         self.blocker_cost_limit = None
@@ -1944,7 +1965,7 @@ class GameState:
 
     def _trigger_on_don_return_effects(self, player: Player):
         """Fire leader effects that care about DON!! returning to the DON!! deck."""
-        from .effects.hardcoded import has_hardcoded_effect, execute_hardcoded_effect
+        from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
         if player.leader and has_hardcoded_effect(player.leader.id, 'on_don_return'):
             execute_hardcoded_effect(self, player, player.leader, 'on_don_return')
 
@@ -2274,7 +2295,7 @@ class GameState:
                                 break
                 if trashed:
                     if draw_after > 0:
-                        from .effects.hardcoded import draw_cards
+                        from .effects.effect_registry import draw_cards
                         draw_cards(player, draw_after)
                     if power_boost_card_id and power_boost_amount:
                         boost_card = (next((c for c in player.cards_in_play if c.id == power_boost_card_id), None)
@@ -2425,7 +2446,7 @@ class GameState:
                 # Handle different card-specific mode effects
                 if selected_mode == "return":
                     # Return opponent's character to hand
-                    from .effects.hardcoded import return_opponent_to_hand
+                    from .effects.effect_registry import return_opponent_to_hand
                     # Determine max_cost based on the card
                     if card_id and "OP12-060" in card_id:  # Boeuf Burst
                         self.pending_choice = None
@@ -2439,7 +2460,7 @@ class GameState:
 
                 elif selected_mode == "draw":
                     # Draw cards
-                    from .effects.hardcoded import draw_cards
+                    from .effects.effect_registry import draw_cards
                     if card_id and "OP12-060" in card_id:  # Boeuf Burst
                         draw_cards(player, 2)
                         self._log(f"{player.name} drew 2 cards")
@@ -2449,7 +2470,7 @@ class GameState:
 
                 elif selected_mode == "ko":
                     # KO opponent's character
-                    from .effects.hardcoded import ko_opponent_character
+                    from .effects.effect_registry import ko_opponent_character
                     if card_id and "OP06-065" in card_id:  # Niji
                         self.pending_choice = None
                         return ko_opponent_character(self, player, max_cost=2, source_card=source_card)
@@ -2463,13 +2484,13 @@ class GameState:
                 elif selected_mode == "discard":
                     # Opponent discards
                     if opponent.hand:
-                        from .effects.hardcoded import trash_from_hand
+                        from .effects.effect_registry import trash_from_hand
                         trash_from_hand(opponent, 1, self, source_card)
                         self._log(f"{opponent.name} must discard 1 card")
 
                 elif selected_mode == "cost_reduce":
                     # Apply -4 cost to opponent's character
-                    from .effects.hardcoded import create_power_effect_choice
+                    from .effects.effect_registry import create_power_effect_choice
                     if opponent.cards_in_play:
                         self.pending_choice = None
                         # Create a choice for target selection
@@ -2953,7 +2974,7 @@ class GameState:
                 queued = getattr(self, '_queued_counter_effects', [])
                 if queued:
                     defender_player, counter_card = queued.pop(0)
-                    from .effects.hardcoded import execute_hardcoded_effect
+                    from .effects.effect_registry import execute_hardcoded_effect
                     execute_hardcoded_effect(self, defender_player, counter_card, 'counter')
 
                 # If all counter effects resolved and attack resolution was deferred, do it now
@@ -3096,7 +3117,7 @@ class GameState:
         queued = getattr(self, '_queued_counter_effects', [])
         if queued:
             defender_player, counter_card = queued.pop(0)
-            from .effects.hardcoded import execute_hardcoded_effect
+            from .effects.effect_registry import execute_hardcoded_effect
             execute_hardcoded_effect(self, defender_player, counter_card, 'counter')
 
         if (
@@ -3344,7 +3365,7 @@ class GameState:
 
         draw_after = data.get("draw_after", 0)
         if draw_after > 0:
-            from .effects.hardcoded import draw_cards
+            from .effects.effect_registry import draw_cards
             draw_cards(player, draw_after)
 
         power_boost_card_id = data.get("power_boost_card_id", "")

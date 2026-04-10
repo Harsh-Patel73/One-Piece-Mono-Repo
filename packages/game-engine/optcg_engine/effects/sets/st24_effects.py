@@ -2,7 +2,7 @@
 Hardcoded effects for ST24 cards.
 """
 
-from ..hardcoded import register_effect, search_top_cards
+from ..effect_registry import register_effect, search_top_cards
 
 
 # --- ST24-002: Kid & Killer ---

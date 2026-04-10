@@ -3,7 +3,7 @@ Effect handlers for triggering card effects.
 """
 
 from typing import TYPE_CHECKING
-from ..effects.hardcoded import execute_hardcoded_effect, has_hardcoded_effect
+from ..effects.effect_registry import execute_hardcoded_effect, has_hardcoded_effect
 
 if TYPE_CHECKING:
     from ..game_engine import GameState

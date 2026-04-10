@@ -2,7 +2,7 @@
 Hardcoded effects for OP13 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     add_don_from_deck, add_power_modifier, check_leader_type, check_life_count,
     create_don_assignment_choice, create_hand_discard_choice, create_ko_choice,
     create_own_character_choice, create_power_effect_choice, create_return_to_hand_choice,

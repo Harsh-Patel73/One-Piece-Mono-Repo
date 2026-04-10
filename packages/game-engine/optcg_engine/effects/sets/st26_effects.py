@@ -2,7 +2,7 @@
 Hardcoded effects for ST26 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     get_opponent, register_effect,
 )
 

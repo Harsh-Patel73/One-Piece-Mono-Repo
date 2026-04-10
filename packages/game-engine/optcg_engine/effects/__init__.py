@@ -11,7 +11,7 @@ from .manager import (
     CardEffectManager, get_effect_manager, parse_card_effects,
     get_effects_by_timing, check_don_requirement, clear_effect_cache
 )
-from .hardcoded import (
+from .effect_registry import (
     has_hardcoded_effect, execute_hardcoded_effect, register_effect,
     get_all_hardcoded_cards, get_hardcoded_effect_count
 )

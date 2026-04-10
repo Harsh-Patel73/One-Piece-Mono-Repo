@@ -2,7 +2,7 @@
 Hardcoded effects for ST23 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_ko_choice, get_opponent, register_effect, trash_from_hand,
 )
 

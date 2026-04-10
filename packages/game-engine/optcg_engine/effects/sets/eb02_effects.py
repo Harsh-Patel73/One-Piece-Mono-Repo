@@ -2,7 +2,7 @@
 Hardcoded effects for EB02 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_cost_reduction_choice, create_mode_choice, create_ko_choice, draw_cards, filter_by_max_cost, get_opponent,
     give_don_to_card, register_effect, search_top_cards, trash_from_hand,
 )

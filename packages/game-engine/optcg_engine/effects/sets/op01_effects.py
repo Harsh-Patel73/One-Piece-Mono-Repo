@@ -4,7 +4,7 @@ Hardcoded effects for OP01 cards.
 
 import random
 
-from ..hardcoded import (
+from ..effect_registry import (
     add_don_from_deck, create_add_from_trash_choice, create_bottom_deck_choice, create_ko_choice,
     create_own_character_choice, create_play_from_hand_choice, create_power_effect_choice,
     create_rest_choice, create_return_to_hand_choice, create_set_active_choice, create_target_choice,
@@ -149,6 +149,9 @@ def op01_003_luffy_leader(game_state, player, card):
             target.is_resting = False
             target.has_attacked = False
             target.power_modifier = getattr(target, 'power_modifier', 0) + 1000
+            target._sticky_power_modifier = getattr(target, '_sticky_power_modifier', 0) + 1000
+            target.power_modifier_expires_on_turn = game_state.turn_count
+            target._sticky_power_modifier_expires_on_turn = game_state.turn_count
             game_state._log(f"{target.name} set active and gained +1000 power")
 
     return create_set_active_choice(
@@ -2330,7 +2333,7 @@ def op01_116_smile_event(game_state, player, card):
     # Card text: [Main] Look at 5 cards from the top of your deck; play up to 1 {SMILE} type
     # Character card with a cost of 3 or less. Then, place the rest at the bottom of your deck.
     # Uses search_top_cards so the player always sees the top 5 cards, even when no SMILE match.
-    from ...effects.hardcoded import search_top_cards
+    from ...effects.effect_registry import search_top_cards
     def smile_char_filter(c):
         return (getattr(c, 'card_type', '') == 'CHARACTER'
                 and 'smile' in (getattr(c, 'card_origin', '') or '').lower()

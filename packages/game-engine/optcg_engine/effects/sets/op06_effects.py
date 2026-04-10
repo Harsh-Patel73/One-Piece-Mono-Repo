@@ -4,7 +4,7 @@ Hardcoded effects for OP06 cards.
 
 import random
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_add_to_life_choice, create_bottom_deck_choice, create_don_assignment_choice, create_ko_choice,
     create_cost_reduction_choice, create_mode_choice, create_play_from_trash_choice,
     create_power_effect_choice, create_rest_choice, create_return_to_hand_choice,

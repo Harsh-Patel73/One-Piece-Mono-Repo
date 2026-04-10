@@ -2,7 +2,7 @@
 Hardcoded effects for ST29 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     draw_cards, get_opponent, give_don_to_card, register_effect,
     search_top_cards, trash_from_hand,
 )

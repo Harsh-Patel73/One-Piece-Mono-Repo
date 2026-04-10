@@ -2,7 +2,7 @@
 Hardcoded effects for ST20 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     get_opponent, register_effect, trash_from_hand,
 )
 

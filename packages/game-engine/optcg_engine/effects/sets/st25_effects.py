@@ -2,7 +2,7 @@
 Hardcoded effects for ST25 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     draw_cards, register_effect, trash_from_hand,
 )
 

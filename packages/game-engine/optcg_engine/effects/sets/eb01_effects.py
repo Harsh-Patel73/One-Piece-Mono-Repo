@@ -2,7 +2,7 @@
 Hardcoded effects for EB01 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     add_don_from_deck, create_mode_choice, draw_cards, get_opponent,
     give_don_to_card, register_effect, search_top_cards, set_active,
     trash_from_hand,

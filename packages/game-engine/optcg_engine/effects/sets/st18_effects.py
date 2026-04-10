@@ -2,7 +2,7 @@
 Hardcoded effects for ST18 cards.
 """
 
-from ..hardcoded import register_effect, search_top_cards
+from ..effect_registry import register_effect, search_top_cards
 
 
 # --- ST18-004: Zoro-Juurou ---

@@ -2,7 +2,7 @@
 Hardcoded effects for ST09 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_play_from_hand_choice, create_target_choice, get_opponent, register_effect,
     trash_from_hand,
 )

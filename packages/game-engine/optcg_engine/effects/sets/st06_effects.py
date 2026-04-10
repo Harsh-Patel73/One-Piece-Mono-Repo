@@ -2,7 +2,7 @@
 Hardcoded effects for ST06 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_cost_reduction_choice, create_ko_choice, get_opponent, register_effect,
     trash_from_hand,
 )

@@ -2,7 +2,7 @@
 Hardcoded effects for ST10 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     add_don_from_deck, create_bottom_deck_choice, create_ko_choice, create_play_from_hand_choice,
     create_power_effect_choice, draw_cards, get_opponent, register_effect,
     trash_from_hand,

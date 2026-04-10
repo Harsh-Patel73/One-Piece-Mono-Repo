@@ -2,7 +2,7 @@
 Hardcoded effects for ST12 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_ko_choice, create_mode_choice, create_play_from_hand_choice, create_rest_choice,
     draw_cards, get_opponent, register_effect,
 )

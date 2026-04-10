@@ -7,7 +7,7 @@ packages/
   game-engine/optcg_engine/        # Core Python game engine
     game_engine.py                 # GameState, Player, PendingChoice, resolve_pending_choice
     effects/
-      hardcoded.py                 # create_* helpers, register_effect, utility fns
+      effect_registry.py           # create_* helpers, register_effect, utility fns
       sets/op01_effects.py         # OP01 hardcoded effects
       sets/op02_effects.py         # OP02 hardcoded effects
       CARD_STATUS.md               # Per-card implementation status (column order: ID | Status | Type | Notes)

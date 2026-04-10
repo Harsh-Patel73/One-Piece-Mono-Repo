@@ -4,7 +4,7 @@ Hardcoded effects for ST02 cards.
 
 import random
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_target_choice, get_opponent, register_effect, trash_from_hand,
 )
 

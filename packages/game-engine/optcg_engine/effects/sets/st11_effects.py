@@ -2,7 +2,7 @@
 Hardcoded effects for ST11 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_hand_discard_choice, create_mode_choice, filter_by_max_cost, get_opponent, register_effect,
     search_top_cards, set_active,
 )

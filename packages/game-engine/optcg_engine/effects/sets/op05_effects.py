@@ -4,7 +4,7 @@ Hardcoded effects for OP05 cards.
 
 import random
 
-from ..hardcoded import (
+from ..effect_registry import (
     add_don_from_deck, create_bottom_deck_choice, create_hand_discard_choice, create_ko_choice,
     create_mode_choice, create_rest_choice, create_return_to_hand_choice, create_set_active_choice,
     create_target_choice, add_power_modifier, check_life_count, check_leader_type,

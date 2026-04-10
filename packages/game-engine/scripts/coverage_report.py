@@ -18,7 +18,7 @@ from typing import Dict, List, Tuple, Optional, Any
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from optcg_engine.effects.hardcoded import (
+from optcg_engine.effects.effect_registry import (
     _hardcoded_effects,
     has_hardcoded_effect,
     get_all_hardcoded_cards,

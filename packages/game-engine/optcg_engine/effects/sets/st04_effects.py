@@ -2,7 +2,7 @@
 Hardcoded effects for ST04 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     add_don_from_deck, create_ko_choice, create_play_from_hand_choice, draw_cards,
     get_opponent, register_effect, trash_from_hand,
 )

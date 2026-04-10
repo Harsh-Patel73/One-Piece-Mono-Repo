@@ -2,7 +2,7 @@
 Hardcoded effects for PRB02 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_target_choice, get_opponent, register_effect, search_top_cards,
 )
 

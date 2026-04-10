@@ -2,7 +2,7 @@
 Hardcoded effects for EB04 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_bottom_deck_choice, draw_cards, get_characters_by_type, get_opponent,
     register_effect, search_top_cards, set_active, trash_from_hand,
 )

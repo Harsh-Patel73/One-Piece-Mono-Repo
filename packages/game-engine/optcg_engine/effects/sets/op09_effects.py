@@ -2,7 +2,7 @@
 Hardcoded effects for OP09 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_bottom_deck_choice, create_ko_choice, create_own_character_choice, create_play_from_hand_choice,
     create_return_to_hand_choice, create_target_choice, draw_cards, get_opponent,
     register_effect, search_top_cards, set_active, check_leader_type, check_life_count, trash_from_hand,

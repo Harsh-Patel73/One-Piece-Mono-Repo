@@ -2,7 +2,7 @@
 Hardcoded effects for ST15 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     add_don_from_deck, create_power_effect_choice, get_opponent, register_effect,
 )
 

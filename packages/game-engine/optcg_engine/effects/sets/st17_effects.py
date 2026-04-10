@@ -2,7 +2,7 @@
 Hardcoded effects for ST17 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     give_don_to_card, register_effect, reorder_top_cards,
 )
 

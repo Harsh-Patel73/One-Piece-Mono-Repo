@@ -2,7 +2,7 @@
 Hardcoded effects for ST21 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_don_assignment_choice, register_effect,
 )
 

@@ -4,7 +4,7 @@ Hardcoded effects for ST13 cards.
 
 import random
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_ko_choice, create_own_character_choice, draw_cards, get_opponent,
     register_effect, search_top_cards, trash_from_hand,
 )
@@ -81,7 +81,7 @@ def st13_001_sabo_leader(game_state, player, card):
                 if player.leader:
                     all_chars.append(player.leader)
                 if all_chars:
-                    from ..hardcoded import create_power_effect_choice
+                    from ..effect_registry import create_power_effect_choice
                     create_power_effect_choice(game_state, player, all_chars, 2000,
                                                source_card=None,
                                                prompt="Choose a Character or Leader to give +2000 power until next turn",

@@ -2,7 +2,7 @@
 Hardcoded effects for PRB01 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_target_choice, register_effect,
 )
 

@@ -2,7 +2,7 @@
 Hardcoded effects for ST22 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     create_mode_choice, create_play_from_hand_choice, create_power_effect_choice, draw_cards,
     get_opponent, register_effect, search_top_cards, trash_from_hand,
 )

@@ -2,7 +2,7 @@
 Hardcoded effects for OP10 cards.
 """
 
-from ..hardcoded import (
+from ..effect_registry import (
     add_don_from_deck, add_power_modifier,
     create_bottom_deck_choice, create_ko_choice, create_own_character_choice,
     create_play_from_hand_choice, create_rest_choice, create_return_to_hand_choice,

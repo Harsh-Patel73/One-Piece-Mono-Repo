@@ -21,7 +21,7 @@
 | OP01-010 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
 | OP01-011 | ✅ Verified | CHARACTER | Player should be prompted for which card they walk to place at bottom of deck. | [On Play] You may place 1 card from your hand at the bottom of your de… | Impl exists: on_play |
 | OP01-012 | ✅ Verified | CHARACTER | ✅ Verified |  |  |
-| OP01-013 | ✅ Verified | CHARACTER | ✅ Verified | [Activate: Main] [Once Per Turn] You may add 1 card from your Life are… | Impl exists: activate |
+| OP01-013 | ✅ Verified | CHARACTER | ⚠ Needs Fix | [Activate: Main] [Once Per Turn] You may add 1 card from your Life are… | This effect should only be able to be done once per turn, it currently let's me do it as much as I want.  |
 | OP01-014 | ✅ Verified | CHARACTER | Effect works as intended. A change to remember for the remainder of the project though is that when a character blocks it should become rested. It will refresh when we enter refresh phase (Start of turn) UNLESS there is an effect preventing it from restanding to active. | [Blocker] (After your opponent declares an attack, you may rest this c… | Impl exists: blocker, on_block |
 | OP01-015 | ✅ Verified | CHARACTER | Only seeing Error: Invalid choice response in Game Log, I am at least being prompted which is good, but not the correct effect at the end. The card I choose to trash is not being trashed and the card I am taking from trash to hand is not working either. | [DON!! x1] [When Attacking] You may trash 1 card from your hand: Add u… | Impl exists: on_attack |
 | OP01-016 | ✅ Verified | CHARACTER | Still cannot choose the order that I want to send the cards to the bottom of the deck in. | [On Play] Look at 5 cards from the top of your deck; reveal up to 1 {S… | Impl exists: on_play |
