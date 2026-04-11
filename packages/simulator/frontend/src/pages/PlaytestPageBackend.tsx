@@ -54,6 +54,7 @@ export function PlaytestPageBackend() {
   const [selectedCounterIndices, setSelectedCounterIndices] = useState<number[]>([])
   // Hovered card preview
   const [hoveredCard, setHoveredCard] = useState<PlaytestCard | null>(null)
+  const [selectedChoiceIds, setSelectedChoiceIds] = useState<string[]>([])
 
   // Clear selection when turn changes (so you don't have wrong player's card selected)
   useEffect(() => {
@@ -61,6 +62,10 @@ export function PlaytestPageBackend() {
     setSelectedFieldIndex(null)
     setAttackMode(false)
   }, [activePlayer])
+
+  useEffect(() => {
+    setSelectedChoiceIds([])
+  }, [pendingChoice?.choiceId])
 
   // Start game when deck is selected and connected
   useEffect(() => {
@@ -619,18 +624,77 @@ export function PlaytestPageBackend() {
               {pendingChoice.sourceCardName || 'Effect Choice'}
             </h3>
             <p className="text-stone-300 mb-4">{pendingChoice.prompt}</p>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {pendingChoice.options.map((opt) => (
-                <button
-                  key={opt.id}
-                  onClick={() => submitEffectChoice(pendingChoice.choiceId, [opt.id])}
-                  className="w-full p-3 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium text-left transition-colors"
-                >
-                  {opt.label || opt.cardName || `Option ${opt.id}`}
-                </button>
-              ))}
-            </div>
-            {pendingChoice.minSelections === 0 && (
+            {(pendingChoice.maxSelections > 1 || pendingChoice.minSelections > 1) ? (
+              <>
+                <p className="text-xs text-amber-200/60 mb-3">
+                  Select {pendingChoice.minSelections}
+                  {pendingChoice.maxSelections !== pendingChoice.minSelections ? `-${pendingChoice.maxSelections}` : ''}
+                  {' '}option{pendingChoice.maxSelections === 1 ? '' : 's'}.
+                </p>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {pendingChoice.options.map((opt) => {
+                    const isSelected = selectedChoiceIds.includes(opt.id)
+                    const canAdd = isSelected || selectedChoiceIds.length < pendingChoice.maxSelections
+                    return (
+                      <button
+                        key={opt.id}
+                        onClick={() => {
+                          setSelectedChoiceIds(prev => {
+                            if (prev.includes(opt.id)) {
+                              return prev.filter(id => id !== opt.id)
+                            }
+                            if (!canAdd) return prev
+                            return [...prev, opt.id]
+                          })
+                        }}
+                        className={`w-full p-3 rounded-lg font-medium text-left transition-colors border ${
+                          isSelected
+                            ? 'bg-green-600 border-green-400 text-white'
+                            : canAdd
+                              ? 'bg-amber-600 hover:bg-amber-500 border-amber-500 text-white'
+                              : 'bg-stone-700 border-stone-600 text-stone-400 cursor-not-allowed'
+                        }`}
+                      >
+                        {opt.label || opt.cardName || `Option ${opt.id}`}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <button
+                    onClick={() => submitEffectChoice(pendingChoice.choiceId, selectedChoiceIds)}
+                    disabled={
+                      selectedChoiceIds.length < pendingChoice.minSelections
+                      || selectedChoiceIds.length > pendingChoice.maxSelections
+                    }
+                    className="flex-1 p-3 bg-green-600 hover:bg-green-500 disabled:bg-stone-700 disabled:text-stone-500 text-white rounded-lg font-medium transition-colors"
+                  >
+                    Confirm Selection
+                  </button>
+                  {pendingChoice.minSelections === 0 && (
+                    <button
+                      onClick={() => submitEffectChoice(pendingChoice.choiceId, [])}
+                      className="p-3 bg-stone-600 hover:bg-stone-500 text-white rounded-lg font-medium"
+                    >
+                      Skip
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {pendingChoice.options.map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => submitEffectChoice(pendingChoice.choiceId, [opt.id])}
+                    className="w-full p-3 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium text-left transition-colors"
+                  >
+                    {opt.label || opt.cardName || `Option ${opt.id}`}
+                  </button>
+                ))}
+              </div>
+            )}
+            {pendingChoice.minSelections === 0 && pendingChoice.maxSelections <= 1 && (
               <button
                 onClick={() => submitEffectChoice(pendingChoice.choiceId, [])}
                 className="w-full mt-4 p-3 bg-stone-600 hover:bg-stone-500 text-white rounded-lg font-medium"
@@ -876,6 +940,12 @@ function CardDisplay({
   // DON only gives +1000 power on the card owner's turn
   const donPower = isOwnerTurn ? card.attachedDon * 1000 : 0
   const power = card.power ? card.power + donPower : null
+  const badges = [
+    card.hasBlocker ? 'BLK' : null,
+    card.hasDoubleAttack ? 'DA' : null,
+    card.hasBanish ? 'BAN' : null,
+    card.hasRush ? 'RUSH' : null,
+  ].filter(Boolean) as string[]
 
   return (
     <div
@@ -884,7 +954,7 @@ function CardDisplay({
       onMouseEnter={() => onHover?.(card)}
       onMouseLeave={() => onHover?.(null)}
     >
-      <div className={`${sizeClasses[size]} aspect-[2.5/3.5] rounded border-2 overflow-hidden transition-all ${
+      <div className={`${sizeClasses[size]} relative aspect-[2.5/3.5] rounded border-2 overflow-hidden transition-all ${
         isSelected
           ? 'border-yellow-400 shadow-lg shadow-yellow-400/30'
           : canAfford === false
@@ -893,6 +963,18 @@ function CardDisplay({
               ? 'border-green-500/50 hover:border-green-400'
               : 'border-amber-900/50 hover:border-amber-500'
       }`}>
+        {badges.length > 0 && (
+          <div className="absolute top-1 left-1 z-10 flex flex-wrap gap-1">
+            {badges.map((badge) => (
+              <span
+                key={badge}
+                className="px-1 py-0.5 rounded bg-black/75 text-[7px] font-bold text-amber-200 border border-amber-400/50"
+              >
+                {badge}
+              </span>
+            ))}
+          </div>
+        )}
         {card.imageUrl ? (
           <img src={card.imageUrl} alt={card.name} className="w-full h-full object-cover" />
         ) : (
@@ -922,6 +1004,13 @@ function CardDisplay({
 
 // Enlarged card preview — fixed position overlay shown on hover
 function CardPreview({ card }: { card: PlaytestCard }) {
+  const badges = [
+    card.hasBlocker ? 'Blocker' : null,
+    card.hasDoubleAttack ? 'Double Attack' : null,
+    card.hasBanish ? 'Banish' : null,
+    card.hasRush ? 'Rush' : null,
+  ].filter(Boolean) as string[]
+
   return (
     <div className="fixed right-4 top-1/2 -translate-y-1/2 z-50 pointer-events-none">
       <div className="w-64 rounded-lg border-2 border-amber-500/60 shadow-2xl shadow-black/60 overflow-hidden bg-stone-900">
@@ -951,6 +1040,15 @@ function CardPreview({ card }: { card: PlaytestCard }) {
           )}
           {card.counter != null && card.counter > 0 && (
             <div className="text-blue-400 text-xs">Counter: +{card.counter}</div>
+          )}
+          {badges.length > 0 && (
+            <div className="flex flex-wrap gap-1 border-t border-stone-700 pt-1.5 mt-1.5">
+              {badges.map((badge) => (
+                <span key={badge} className="px-2 py-0.5 rounded bg-amber-900/30 text-amber-200 text-[11px] font-semibold">
+                  {badge}
+                </span>
+              ))}
+            </div>
           )}
           {card.effect && (
             <div className="text-stone-300 text-xs leading-relaxed border-t border-stone-700 pt-1.5 mt-1.5">

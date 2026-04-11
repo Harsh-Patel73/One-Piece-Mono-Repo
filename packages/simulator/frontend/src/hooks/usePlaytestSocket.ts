@@ -31,6 +31,10 @@ interface BackendCard {
   attached_don: number
   has_attacked: boolean
   can_attack_active: boolean
+  has_blocker?: boolean
+  has_double_attack?: boolean
+  has_banish?: boolean
+  has_rush?: boolean
 }
 
 interface BackendPlayer {
@@ -129,6 +133,10 @@ export interface PlaytestCard {
   attachedDon: number
   hasAttacked: boolean
   canAttackActive: boolean
+  hasBlocker?: boolean
+  hasDoubleAttack?: boolean
+  hasBanish?: boolean
+  hasRush?: boolean
 }
 
 export interface PlaytestPlayer {
@@ -229,6 +237,10 @@ function convertCard(card: BackendCard, index: number): PlaytestCard {
     attachedDon: card.attached_don,
     hasAttacked: card.has_attacked,
     canAttackActive: card.can_attack_active ?? false,
+    hasBlocker: card.has_blocker ?? false,
+    hasDoubleAttack: card.has_double_attack ?? false,
+    hasBanish: card.has_banish ?? false,
+    hasRush: card.has_rush ?? false,
   }
 }
 

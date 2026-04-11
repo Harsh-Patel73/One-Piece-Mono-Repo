@@ -299,27 +299,30 @@ class CardEffectManager:
 
         # Check parsed effects on leader
         if defending_player.leader:
-            effects = get_effects_by_timing(defending_player.leader, EffectTiming.ON_OPPONENT_ATTACK)
-            for effect in effects:
-                if not check_don_requirement(defending_player.leader, effect):
-                    continue
-
-                # Check once-per-turn
-                if effect.once_per_turn:
-                    effect_id = f"{defending_player.leader.id}_ON_OPPONENT_ATTACK"
-                    used = self.used_once_per_turn.get(defending_player.leader.id, [])
-                    if effect_id in used:
+            if not has_hardcoded_effect(defending_player.leader.id, 'ON_OPPONENT_ATTACK'):
+                effects = get_effects_by_timing(defending_player.leader, EffectTiming.ON_OPPONENT_ATTACK)
+                for effect in effects:
+                    if not check_don_requirement(defending_player.leader, effect):
                         continue
-                    used.append(effect_id)
-                    self.used_once_per_turn[defending_player.leader.id] = used
 
-                result = self._resolve_effect(
-                    game_state, defending_player, defending_player.leader, effect
-                )
-                results.append(result)
+                    # Check once-per-turn
+                    if effect.once_per_turn:
+                        effect_id = f"{defending_player.leader.id}_ON_OPPONENT_ATTACK"
+                        used = self.used_once_per_turn.get(defending_player.leader.id, [])
+                        if effect_id in used:
+                            continue
+                        used.append(effect_id)
+                        self.used_once_per_turn[defending_player.leader.id] = used
+
+                    result = self._resolve_effect(
+                        game_state, defending_player, defending_player.leader, effect
+                    )
+                    results.append(result)
 
         # Check parsed effects on defending player's characters
         for card in defending_player.cards_in_play:
+            if has_hardcoded_effect(card.id, 'ON_OPPONENT_ATTACK'):
+                continue
             effects = get_effects_by_timing(card, EffectTiming.ON_OPPONENT_ATTACK)
             for effect in effects:
                 if not check_don_requirement(card, effect):

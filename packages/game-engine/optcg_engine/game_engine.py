@@ -267,7 +267,8 @@ class Player:
 
         for _ in range(actual_amount):
             idx = self.don_pool.index("active")
-            self.don_pool[idx] = "rested"
+            self.don_pool.pop(idx)
+            self.don_pool.append("rested")
 
         # Check DON conditions
         if card.effect:
@@ -522,8 +523,16 @@ class GameState:
 
     def next_turn(self):
         """Advance to the next turn."""
-        # End phase: check hand limit
+        # End phase may create pending choices that must resolve before the turn changes.
+        self._advance_turn_after_end_phase = True
         self._end_phase()
+        if self.pending_choice:
+            return
+        self._advance_turn_after_end_phase = False
+        self._complete_turn_transition()
+
+    def _complete_turn_transition(self):
+        """Finish switching to the next player's turn after end-of-turn effects resolve."""
 
         self.turn_count += 1
         self.current_player, self.opponent_player = self.opponent_player, self.current_player
@@ -618,7 +627,10 @@ class GameState:
         if activate_don_eot_count <= 0 or self.pending_choice:
             return False
 
-        rested_indices = [idx for idx, don in enumerate(self.current_player.don_pool) if don == "rested"]
+        rested_indices = [
+            idx for idx, don in enumerate(self._cost_area_don_pool(self.current_player))
+            if don == "rested"
+        ]
         if not rested_indices:
             self.current_player.activate_don_eot_count = 0
             return False
@@ -640,10 +652,11 @@ class GameState:
 
     def _resolve_end_of_turn_don_activation_choice(self, selected: List[str]) -> None:
         """Resolve an end-of-turn DON!! activation prompt."""
+        cost_area_count = len(self._cost_area_don_pool(self.current_player))
         activated = 0
         for sel in selected:
             idx = int(sel) if sel is not None else -1
-            if 0 <= idx < len(self.current_player.don_pool) and self.current_player.don_pool[idx] == "rested":
+            if 0 <= idx < cost_area_count and self.current_player.don_pool[idx] == "rested":
                 self.current_player.don_pool[idx] = "active"
                 activated += 1
         if activated > 0:
@@ -729,6 +742,7 @@ class GameState:
                     has_innate = ('[Double Attack]' in effect_text
                                   and not _re.search(r'gains?\s+\[Double Attack\]', effect_text, _re.IGNORECASE))
                     card.has_doubleattack = has_innate
+                    card.has_double_attack = has_innate
             # Clear cost_modifier on cards in play (e.g. Issho OP03-078 -3 cost)
             for card in player.cards_in_play:
                 if hasattr(card, 'cost_modifier'):
@@ -763,6 +777,7 @@ class GameState:
             # Clear temporary double attack granted to leader (e.g. OP03-016 Flame Emperor)
             if getattr(player.leader, '_temp_doubleattack', False):
                 player.leader.has_doubleattack = False
+                player.leader.has_double_attack = False
                 player.leader._temp_doubleattack = False
 
         # Clear character temporary effects
@@ -796,6 +811,7 @@ class GameState:
                 card.has_banish = getattr(card, '_innate_banish', False)
             if getattr(card, '_temp_doubleattack', False):
                 card.has_doubleattack = False
+                card.has_double_attack = False
                 card._temp_doubleattack = False
             if hasattr(card, 'blocker_disabled'):
                 card.blocker_disabled = False
@@ -888,6 +904,7 @@ class GameState:
                     card._innate_banish = True
                 elif line.startswith('[Double Attack]'):
                     card.has_doubleattack = True
+                    card.has_double_attack = True
                     card._innate_doubleattack = True
 
         for owner, opponent in ((self.player1, self.player2), (self.player2, self.player1)):
@@ -1054,13 +1071,22 @@ class GameState:
 
     def play_card(self, card: Card):
         """Play a card from hand."""
+        if isinstance(card, int):
+            if not (0 <= card < len(self.current_player.hand)):
+                return False
+            card = self.current_player.hand[card]
+        card_type = (getattr(card, 'card_type', '') or '').upper()
         cost = max(0, (card.cost or 0) + getattr(card, 'cost_modifier', 0))
         available = self.available_don()
         print(f"[DEBUG] play_card: {card.name}, cost={cost}, available_don={available}, don_pool={self.current_player.don_pool}")
 
         # Check field limit (max 5 characters) — prompt to replace if full
-        if card.card_type == "CHARACTER":
-            char_count = sum(1 for c in self.current_player.cards_in_play if c.card_type == "CHARACTER")
+        if card_type == "CHARACTER":
+            char_count = sum(
+                1
+                for c in self.current_player.cards_in_play
+                if (getattr(c, 'card_type', '') or '').upper() == "CHARACTER"
+            )
             if char_count >= 5:
                 # Must also be able to afford the card
                 if cost > available:
@@ -1069,7 +1095,7 @@ class GameState:
                 # Prompt player to choose which character to trash to make room
                 options = []
                 for i, c in enumerate(self.current_player.cards_in_play):
-                    if c.card_type == "CHARACTER":
+                    if (getattr(c, 'card_type', '') or '').upper() == "CHARACTER":
                         options.append({
                             "id": str(i),
                             "label": f"{c.name} (Cost {c.cost or 0}, Power {c.power or 0})",
@@ -1109,21 +1135,18 @@ class GameState:
                 self.current_player.hand.remove(card)
 
             # EVENT cards go directly to trash after resolving
-            if card.card_type == "EVENT":
+            if card_type == "EVENT":
                 self.current_player.trash.append(card)
                 self._log(f"{self.current_player.name} plays {card.name} (Event, Cost {cost}), Remaining Active DON: {self.available_don()}")
                 # Trigger effect
                 if card.effect:
                     self._trigger_on_play_effects(card)
-                # Fire on_event triggers (e.g. Crocodile leader: draw 1 when you activate Event)
-                from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
-                if self.current_player.leader and has_hardcoded_effect(self.current_player.leader.id, 'on_event'):
-                    execute_hardcoded_effect(self, self.current_player, self.current_player.leader, 'on_event')
+                self._trigger_on_event_effects(self.current_player)
             else:
                 # CHARACTER and STAGE cards go to field
                 self.current_player.cards_in_play.append(card)
                 setattr(card, 'played_turn', self.turn_count)
-                if card.card_type == "CHARACTER":
+                if card_type == "CHARACTER":
                     self.last_played_character = card
 
                 # Apply keyword effects (Rush, Blocker, etc.)
@@ -1135,8 +1158,10 @@ class GameState:
                 if card.effect and '[On Play]' in card.effect:
                     self._trigger_on_play_effects(card)
                 from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
-                if card.card_type == "CHARACTER" and self.current_player.leader and has_hardcoded_effect(self.current_player.leader.id, 'on_play_character'):
+                if card_type == "CHARACTER" and self.current_player.leader and has_hardcoded_effect(self.current_player.leader.id, 'on_play_character'):
                     execute_hardcoded_effect(self, self.current_player, self.current_player.leader, 'on_play_character')
+                if card_type == "CHARACTER":
+                    self._queue_on_opponent_play_effects(self.current_player, self.opponent_player, card)
         else:
             self._log(f"Cannot play {card.name}: needs {cost} DON, has {self.available_don()}.")
             return False
@@ -1443,10 +1468,7 @@ class GameState:
                         effect_manager = get_effect_manager()
                         effect_manager.on_opponent_event_play(self, attacker_player, card)
 
-                    # Fire on_event for defender's leader (e.g. Crocodile OP01-062: draw 1 when you activate Event)
-                    from .effects.effect_registry import has_hardcoded_effect as _has_he, execute_hardcoded_effect as _exec_he
-                    if defender_player.leader and _has_he(defender_player.leader.id, 'on_event'):
-                        _exec_he(self, defender_player, defender_player.leader, 'on_event')
+                    self._trigger_on_event_effects(defender_player)
 
                     # Check if card has a hardcoded counter effect
                     from .effects.effect_registry import has_hardcoded_effect
@@ -1910,6 +1932,8 @@ class GameState:
                     from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
                     if p.leader and has_hardcoded_effect(p.leader.id, 'on_opponent_ko'):
                         execute_hardcoded_effect(self, p, p.leader, 'on_opponent_ko')
+                    if has_hardcoded_effect(attacker.id, 'on_ko_opponent'):
+                        execute_hardcoded_effect(self, p, attacker, 'on_ko_opponent')
 
                     self._finish_attack()
 
@@ -2287,6 +2311,10 @@ class GameState:
             'attached_don': getattr(card, 'attached_don', 0),
             'has_attacked': getattr(card, 'has_attacked', False),
             'can_attack_active': getattr(card, 'can_attack_active', False),
+            'has_blocker': getattr(card, 'has_blocker', False),
+            'has_double_attack': getattr(card, 'has_doubleattack', False) or getattr(card, 'has_double_attack', False),
+            'has_banish': getattr(card, 'has_banish', False),
+            'has_rush': getattr(card, 'has_rush', False),
             'has_taunt': getattr(card, 'has_taunt', False),
         }
 
@@ -2297,6 +2325,64 @@ class GameState:
         if player.leader and has_hardcoded_effect(player.leader.id, 'on_don_return'):
             execute_hardcoded_effect(self, player, player.leader, 'on_don_return')
 
+    def _trigger_on_event_effects(self, player: Player) -> None:
+        """Fire hardcoded on_event effects for the given player's leader and field cards."""
+        from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
+
+        if player.leader and has_hardcoded_effect(player.leader.id, 'on_event'):
+            execute_hardcoded_effect(self, player, player.leader, 'on_event')
+        for field_card in list(player.cards_in_play):
+            if has_hardcoded_effect(field_card.id, 'on_event'):
+                execute_hardcoded_effect(self, player, field_card, 'on_event')
+
+    def _queue_on_opponent_play_effects(
+        self,
+        acting_player: Player,
+        reacting_player: Player,
+        played_card: Card,
+    ) -> None:
+        """Queue hardcoded reactions for "when your opponent plays a Character" effects."""
+        from .effects.effect_registry import has_hardcoded_effect
+
+        queued_sources: List[Tuple[Player, Card]] = []
+        if reacting_player.leader and has_hardcoded_effect(reacting_player.leader.id, 'on_opponent_play'):
+            queued_sources.append((reacting_player, reacting_player.leader))
+        for field_card in list(reacting_player.cards_in_play):
+            if has_hardcoded_effect(field_card.id, 'on_opponent_play'):
+                queued_sources.append((reacting_player, field_card))
+
+        self._queued_on_opponent_play_sources = queued_sources
+        self._pending_on_opponent_play_card = played_card
+        if queued_sources and not self.pending_choice:
+            self._advance_on_opponent_play_effects()
+
+    def _advance_on_opponent_play_effects(self) -> None:
+        """Continue resolving queued on_opponent_play effects until one needs input."""
+        from .effects.effect_registry import execute_hardcoded_effect
+
+        while not self.pending_choice:
+            queued_sources = getattr(self, '_queued_on_opponent_play_sources', [])
+            if not queued_sources:
+                self._queued_on_opponent_play_sources = []
+                self._pending_on_opponent_play_card = None
+                return
+            owner, source_card = queued_sources.pop(0)
+            execute_hardcoded_effect(self, owner, source_card, 'on_opponent_play')
+
+    def _attached_don_total(self, player: Player) -> int:
+        """Return the number of DON!! cards currently attached to this player's leader/characters."""
+        attached = sum(getattr(card, 'attached_don', 0) for card in player.cards_in_play)
+        if player.leader:
+            attached += getattr(player.leader, 'attached_don', 0)
+        return attached
+
+    def _cost_area_don_pool(self, player: Player) -> List[str]:
+        """Return just the DON!! cards still in the cost area, excluding attached DON!! cards."""
+        attached = min(self._attached_don_total(player), len(player.don_pool))
+        if attached <= 0:
+            return list(player.don_pool)
+        return list(player.don_pool[:-attached])
+
     def _player_to_dict(self, player: Player, is_viewer: bool = False) -> dict:
         """Serialize a player to a dictionary.
 
@@ -2304,6 +2390,7 @@ class GameState:
             player: The player to serialize
             is_viewer: If True, include full hand info (player is viewing their own state)
         """
+        cost_area_don_pool = self._cost_area_don_pool(player)
         return {
             'player_id': player.player_id or '',
             'name': player.name,
@@ -2315,9 +2402,9 @@ class GameState:
             'field': [self._card_to_dict(c) for c in player.cards_in_play],
             'trash_count': len(player.trash),
             'trash': [self._card_to_dict(c) for c in player.trash],
-            'don_active': player.don_pool.count('active'),
-            'don_total': len(player.don_pool),
-            'don_pool': list(player.don_pool),
+            'don_active': cost_area_don_pool.count('active'),
+            'don_total': len(cost_area_don_pool),
+            'don_pool': cost_area_don_pool,
             'has_mulliganed': player.has_mulliganed,
         }
 
@@ -3345,6 +3432,47 @@ class GameState:
         )
         self._log(f"Invalid selection for {action}")
 
+    def _normalize_pending_choice_selection(self, choice: PendingChoice, selected: List[str]) -> Optional[List[str]]:
+        """Validate and normalize a pending-choice submission to the choice's canonical option ids."""
+        count = len(selected)
+        if count < choice.min_selections:
+            self._log_invalid_selection(choice.choice_type, selected, f"needs at least {choice.min_selections} selections")
+            return None
+        if count > choice.max_selections:
+            self._log_invalid_selection(choice.choice_type, selected, f"allows at most {choice.max_selections} selections")
+            return None
+
+        if not choice.options:
+            if len(set(selected)) != count:
+                self._log_invalid_selection(choice.choice_type, selected, "duplicate option ids submitted")
+                return None
+            return [str(raw) for raw in selected]
+
+        valid_ids = {str(option.get("id")) for option in choice.options}
+        normalized: List[str] = []
+        for raw in selected:
+            raw_str = str(raw)
+            if raw_str in valid_ids:
+                normalized.append(raw_str)
+                continue
+
+            try:
+                option_index = int(raw_str)
+            except (TypeError, ValueError):
+                self._log_invalid_selection(choice.choice_type, selected, f"unknown option id {raw!r}")
+                return None
+
+            if not (0 <= option_index < len(choice.options)):
+                self._log_invalid_selection(choice.choice_type, selected, f"unknown option id {raw!r}")
+                return None
+
+            normalized.append(str(choice.options[option_index].get("id")))
+
+        if len(set(normalized)) != count:
+            self._log_invalid_selection(choice.choice_type, selected, "duplicate option ids submitted")
+            return None
+        return normalized
+
     def _parse_selected_index(
         self,
         action: str,
@@ -3421,6 +3549,32 @@ class GameState:
                 return leader
         return None
 
+    def _card_matches_target_info(self, card: Optional[Card], target_info: Dict[str, Any]) -> bool:
+        """Check whether a live card matches a serialized pending-choice target."""
+        if card is None:
+            return False
+        unique_id = target_info.get("unique_id")
+        if unique_id is not None:
+            return id(card) == unique_id
+        return card.id == target_info.get("id")
+
+    def _find_live_card_by_info(
+        self,
+        target_info: Dict[str, Any],
+        zones: List[List[Card]],
+        *,
+        include_leaders: Optional[List[Optional[Card]]] = None,
+    ) -> Optional[Card]:
+        """Find a live card object from serialized target info."""
+        for zone in zones:
+            for card in zone:
+                if self._card_matches_target_info(card, target_info):
+                    return card
+        for leader in include_leaders or []:
+            if self._card_matches_target_info(leader, target_info):
+                return leader
+        return None
+
     def _target_card_from_info(
         self,
         player: Player,
@@ -3430,8 +3584,8 @@ class GameState:
     ) -> Optional[Card]:
         """Resolve a serialized target reference to the live card."""
         leaders = [self.player1.leader, self.player2.leader] if include_leaders else None
-        return self._find_card_by_id(
-            target_info["id"],
+        return self._find_live_card_by_info(
+            target_info,
             [self.player1.cards_in_play, self.player2.cards_in_play, player.cards_in_play],
             include_leaders=leaders,
         )
@@ -3450,8 +3604,17 @@ class GameState:
             self._advance_on_opponent_attack_effects()
             if self.pending_choice:
                 return
+        queued_play_effects = getattr(self, '_queued_on_opponent_play_sources', [])
+        if queued_play_effects:
+            self._advance_on_opponent_play_effects()
+            if self.pending_choice:
+                return
         if not self.pending_choice and self.phase == GamePhase.END:
             self._queue_end_of_turn_don_activation_choice()
+        if not self.pending_choice and getattr(self, '_advance_turn_after_end_phase', False):
+            self._advance_turn_after_end_phase = False
+            self._complete_turn_transition()
+            return
         queued = getattr(self, '_queued_counter_effects', [])
         if queued:
             defender_player, counter_card = queued.pop(0)
@@ -3628,11 +3791,14 @@ class GameState:
                 target.attached_don = getattr(target, "attached_don", 0) + 1
                 given += 1
         else:
-            for state in list(player.don_pool):
+            cost_area_count = len(self._cost_area_don_pool(player))
+            for idx, state in enumerate(list(player.don_pool[:cost_area_count])):
                 if given >= don_count:
                     break
                 if rested_only and state != "rested":
                     continue
+                player.don_pool.pop(idx - given)
+                player.don_pool.append("rested")
                 target.attached_don = getattr(target, "attached_don", 0) + 1
                 given += 1
         self._log(f"{player.name} attached {given} DON to {target.name}")
@@ -3670,7 +3836,7 @@ class GameState:
             return
         for participant in [self.player1, self.player2]:
             for card in participant.cards_in_play[:]:
-                if card.id != target_info["id"]:
+                if not self._card_matches_target_info(card, target_info):
                     continue
                 self._attempt_character_ko(card, by_effect=True)
                 return
@@ -3684,7 +3850,7 @@ class GameState:
         trashed_card: Optional[Card] = None
         for zone_name, zone in (("hand", player.hand), ("field", player.cards_in_play)):
             for card in zone[:]:
-                if card.id == target_info["id"]:
+                if self._card_matches_target_info(card, target_info):
                     zone.remove(card)
                     player.trash.append(card)
                     trashed_card = card
@@ -3733,7 +3899,7 @@ class GameState:
         if not target_info:
             return
         for card in player.trash[:]:
-            if card.id == target_info["id"]:
+            if self._card_matches_target_info(card, target_info):
                 player.trash.remove(card)
                 player.hand.append(card)
                 self._log(f"{card.name} added to hand from trash")
@@ -3746,7 +3912,7 @@ class GameState:
             return
         for participant in [self.player1, self.player2]:
             for card in participant.cards_in_play[:]:
-                if card.id == target_info["id"]:
+                if self._card_matches_target_info(card, target_info):
                     participant.cards_in_play.remove(card)
                     participant.hand.append(card)
                     self._log(f"{card.name} returned to hand")
@@ -3764,7 +3930,7 @@ class GameState:
         target_info = target_cards[idx]
         rest_on_play = data.get("rest_on_play", True)
         for card in player.trash[:]:
-            if card.id == target_info["id"]:
+            if self._card_matches_target_info(card, target_info):
                 player.trash.remove(card)
                 card.is_resting = rest_on_play
                 player.cards_in_play.append(card)
@@ -3822,7 +3988,7 @@ class GameState:
         if not target_info:
             return
         for card in player.cards_in_play[:]:
-            if card.id == target_info["id"]:
+            if self._card_matches_target_info(card, target_info):
                 player.cards_in_play.remove(card)
                 player.hand.append(card)
                 self._log(f"{player.name} returned {card.name} to hand")
@@ -3834,7 +4000,7 @@ class GameState:
         for target_info in self._get_target_infos("apply_cost_reduction", data, selected):
             for participant in [self.player2 if player == self.player1 else self.player1, player]:
                 for card in participant.cards_in_play:
-                    if card.id != target_info["id"]:
+                    if not self._card_matches_target_info(card, target_info):
                         continue
                     if cost_reduction == "zero":
                         current_cost = max(0, (card.cost or 0) + getattr(card, 'cost_modifier', 0))
@@ -3857,7 +4023,7 @@ class GameState:
         target_info = target_cards[idx]
         rest_on_play = data.get("rest_on_play", False)
         for card in player.hand[:]:
-            if card.id == target_info["id"]:
+            if self._card_matches_target_info(card, target_info):
                 player.hand.remove(card)
                 card.is_resting = rest_on_play
                 setattr(card, 'played_turn', self.turn_count)
@@ -3876,7 +4042,7 @@ class GameState:
             return
         for participant in [self.player1, self.player2]:
             for card in participant.cards_in_play[:]:
-                if card.id == target_info["id"]:
+                if self._card_matches_target_info(card, target_info):
                     participant.cards_in_play.remove(card)
                     participant.deck.append(card)
                     self._log(f"{card.name} was placed at the bottom of deck")
@@ -3957,7 +4123,7 @@ class GameState:
             return
         opponent = self.player2 if player == self.player1 else self.player1
         for card in opponent.cards_in_play:
-            if card.id == target_info["id"]:
+            if self._card_matches_target_info(card, target_info):
                 card.cannot_attack = True
                 card.cannot_attack_until_turn = self.turn_count + 1
                 self._log(f"{card.name} cannot attack this turn")
@@ -3969,7 +4135,7 @@ class GameState:
         if not target_info:
             return
         for card in player.cards_in_play:
-            if card.id == target_info["id"]:
+            if self._card_matches_target_info(card, target_info):
                 card.has_doubleattack = True
                 card.has_double_attack = True
                 self._log(f"{card.name} gains Double Attack")
@@ -3981,7 +4147,7 @@ class GameState:
         if not target_info:
             return
         for card in player.cards_in_play:
-            if card.id == target_info["id"]:
+            if self._card_matches_target_info(card, target_info):
                 card.has_banish = True
                 self._log(f"{card.name} gains Banish")
                 return
@@ -3993,7 +4159,7 @@ class GameState:
             return
         opponent = self.player2 if player == self.player1 else self.player1
         for card in opponent.cards_in_play[:]:
-            if card.id == target_info["id"]:
+            if self._card_matches_target_info(card, target_info):
                 opponent.cards_in_play.remove(card)
                 opponent.life_cards.append(card)
                 self._log(f"{card.name} was added to opponent's Life")
@@ -4023,7 +4189,7 @@ class GameState:
         opponent = self.player2 if player == self.player1 else self.player1
         for target_info in self._get_target_infos("perona_cannot_rest", data, selected[:2]):
             for card in opponent.cards_in_play:
-                if card.id == target_info["id"]:
+                if self._card_matches_target_info(card, target_info):
                     card.cannot_be_rested = True
                     self._log(f"{card.name} cannot be rested")
                     break
@@ -4034,13 +4200,13 @@ class GameState:
         if not target_info:
             return
         for card in player.hand[:]:
-            if card.id == target_info["id"]:
+            if self._card_matches_target_info(card, target_info):
                 player.hand.remove(card)
                 player.cards_in_play.append(card)
                 self._log(f"{card.name} was played from hand")
                 return
         for card in list(player.trash):
-            if card.id == target_info["id"]:
+            if self._card_matches_target_info(card, target_info):
                 player.trash.remove(card)
                 player.cards_in_play.append(card)
                 self._log(f"{card.name} was played from trash")
@@ -4052,7 +4218,7 @@ class GameState:
         if not target_info:
             return
         for card in player.cards_in_play:
-            if card.id == target_info["id"]:
+            if self._card_matches_target_info(card, target_info):
                 card.has_rush = True
                 self._log(f"{card.name} gains Rush")
                 return
@@ -4063,7 +4229,7 @@ class GameState:
         if not target_info:
             return
         for card in player.cards_in_play:
-            if card.id == target_info["id"]:
+            if self._card_matches_target_info(card, target_info):
                 card.is_resting = False
                 card.has_attacked = False
                 self._log(f"{card.name} was set active")
@@ -4075,7 +4241,7 @@ class GameState:
         if not target_info:
             return
         for card in player.cards_in_play:
-            if card.id == target_info["id"]:
+            if self._card_matches_target_info(card, target_info):
                 card.is_resting = True
                 self._log(f"{card.name} was rested instead")
                 return
@@ -4096,7 +4262,7 @@ class GameState:
         if not target_info:
             return
         for card in list(player.trash):
-            if card.id == target_info["id"]:
+            if self._card_matches_target_info(card, target_info):
                 player.trash.remove(card)
                 player.hand.append(card)
                 self._log(f"{card.name} was added to hand from trash")
@@ -4109,7 +4275,7 @@ class GameState:
             return
         opponent = self.player2 if player == self.player1 else self.player1
         for card in opponent.cards_in_play:
-            if card.id == target_info["id"]:
+            if self._card_matches_target_info(card, target_info):
                 card.effects_negated_this_turn = True
                 self._log(f"{card.name}'s effects were negated")
                 return
@@ -4130,6 +4296,10 @@ class GameState:
         choice = self.pending_choice
         data = choice.callback_data
         player = self._resolve_choice_player(data)
+        normalized_selection = self._normalize_pending_choice_selection(choice, selected)
+        if normalized_selection is None:
+            return False
+        selected = normalized_selection
 
         try:
             if choice.callback is not None:

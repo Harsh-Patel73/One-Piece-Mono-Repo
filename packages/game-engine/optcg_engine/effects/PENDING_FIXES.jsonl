@@ -1,2 +1,2 @@
-{"card_id": "OP04-032", "note": "This card is still currently setting ALL rested DON!! as active, it should just be 2. ", "submitted_at": "2026-04-10T22:44:43.931958", "fixed_at": null}
-{"card_id": "OP04-033", "note": "This card is also setting all of the DON!! as active at end of turn. It should only be 1. ", "submitted_at": "2026-04-10T22:45:11.836239", "fixed_at": null}
+
+{"card_id": "OP04-053", "note": "I should be prompted to select which card I want to add to the bottom of the deck after the draw. ", "submitted_at": "2026-04-11T04:17:31.421986", "fixed_at": null}

@@ -8,7 +8,7 @@ from ..effect_registry import (
     add_don_from_deck, create_bottom_deck_choice, create_cost_reduction_choice,
     create_hand_discard_choice, create_ko_choice, create_rest_choice, create_return_to_hand_choice,
     create_mode_choice, create_play_from_trash_choice, create_power_effect_choice, create_trash_choice,
-    create_set_active_choice, create_target_choice, add_power_modifier, check_life_count,
+    create_set_active_choice, create_target_choice, add_power_modifier, check_life_count, give_don_to_card,
     draw_cards, get_characters_by_cost, get_characters_by_type, get_opponent, optional_don_return,
     register_effect, search_top_cards, trash_from_hand,
 )
@@ -445,15 +445,49 @@ def _prompt_exact_hand_trash(game_state, player, count, source_card, prompt, aft
     return True
 
 
-def _prompt_take_life_top_or_bottom_to_hand(game_state, player, source_card, prompt, after_callback):
+def _add_top_deck_to_life(game_state, player, *, log_card_name=False):
+    if not player.deck:
+        return None
+    life_card = player.deck.pop(0)
+    player.life_cards.append(life_card)
+    if log_card_name:
+        game_state._log(f"{player.name} added {life_card.name} from the top of deck to Life")
+    else:
+        game_state._log(f"{player.name} added a card from the top of deck to Life")
+    return life_card
+
+
+def _grant_double_attack_for_turn(game_state, target):
+    target.has_doubleattack = True
+    target.has_double_attack = True
+    target._temp_doubleattack = True
+    game_state._log(f"{target.name} gains Double Attack during this turn")
+
+
+def _prompt_take_life_top_or_bottom_to_hand(
+    game_state,
+    player,
+    source_card,
+    prompt,
+    after_callback,
+    *,
+    reveal_card_names=True,
+):
     life_cards = list(player.life_cards)
     if not life_cards:
         after_callback(False, None)
         return True
 
-    options = [{"id": "top", "label": f"Top of Life ({life_cards[-1].name})"}]
+    top_label = "Top of Life"
+    bottom_label = "Bottom of Life"
+    if reveal_card_names:
+        top_label = f"{top_label} ({life_cards[-1].name})"
+        if len(life_cards) > 1:
+            bottom_label = f"{bottom_label} ({life_cards[0].name})"
+
+    options = [{"id": "top", "label": top_label}]
     if len(life_cards) > 1:
-        options.append({"id": "bottom", "label": f"Bottom of Life ({life_cards[0].name})"})
+        options.append({"id": "bottom", "label": bottom_label})
 
     def callback(selected):
         choice = selected[0] if selected else None
@@ -622,15 +656,16 @@ def op04_040_queen_leader(game_state, player, card):
         if total > 4:
             return False
         has_cost_8_plus = any((getattr(c, 'cost', 0) or 0) >= 8 for c in player.cards_in_play)
-        if not player.deck and not has_cost_8_plus:
+        if not player.deck:
+            return True
+        if not has_cost_8_plus:
+            draw_cards(player, 1)
             return True
 
         def callback(selected):
             mode = selected[0] if selected else "draw"
             if mode == "life" and has_cost_8_plus and player.deck:
-                life_card = player.deck.pop(0)
-                player.life_cards.append(life_card)
-                game_state._log(f"{player.name} added {life_card.name} from the top of deck to Life")
+                _add_top_deck_to_life(game_state, player, log_card_name=False)
                 return
             draw_cards(player, 1)
 
@@ -709,11 +744,10 @@ def op04_004_karoo(game_state, player, card):
         def callback(selected):
             for sel in selected:
                 idx = int(sel)
-                if 0 <= idx < len(alabasta_chars) and "rested" in player.don_pool:
-                    player.don_pool.remove("rested")
+                if 0 <= idx < len(alabasta_chars):
                     target = alabasta_chars[idx]
-                    target.attached_don = getattr(target, 'attached_don', 0) + 1
-                    game_state._log(f"{target.name} received 1 rested DON!!")
+                    if give_don_to_card(player, target, 1, rested_only=True):
+                        game_state._log(f"{target.name} received 1 rested DON!!")
 
         return create_target_choice(
             game_state, player, alabasta_chars,
@@ -1119,14 +1153,17 @@ def op04_024_sugar_opp_turn(game_state, player, card):
                 snapshot = list(targets)
 
                 def callback(selected):
-                    if _rest_selected_targets(game_state, snapshot, selected):
-                        card.is_resting = True
+                    _rest_selected_targets(game_state, snapshot, selected)
+                    card.is_resting = True
+                    game_state._log(f"{card.name} was rested")
 
                 return create_rest_choice(
                     game_state, player, snapshot, source_card=card,
                     prompt="Choose up to 1 opponent's Character to rest",
                     min_selections=0, callback=callback
                 )
+            card.is_resting = True
+            game_state._log(f"{card.name} was rested")
             return True
     return False
 
@@ -2281,24 +2318,35 @@ def op04_072_mr5(game_state, player, card):
 def op04_073_mr13_friday(game_state, player, card):
     """Activate: Trash this and Baroque Works character to add 1 active DON."""
     bw_chars = [c for c in player.cards_in_play if 'Baroque Works' in (c.card_origin or '') and c != card]
-    if bw_chars and card in player.cards_in_play:
+    if card not in player.cards_in_play or not bw_chars:
+        return False
+
+    bw_snap = list(bw_chars)
+
+    def mr13_friday_cb(selected: list) -> None:
+        target_idx = int(selected[0]) if selected else -1
+        if not (0 <= target_idx < len(bw_snap)):
+            return
+        target = bw_snap[target_idx]
+        if target not in player.cards_in_play or card not in player.cards_in_play:
+            return
+        player.cards_in_play.remove(target)
+        player.trash.append(target)
         player.cards_in_play.remove(card)
         player.trash.append(card)
-        bw_snap = list(bw_chars)
-        def mr13_friday_cb(selected: list) -> None:
-            target_idx = int(selected[0]) if selected else -1
-            if 0 <= target_idx < len(bw_snap):
-                target = bw_snap[target_idx]
-                if target in player.cards_in_play:
-                    player.cards_in_play.remove(target)
-                    player.trash.append(target)
-                    game_state._log(f"{target.name} was trashed")
-            add_don_from_deck(player, 1, set_active=True)
-            game_state._log(f"{player.name} gained 1 active DON")
-        return create_ko_choice(game_state, player, bw_chars, source_card=card,
-                               prompt="Choose your Baroque Works Character to trash",
-                               callback=mr13_friday_cb)
-    return False
+        game_state._log(f"{target.name} was trashed")
+        game_state._log(f"{card.name} was trashed")
+        add_don_from_deck(player, 1, set_active=True)
+        game_state._log(f"{player.name} gained 1 active DON")
+
+    return create_target_choice(
+        game_state,
+        player,
+        bw_snap,
+        "Choose 1 of your other Baroque Works type Characters to trash",
+        source_card=card,
+        callback=mr13_friday_cb,
+    )
 
 
 @register_effect("OP04-073", "trigger", "[Trigger] Play this card")
@@ -2765,6 +2813,7 @@ def op04_090_luffy_activate(game_state, player, card):
             for chosen in chosen_cards:
                 player.deck.append(chosen)
             card.is_resting = False
+            card.has_attacked = False
             card.skip_next_refresh = True
             card.op04_090_used = True
             game_state._log(f"{player.name} returned 7 cards from trash to the bottom of the deck")
@@ -2863,9 +2912,7 @@ def op04_093_king_kong_gun(game_state, player, card):
         target._sticky_power_modifier_expires_on_turn = game_state.turn_count
         game_state._log(f"{target.name} gets +6000 power during this turn")
         if has_large_trash:
-            target.has_doubleattack = True
-            target._temp_doubleattack = True
-            game_state._log(f"{target.name} gains Double Attack during this turn")
+            _grant_double_attack_for_turn(game_state, target)
 
     return create_target_choice(
         game_state,
@@ -3411,32 +3458,42 @@ def op04_110_pound_ko(game_state, player, card):
 def op04_111_hera(game_state, player, card):
     """Activate: Trash Homies and rest to set Charlotte Linlin active."""
     homies = [c for c in player.cards_in_play if 'Homies' in (c.card_origin or '') and c != card]
-    if homies and not getattr(card, 'is_resting', False):
+    if getattr(card, 'is_resting', False) or not homies:
+        return False
+
+    homies_snap = list(homies)
+
+    def hera_cb(selected: list) -> None:
+        target_idx = int(selected[0]) if selected else -1
+        if not (0 <= target_idx < len(homies_snap)):
+            return
+        target = homies_snap[target_idx]
+        if target not in player.cards_in_play or card not in player.cards_in_play:
+            return
+        player.cards_in_play.remove(target)
+        player.trash.append(target)
         card.is_resting = True
-        homies_snap = list(homies)
-        def hera_cb(selected: list) -> None:
-            target_idx = int(selected[0]) if selected else -1
-            if 0 <= target_idx < len(homies_snap):
-                target = homies_snap[target_idx]
-                if target in player.cards_in_play:
-                    player.cards_in_play.remove(target)
-                    player.trash.append(target)
-                    game_state._log(f"{target.name} was trashed")
-            linlins = [
-                c for c in player.cards_in_play
-                if 'Charlotte Linlin' in (getattr(c, 'name', '') or '')
-                or getattr(c, 'alt_name', '') == 'Charlotte Linlin'
-            ]
-            if linlins:
-                create_set_active_choice(
-                    game_state, player, linlins, source_card=card,
-                    prompt="Choose up to 1 of your Charlotte Linlin Characters to set active",
-                    min_selections=0,
-                )
-        return create_ko_choice(game_state, player, homies, source_card=card,
-                               prompt="Choose Homies Character to trash",
-                               callback=hera_cb)
-    return False
+        game_state._log(f"{target.name} was trashed")
+        linlins = [
+            c for c in player.cards_in_play
+            if 'Charlotte Linlin' in (getattr(c, 'name', '') or '')
+            or getattr(c, 'alt_name', '') == 'Charlotte Linlin'
+        ]
+        if linlins:
+            create_set_active_choice(
+                game_state, player, linlins, source_card=card,
+                prompt="Choose up to 1 of your Charlotte Linlin Characters to set active",
+                min_selections=0,
+            )
+
+    return create_target_choice(
+        game_state,
+        player,
+        homies_snap,
+        "Choose 1 of your other Homies type Characters to trash",
+        source_card=card,
+        callback=hera_cb,
+    )
 
 
 @register_effect("OP04-111", "trigger", "[Trigger] Play this card")
@@ -3461,9 +3518,7 @@ def op04_112_yamato(game_state, player, card):
         def callback(selected):
             if not selected or selected[0] != "yes" or not player.deck:
                 return
-            life_card = player.deck.pop(0)
-            player.life_cards.append(life_card)
-            game_state._log(f"{player.name} added {life_card.name} from the top of deck to Life")
+            _add_top_deck_to_life(game_state, player, log_card_name=False)
 
         _prompt_optional_yes_no(
             game_state,
@@ -3525,9 +3580,7 @@ def op04_115_gun_modoki(game_state, player, card):
             idx = int(selected[0])
             if 0 <= idx < len(targets):
                 target = targets[idx]
-                target.has_doubleattack = True
-                target._temp_doubleattack = True
-                game_state._log(f"{target.name} gains Double Attack during this turn")
+                _grant_double_attack_for_turn(game_state, target)
 
         create_target_choice(
             game_state,
@@ -3549,6 +3602,7 @@ def op04_115_gun_modoki(game_state, player, card):
             card,
             "Choose the top or bottom card of your Life cards to add to your hand",
             after_life,
+            reveal_card_names=False,
         )
 
     return _prompt_optional_yes_no(
@@ -3725,6 +3779,7 @@ def op04_117_heavenly_fire_trigger(game_state, player, card):
             card,
             "Choose the top or bottom card of your Life cards to add to your hand",
             after_life,
+            reveal_card_names=False,
         )
 
     return _prompt_optional_yes_no(

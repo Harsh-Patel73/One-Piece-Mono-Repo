@@ -28,6 +28,29 @@ class HardcodedEffect:
 _hardcoded_effects: Dict[str, List[HardcodedEffect]] = {}
 
 
+def _serialize_card_ref(card: 'Card') -> Dict[str, Any]:
+    """Serialize a live card reference for pending-choice callbacks."""
+    return {
+        "id": card.id,
+        "name": card.name,
+        "unique_id": id(card),
+    }
+
+
+def _serialize_card_refs(cards: List['Card']) -> List[Dict[str, Any]]:
+    """Serialize many live card references for pending-choice callbacks."""
+    return [_serialize_card_ref(card) for card in cards]
+
+
+def _remove_card_instance(zone: List['Card'], target: 'Card') -> bool:
+    """Remove the exact card object from a zone, even if equal-value copies exist."""
+    for idx, card in enumerate(zone):
+        if card is target:
+            zone.pop(idx)
+            return True
+    return False
+
+
 def register_effect(card_id: str, timing: str, description: str):
     """Decorator to register a hardcoded effect handler."""
     def decorator(func: Callable[['GameState', 'Player', 'Card'], bool]):
@@ -316,7 +339,7 @@ def create_target_choice(game_state: 'GameState', player: 'Player',
     data = {
         "player_id": player.player_id,
         "player_index": 0 if player is game_state.player1 else 1,
-        "target_cards": [{"id": card.id, "name": card.name} for card in targets],
+        "target_cards": _serialize_card_refs(targets),
     }
     if callback_data:
         data.update(callback_data)
@@ -594,24 +617,18 @@ def get_characters_by_cost(player: 'Player', max_cost: int = None, min_cost: int
 def add_don_from_deck(player: 'Player', count: int, set_active: bool = False) -> int:
     """Add DON from DON deck (don_pool is a list of 'active'/'rested' strings, max 10).
 
-    Rested DON is inserted BEFORE existing rested entries so the frontend does not
-    mistake the new DON for an attached DON (the frontend assumes trailing rested
-    entries are the ones attached to cards).
+    Attached DON is represented by the trailing entries in ``don_pool``. New free
+    DON must therefore be inserted before that trailing attached segment.
     """
     added = 0
+    attached_total = sum(getattr(c, 'attached_don', 0) for c in player.cards_in_play)
+    if getattr(player, 'leader', None):
+        attached_total += getattr(player.leader, 'attached_don', 0)
     for _ in range(count):
         if len(player.don_pool) < 10:
             status = "active" if set_active else "rested"
-            if status == "rested":
-                # Insert before the first existing rested entry so it's clearly
-                # a free rested DON, not confused with trailing attached DON
-                insert_idx = next(
-                    (i for i, s in enumerate(player.don_pool) if s == "rested"),
-                    len(player.don_pool)
-                )
-                player.don_pool.insert(insert_idx, status)
-            else:
-                player.don_pool.append(status)
+            insert_idx = max(0, len(player.don_pool) - attached_total)
+            player.don_pool.insert(insert_idx, status)
             added += 1
     return added
 
@@ -631,10 +648,10 @@ def return_don_to_deck(game_state: 'GameState', player: 'Player', count: int,
     """
     from ..game_engine import PendingChoice
 
-    total_pool = len(player.don_pool)
     attached_total = sum(getattr(c, 'attached_don', 0) for c in player.cards_in_play)
     if getattr(player, 'leader', None):
         attached_total += getattr(player.leader, 'attached_don', 0)
+    total_pool = max(0, len(player.don_pool) - attached_total)
 
     if total_pool + attached_total < count:
         return True  # Not enough DON to pay — effect fizzles
@@ -693,6 +710,10 @@ def return_don_to_deck(game_state: 'GameState', player: 'Player', count: int,
             if ci < len(player.cards_in_play):
                 c = player.cards_in_play[ci]
                 c.attached_don = max(0, getattr(c, 'attached_don', 0) - cnt)
+        detached_total = leader_detach + sum(char_detach.values())
+        for _ in range(detached_total):
+            if player.don_pool:
+                player.don_pool.pop()
         game_state._log(f"Returned {len(selected)} DON!! to DON deck")
         game_state._trigger_on_don_return_effects(player)
         if post_callback is not None:
@@ -732,9 +753,7 @@ def optional_don_return(game_state: 'GameState', player: 'Player', count: int,
     """
     from ..game_engine import PendingChoice
 
-    total_don = len(player.don_pool) + sum(getattr(c, 'attached_don', 0) for c in player.cards_in_play)
-    if getattr(player, 'leader', None):
-        total_don += getattr(player.leader, 'attached_don', 0)
+    total_don = len(player.don_pool)
     if total_don < count:
         return True  # Can't pay — fizzle silently
 
@@ -776,13 +795,18 @@ def optional_don_return(game_state: 'GameState', player: 'Player', count: int,
 
 def give_don_to_card(player: 'Player', target: 'Card', count: int, rested_only: bool = False) -> int:
     """Give DON from pool to a card (increments attached_don, removes from pool)."""
+    attached_total = sum(getattr(c, 'attached_don', 0) for c in player.cards_in_play)
+    if getattr(player, 'leader', None):
+        attached_total += getattr(player.leader, 'attached_don', 0)
+    cost_area_count = max(0, len(player.don_pool) - attached_total)
     given = 0
-    for i in range(len(player.don_pool) - 1, -1, -1):
+    for i in range(cost_area_count - 1, -1, -1):
         if given >= count:
             break
         if rested_only and player.don_pool[i] != "rested":
             continue
         player.don_pool.pop(i)
+        player.don_pool.append("rested")
         target.attached_don = getattr(target, 'attached_don', 0) + 1
         given += 1
     return given
@@ -843,7 +867,7 @@ def create_don_assignment_choice(game_state: 'GameState', player: 'Player',
             "player_id": player.player_id,
             "don_count": don_count,
             "rested_only": rested_only,
-            "target_cards": [{"id": c.id, "name": c.name} for c in targets],
+            "target_cards": _serialize_card_refs(targets),
         }
     )
     return True
@@ -911,7 +935,7 @@ def create_power_effect_choice(game_state: 'GameState', player: 'Player',
         callback_data={
             "player_id": player.player_id,
             "power_amount": power_amount,
-            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
+            "target_cards": _serialize_card_refs(snapshot),
         }
     )
     return True
@@ -960,7 +984,7 @@ def create_ko_choice(game_state: 'GameState', player: 'Player',
 
     cb_data = {
         "player_id": player.player_id,
-        "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
+        "target_cards": _serialize_card_refs(snapshot),
     }
     if callback_data:
         cb_data.update(callback_data)
@@ -1010,8 +1034,7 @@ def create_return_to_hand_choice(game_state: 'GameState', player: 'Player',
         if 0 <= target_idx < len(snapshot):
             target = snapshot[target_idx]
             for p in [player, opponent]:
-                if target in p.cards_in_play:
-                    p.cards_in_play.remove(target)
+                if _remove_card_instance(p.cards_in_play, target):
                     p.hand.append(target)
                     game_state._log(f"{target.name} returned to hand")
                     break
@@ -1029,7 +1052,7 @@ def create_return_to_hand_choice(game_state: 'GameState', player: 'Player',
         callback_action="return_to_hand",
         callback_data={
             "player_id": player.player_id,
-            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
+            "target_cards": _serialize_card_refs(snapshot),
         }
     )
     return True
@@ -1064,8 +1087,7 @@ def create_play_from_trash_choice(game_state: 'GameState', player: 'Player',
         target_idx = int(selected[0])
         if 0 <= target_idx < len(snapshot):
             target = snapshot[target_idx]
-            if target in player.trash:
-                player.trash.remove(target)
+            if _remove_card_instance(player.trash, target):
                 target.is_resting = rest_on_play
                 player.cards_in_play.append(target)
                 game_state._log(f"{player.name} played {target.name} from trash")
@@ -1084,7 +1106,7 @@ def create_play_from_trash_choice(game_state: 'GameState', player: 'Player',
         callback_data={
             "player_id": player.player_id,
             "rest_on_play": rest_on_play,
-            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
+            "target_cards": _serialize_card_refs(snapshot),
         }
     )
     return True
@@ -1188,8 +1210,7 @@ def create_own_character_choice(game_state: 'GameState', player: 'Player',
         target_idx = int(selected[0]) if selected else -1
         if 0 <= target_idx < len(snapshot):
             target = snapshot[target_idx]
-            if target in player.cards_in_play:
-                player.cards_in_play.remove(target)
+            if _remove_card_instance(player.cards_in_play, target):
                 player.hand.append(target)
                 game_state._log(f"{target.name} returned to hand")
 
@@ -1208,7 +1229,7 @@ def create_own_character_choice(game_state: 'GameState', player: 'Player',
         callback_action=callback_action or "return_own_to_hand",
         callback_data={
             "player_id": player.player_id,
-            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
+            "target_cards": _serialize_card_refs(snapshot),
         }
     )
     return True
@@ -1277,7 +1298,7 @@ def create_cost_reduction_choice(game_state: 'GameState', player: 'Player',
         callback_data={
             "player_id": player.player_id,
             "cost_reduction": cost_reduction,
-            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
+            "target_cards": _serialize_card_refs(snapshot),
         }
     )
     return True
@@ -1312,8 +1333,7 @@ def create_play_from_hand_choice(game_state: 'GameState', player: 'Player',
         target_idx = int(selected[0])
         if 0 <= target_idx < len(snapshot):
             target = snapshot[target_idx]
-            if target in player.hand:
-                player.hand.remove(target)
+            if _remove_card_instance(player.hand, target):
                 target.is_resting = rest_on_play
                 setattr(target, 'played_turn', game_state.turn_count)
                 player.cards_in_play.append(target)
@@ -1336,7 +1356,7 @@ def create_play_from_hand_choice(game_state: 'GameState', player: 'Player',
         callback_data={
             "player_id": player.player_id,
             "rest_on_play": rest_on_play,
-            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
+            "target_cards": _serialize_card_refs(snapshot),
         }
     )
     return True
@@ -1372,8 +1392,7 @@ def create_bottom_deck_choice(game_state: 'GameState', player: 'Player',
         if 0 <= target_idx < len(snapshot):
             target = snapshot[target_idx]
             for p in [player, opponent]:
-                if target in p.cards_in_play:
-                    p.cards_in_play.remove(target)
+                if _remove_card_instance(p.cards_in_play, target):
                     p.deck.append(target)
                     game_state._log(f"{target.name} was placed at the bottom of deck")
                     break
@@ -1393,7 +1412,7 @@ def create_bottom_deck_choice(game_state: 'GameState', player: 'Player',
         callback_action=callback_action or "place_at_bottom",
         callback_data={
             "player_id": player.player_id,
-            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
+            "target_cards": _serialize_card_refs(snapshot),
         }
     )
     return True
@@ -1452,7 +1471,7 @@ def create_rest_choice(game_state: 'GameState', player: 'Player',
         callback_action=cb_action,
         callback_data={
             "player_id": player.player_id,
-            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
+            "target_cards": _serialize_card_refs(snapshot),
         }
     )
     return True
@@ -1496,7 +1515,7 @@ def create_set_active_choice(game_state: 'GameState', player: 'Player',
 
     cb_data = {
         "player_id": player.player_id,
-        "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
+        "target_cards": _serialize_card_refs(snapshot),
     }
     if extra_data:
         cb_data.update(extra_data)
@@ -1554,7 +1573,7 @@ def create_multi_target_choice(game_state: 'GameState', player: 'Player',
         callback_action=callback_action or "select_target",
         callback_data={
             "player_id": player.player_id,
-            "target_cards": [{"id": c.id, "name": c.name} for c in targets],
+            "target_cards": _serialize_card_refs(targets),
         }
     )
     return True
@@ -1586,8 +1605,7 @@ def create_add_from_trash_choice(game_state: 'GameState', player: 'Player',
         target_idx = int(selected[0]) if selected else -1
         if 0 <= target_idx < len(snapshot):
             target = snapshot[target_idx]
-            if target in player.trash:
-                player.trash.remove(target)
+            if _remove_card_instance(player.trash, target):
                 player.hand.append(target)
                 game_state._log(f"{target.name} was added to hand from trash")
 
@@ -1604,7 +1622,7 @@ def create_add_from_trash_choice(game_state: 'GameState', player: 'Player',
         callback_action="add_from_trash_to_hand",
         callback_data={
             "player_id": player.player_id,
-            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
+            "target_cards": _serialize_card_refs(snapshot),
         }
     )
     return True
@@ -1646,7 +1664,7 @@ def create_hand_discard_choice(game_state: 'GameState', player: 'Player',
         callback_action=callback_action,
         callback_data={
             "player_id": player.player_id,
-            "target_cards": [{"id": c.id, "name": c.name} for c in targets],
+            "target_cards": _serialize_card_refs(targets),
         }
     )
     return True
@@ -1687,8 +1705,7 @@ def create_add_to_life_choice(game_state: 'GameState', player: 'Player',
         target_idx = int(selected[0]) if selected else -1
         if 0 <= target_idx < len(snapshot):
             target = snapshot[target_idx]
-            if target in opponent.cards_in_play:
-                opponent.cards_in_play.remove(target)
+            if _remove_card_instance(opponent.cards_in_play, target):
                 opponent.life_cards.append(target)
                 game_state._log(f"{target.name} was added to opponent's Life")
 
@@ -1705,7 +1722,7 @@ def create_add_to_life_choice(game_state: 'GameState', player: 'Player',
         callback_action="add_to_opponent_life",
         callback_data={
             "player_id": player.player_id,
-            "target_cards": [{"id": c.id, "name": c.name} for c in snapshot],
+            "target_cards": _serialize_card_refs(snapshot),
         }
     )
     return True
@@ -1748,8 +1765,8 @@ def create_dual_target_choice(game_state: 'GameState', player: 'Player',
         callback_action=callback1,
         callback_data={
             "player_id": player.player_id,
-            "target_cards": [{"id": c.id, "name": c.name} for c in targets1],
-            "second_targets": [{"id": c.id, "name": c.name} for c in targets2],
+            "target_cards": _serialize_card_refs(targets1),
+            "second_targets": _serialize_card_refs(targets2),
             "second_callback": callback2,
         }
     )

@@ -56,6 +56,32 @@ def _card(id, name, card_type, cost, power, colors, card_origin, *, rested=False
     return c
 
 
+def _seed_attached_don(player: Player, card: Card, count: int) -> None:
+    """Seed attached DON while keeping the free DON pool/count consistent."""
+    actual = min(max(count, 0), len(player.don_pool))
+    card.attached_don = actual
+    for _ in range(actual):
+        if "active" in player.don_pool:
+            idx = player.don_pool.index("active")
+        elif player.don_pool:
+            idx = len(player.don_pool) - 1
+        else:
+            break
+        player.don_pool.pop(idx)
+        player.don_pool.append("rested")
+
+
+def _cost_area_don_pool(player: Player) -> List[str]:
+    """Return only the free DON pool, excluding trailing attached DON."""
+    attached_total = sum(getattr(c, "attached_don", 0) for c in player.cards_in_play)
+    if getattr(player, "leader", None):
+        attached_total += getattr(player.leader, "attached_don", 0)
+    attached_total = min(attached_total, len(player.don_pool))
+    if attached_total <= 0:
+        return list(player.don_pool)
+    return list(player.don_pool[:-attached_total])
+
+
 def _dummy(index: int, *, rested=False) -> Card:
     c = _card(f"DUMMY-{index:03d}", f"Generic Char {index}", "CHARACTER",
               3, 4000, ["Red"], "Straw Hat Crew", rested=rested)
@@ -158,6 +184,15 @@ def _iceburg_leader(life=4) -> Card:
     return c
 
 
+def _animal_kingdom_leader(life=4) -> Card:
+    """Animal Kingdom Pirates leader for OP04 test setup."""
+    c = _card("OP04-040", "Queen", "LEADER",
+              None, 5000, ["Blue"], "Animal Kingdom Pirates")
+    c.life = life
+    c.counter = None
+    return c
+
+
 def _make_test_card(card_data: dict) -> Card:
     id_ = card_data.get("id") or card_data.get("id_normal", "UNKNOWN")
     id_norm = card_data.get("id_normal") or id_
@@ -220,7 +255,7 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
     t = timing.lower()
 
     if t == "continuous":
-        tc.attached_don = 2
+        _seed_attached_don(p1, tc, 2)
         if tc.card_type == "LEADER":
             p1.leader = tc
         else:
@@ -234,11 +269,13 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
             p1.cards_in_play.append(_straw_hat(300 + i, cost=i + 2))
 
     elif t in ("on_attack", "when_attacking"):
-        tc.attached_don = 2; tc.is_resting = False
+        tc.is_resting = False
         if tc.card_type == "LEADER":
             p1.leader = tc
+            _seed_attached_don(p1, tc, 2)
         else:
             p1.cards_in_play.append(tc)
+            _seed_attached_don(p1, tc, 2)
         opp_c = _dummy(202, rested=False); opp_c.name = "Opp-C active (5000)"; opp_c.power = 5000; opp_c.cost = 4
         p2.cards_in_play.append(opp_c)
 
@@ -270,15 +307,18 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
         p1.cards_in_play.append(tc)
 
     elif t == "on_event":
-        tc.attached_don = 1; p1.leader = tc
+        p1.leader = tc
+        _seed_attached_don(p1, tc, 1)
         while len(p1.hand) > 3:
             p1.hand.pop(-1)
 
     elif t == "on_opponent_ko":
-        tc.attached_don = 1; p1.leader = tc
+        p1.leader = tc
+        _seed_attached_don(p1, tc, 1)
 
     elif t == "on_event_activated":
-        tc.attached_don = 1; p1.cards_in_play.append(tc)
+        p1.cards_in_play.append(tc)
+        _seed_attached_don(p1, tc, 1)
 
     elif t == "blocker":
         p1.cards_in_play.append(tc)
@@ -490,6 +530,34 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
             c = _card(cid, cname, "CHARACTER", cost, power, ["Black"], "CP9")
             p1.deck.insert(i, c)
 
+    # ── OP04 Card-specific test seeding ────────────────────────────
+
+    if card_id == "OP04-046":
+        p1.leader = _animal_kingdom_leader(4)
+        op04_seeds = [
+            _card("AKP-046-001", "Animal Kingdom Filler 1", "CHARACTER", 3, 4000, ["Blue"], "Animal Kingdom Pirates"),
+            _card("AKP-046-002", "Animal Kingdom Filler 2", "CHARACTER", 3, 4000, ["Blue"], "Animal Kingdom Pirates"),
+            _card("AKP-046-003", "Animal Kingdom Filler 3", "CHARACTER", 3, 4000, ["Blue"], "Animal Kingdom Pirates"),
+            _card("AKP-046-004", "Animal Kingdom Filler 4", "CHARACTER", 3, 4000, ["Blue"], "Animal Kingdom Pirates"),
+            _card("AKP-046-005", "Animal Kingdom Filler 5", "CHARACTER", 3, 4000, ["Blue"], "Animal Kingdom Pirates"),
+            _card("OP04-055", "Plague Rounds", "EVENT", 2, None, ["Blue"], "Animal Kingdom Pirates"),
+            _card("OP04-047", "Ice Oni", "CHARACTER", 4, 5000, ["Blue"], "Animal Kingdom Pirates"),
+        ]
+        for i, seed in enumerate(op04_seeds):
+            p1.deck.insert(i, seed)
+
+    if card_id == "OP04-066" and all(getattr(c, "id", "") != tc.id for c in p2.life_cards):
+        p2.life_cards.insert(0, copy.copy(tc))
+
+    if card_id == "OP04-084":
+        top_three = [
+            _card("CP-OP04-084-F1", "Black Filler 1", "CHARACTER", 4, 5000, ["Black"], "Navy"),
+            _card("CP-OP04-084-F2", "Black Filler 2", "CHARACTER", 3, 4000, ["Black"], "Cipher Pol"),
+            _card("CP-OP04-084", "CP Test Agent", "CHARACTER", 2, 3000, ["Black"], "CP"),
+        ]
+        for i, seed in enumerate(top_three):
+            p1.deck.insert(i, seed)
+
     return gs, p1, tc
 
 
@@ -504,13 +572,14 @@ def _snapshot(player: Player, opponent: Player) -> dict:
             f"don={getattr(c,'attached_don',0)} rest={c.is_resting}"
             for c in cards
         ]
+    cost_area_don = _cost_area_don_pool(player)
     return {
         "hand":       len(player.hand),
         "field":      field_repr(player.cards_in_play),
         "trash":      len(player.trash),
         "life":       len(player.life_cards),
-        "don_active": player.don_pool.count("active"),
-        "don_rested": player.don_pool.count("rested"),
+        "don_active": cost_area_don.count("active"),
+        "don_rested": cost_area_don.count("rested"),
         "opp_field":  field_repr(opponent.cards_in_play),
         "opp_life":   len(opponent.life_cards),
         "opp_hand":   len(opponent.hand),
