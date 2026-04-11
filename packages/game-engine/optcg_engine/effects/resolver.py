@@ -474,26 +474,41 @@ class EffectResolver:
 
     def _resolve_play(self, effect: Effect, context: EffectContext) -> EffectResult:
         """Handle play card effect."""
+        def _remove_exact(zone, target) -> bool:
+            for idx, zone_card in enumerate(zone):
+                if zone_card is target:
+                    zone.pop(idx)
+                    return True
+            return False
+
+        def _contains_exact(zone, target) -> bool:
+            return any(zone_card is target for zone_card in zone)
+
         # Check field limit for characters (max 5)
-        char_count = sum(1 for c in context.source_player.cards_in_play if c.card_type == "CHARACTER")
+        char_count = sum(
+            1 for c in context.source_player.cards_in_play
+            if str(getattr(c, "card_type", "")).upper() == "CHARACTER"
+        )
 
         if effect.target_type == TargetType.SELF:
             # Play this card (trigger effect)
             card = context.source_card
-            if card.card_type == "CHARACTER" and char_count >= 5:
+            if str(getattr(card, "card_type", "")).upper() == "CHARACTER" and char_count >= 5:
                 print(f"Cannot play {card.name}: field is full (5 characters max).")
                 return EffectResult(success=False, message="Field is full")
-            if card in context.source_player.trash:
-                context.source_player.trash.remove(card)
-                context.source_player.cards_in_play.append(card)
-                print(f"{card.name} is played from trigger")
-                return EffectResult(success=True, state_changed=True)
+            if _contains_exact(context.source_player.cards_in_play, card):
+                return EffectResult(success=True, state_changed=False)
+
+            _remove_exact(context.source_player.trash, card)
+            context.source_player.cards_in_play.append(card)
+            print(f"{card.name} is played from trigger")
+            return EffectResult(success=True, state_changed=True)
 
         # Play from hand
         targets = context.targets
         if targets:
             card = targets[0]
-            if card.card_type == "CHARACTER" and char_count >= 5:
+            if str(getattr(card, "card_type", "")).upper() == "CHARACTER" and char_count >= 5:
                 print(f"Cannot play {card.name}: field is full (5 characters max).")
                 return EffectResult(success=False, message="Field is full")
             if card in context.source_player.hand:

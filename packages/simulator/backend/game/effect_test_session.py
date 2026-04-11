@@ -24,7 +24,7 @@ if str(_engine_path) not in sys.path:
 from optcg_engine.game_engine import GameState, Player
 from optcg_engine.models.cards import Card
 from optcg_engine.models.enums import GamePhase
-from optcg_engine.effects.hardcoded import execute_hardcoded_effect, _hardcoded_effects
+from optcg_engine.effects.effect_registry import execute_hardcoded_effect, _hardcoded_effects
 
 STATUS_FILE = _engine_path / "optcg_engine" / "effects" / "CARD_STATUS.md"
 CARDS_JSON   = Path(__file__).parent.parent / "data" / "cards.json"
@@ -535,19 +535,22 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
     if card_id == "OP04-046":
         p1.leader = _animal_kingdom_leader(4)
         op04_seeds = [
+            _card("OP04-055", "Plague Rounds", "EVENT", 2, None, ["Blue"], "Animal Kingdom Pirates"),
+            _card("OP04-055-SEED-2", "Plague Rounds", "EVENT", 2, None, ["Blue"], "Animal Kingdom Pirates"),
+            _card("OP04-047", "Ice Oni", "CHARACTER", 4, 5000, ["Blue"], "Animal Kingdom Pirates"),
+            _card("OP04-047-SEED-2", "Ice Oni", "CHARACTER", 4, 5000, ["Blue"], "Animal Kingdom Pirates"),
             _card("AKP-046-001", "Animal Kingdom Filler 1", "CHARACTER", 3, 4000, ["Blue"], "Animal Kingdom Pirates"),
             _card("AKP-046-002", "Animal Kingdom Filler 2", "CHARACTER", 3, 4000, ["Blue"], "Animal Kingdom Pirates"),
             _card("AKP-046-003", "Animal Kingdom Filler 3", "CHARACTER", 3, 4000, ["Blue"], "Animal Kingdom Pirates"),
-            _card("AKP-046-004", "Animal Kingdom Filler 4", "CHARACTER", 3, 4000, ["Blue"], "Animal Kingdom Pirates"),
-            _card("AKP-046-005", "Animal Kingdom Filler 5", "CHARACTER", 3, 4000, ["Blue"], "Animal Kingdom Pirates"),
-            _card("OP04-055", "Plague Rounds", "EVENT", 2, None, ["Blue"], "Animal Kingdom Pirates"),
-            _card("OP04-047", "Ice Oni", "CHARACTER", 4, 5000, ["Blue"], "Animal Kingdom Pirates"),
         ]
         for i, seed in enumerate(op04_seeds):
             p1.deck.insert(i, seed)
 
-    if card_id == "OP04-066" and all(getattr(c, "id", "") != tc.id for c in p2.life_cards):
-        p2.life_cards.insert(0, copy.copy(tc))
+    if card_id == "OP04-066":
+        p1.life_cards = [life_card for life_card in p1.life_cards if getattr(life_card, "id", "") != tc.id]
+        p1.life_cards.append(copy.copy(tc))
+        p2.life_cards = [life_card for life_card in p2.life_cards if getattr(life_card, "id", "") != tc.id]
+        p2.life_cards.append(copy.copy(tc))
 
     if card_id == "OP04-084":
         top_three = [
@@ -557,6 +560,30 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
         ]
         for i, seed in enumerate(top_three):
             p1.deck.insert(i, seed)
+
+    if card_id == "OP04-093":
+        dressrosa = _card("DRESSROSA-093", "Dressrosa Test Target", "CHARACTER", 5, 6000, ["Black"], "Dressrosa")
+        p1.cards_in_play.append(dressrosa)
+        while len(p1.trash) < 14:
+            idx = len(p1.trash) + 1
+            p1.trash.append(_card(f"TRASH-093-{idx:02d}", f"Trash Seed {idx}", "CHARACTER", 2, 3000, ["Black"], "Dressrosa"))
+
+    if card_id == "OP04-111":
+        other_homie = _card("HOMIES-111", "Other Homie", "CHARACTER", 3, 3000, ["Yellow"], "Homies")
+        linlin = _card("LINLIN-111", "Charlotte Linlin", "CHARACTER", 10, 12000, ["Yellow"], "Big Mom Pirates")
+        linlin.is_resting = True
+        linlin.has_attacked = True
+        p1.cards_in_play.append(other_homie)
+        p1.cards_in_play.append(linlin)
+
+    if card_id == "OP04-115":
+        p1.cards_in_play.append(_card("WANO-115", "Wano Test Target", "CHARACTER", 3, 4000, ["Purple"], "Land of Wano"))
+        while len(p1.life_cards) < 2 and p1.deck:
+            p1.life_cards.append(p1.deck.pop(0))
+
+    if card_id == "OP04-119":
+        green_five = _card("GREEN-119", "Green Five Test", "CHARACTER", 5, 6000, ["Green"], "Donquixote Pirates")
+        p1.hand.insert(0, green_five)
 
     return gs, p1, tc
 

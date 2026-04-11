@@ -724,6 +724,20 @@ def setup_socket_handlers(sio: socketio.AsyncServer, game_manager: GameManager):
         # Cards that react when the opponent plays an event during YOUR turn.
         # e.g. Usopp OP01-004: "[DON!! x1] [Your Turn] Draw 1 when opponent activates Event"
         # Setup: card stays on P1's field with 1 DON attached, P2 gets counter events.
+        def _sorted_seed_candidates(predicate):
+            return sorted(
+                [
+                    c for c in game_manager.card_db.values()
+                    if predicate(c)
+                    and not any(c.id.endswith(s) for s in ('_p1', '_p2', '_p3'))
+                ],
+                key=lambda c: ((getattr(c, 'cost', 0) or 0), c.id),
+            )
+
+        def _clone_first_seed(predicate):
+            candidates = _sorted_seed_candidates(predicate)
+            return copy.deepcopy(candidates[0]) if candidates else None
+
         is_opponent_event_reactive = (
             card.card_type == "CHARACTER"
             and '[your turn]' in effect_text
@@ -944,6 +958,159 @@ def setup_socket_handlers(sio: socketio.AsyncServer, game_manager: GameManager):
                         gs.player1.cards_in_play.append(wfc_copy)
                         gs._apply_keywords(wfc_copy)
 
+        # OP04-specific frontend test setup overrides from pending fixes.
+        if card.id == "OP04-046":
+            ak_leader = _clone_first_seed(
+                lambda c: c.card_type == "LEADER"
+                and 'animal kingdom pirates' in (c.card_origin or '').lower()
+            )
+            if ak_leader:
+                gs.player1.leader = ak_leader
+
+            filler_seeds = [
+                copy.deepcopy(seed)
+                for seed in _sorted_seed_candidates(
+                    lambda c: c.card_type == "CHARACTER"
+                    and 'animal kingdom pirates' in (c.card_origin or '').lower()
+                    and c.id not in {card.id, "OP04-047"}
+                )[:3]
+            ]
+            plague_rounds = next((c for c in game_manager.card_db.values() if c.id == "OP04-055"), None)
+            ice_oni = next((c for c in game_manager.card_db.values() if c.id == "OP04-047"), None)
+            top_seeds = []
+            if plague_rounds is not None:
+                top_seeds.extend([copy.deepcopy(plague_rounds), copy.deepcopy(plague_rounds)])
+            if ice_oni is not None:
+                top_seeds.extend([copy.deepcopy(ice_oni), copy.deepcopy(ice_oni)])
+            top_seeds.extend(filler_seeds)
+            for idx, seed in enumerate(top_seeds):
+                gs.player1.deck.insert(idx, seed)
+
+        if card.id == "OP04-084":
+            top_three = []
+            top_three.extend(
+                copy.deepcopy(seed)
+                for seed in _sorted_seed_candidates(
+                    lambda c: c.card_type == "CHARACTER"
+                    and 'navy' in (c.card_origin or '').lower()
+                    and c.id != card.id
+                )[:1]
+            )
+            top_three.extend(
+                copy.deepcopy(seed)
+                for seed in _sorted_seed_candidates(
+                    lambda c: c.card_type == "CHARACTER"
+                    and 'cipher pol' in (c.card_origin or '').lower()
+                    and c.id != card.id
+                )[:1]
+            )
+            cp_target = _clone_first_seed(
+                lambda c: c.card_type == "CHARACTER"
+                and c.id != card.id
+                and (getattr(c, 'cost', 0) or 0) <= 2
+                and 'stussy' not in (c.name or '').lower()
+                and 'cp' in (c.card_origin or '').lower()
+            )
+            if cp_target is None:
+                cp_target = _clone_first_seed(
+                    lambda c: c.card_type == "CHARACTER"
+                    and c.id != card.id
+                    and (getattr(c, 'cost', 0) or 0) <= 2
+                    and 'stussy' not in (c.name or '').lower()
+                )
+                if cp_target is not None:
+                    cp_target.id = "CP-OP04-084-LIVE"
+                    cp_target.id_normal = "CP-OP04-084-LIVE"
+                    cp_target.name = "CP Test Agent"
+                    cp_target.card_origin = "CP"
+                    cp_target.cost = 2
+            if cp_target is not None:
+                top_three.append(cp_target)
+            for idx, seed in enumerate(top_three):
+                gs.player1.deck.insert(idx, seed)
+
+        if card.id == "OP04-093":
+            if not any('dressrosa' in (getattr(c, 'card_origin', '') or '').lower() for c in gs.player1.cards_in_play):
+                dressrosa_target = _clone_first_seed(
+                    lambda c: c.card_type == "CHARACTER"
+                    and 'dressrosa' in (c.card_origin or '').lower()
+                    and c.id != card.id
+                )
+                if dressrosa_target:
+                    gs.player1.cards_in_play.append(dressrosa_target)
+                    gs._apply_keywords(dressrosa_target)
+
+            trash_seed_pool = _sorted_seed_candidates(
+                lambda c: c.card_type == "CHARACTER" and c.id != card.id
+            )
+            trash_idx = 0
+            while len(gs.player1.trash) < 14 and trash_seed_pool:
+                gs.player1.trash.append(copy.deepcopy(trash_seed_pool[trash_idx % len(trash_seed_pool)]))
+                trash_idx += 1
+
+        if card.id == "OP04-111":
+            if not any(
+                'homies' in (getattr(c, 'card_origin', '') or '').lower() and c.id != card.id
+                for c in gs.player1.cards_in_play
+            ):
+                other_homie = _clone_first_seed(
+                    lambda c: c.card_type == "CHARACTER"
+                    and c.id != card.id
+                    and 'homies' in (c.card_origin or '').lower()
+                )
+                if other_homie:
+                    gs.player1.cards_in_play.append(other_homie)
+                    gs._apply_keywords(other_homie)
+
+            if not any(
+                'charlotte linlin' in ((getattr(c, 'name', '') or '') + ' ' + (getattr(c, 'alt_name', '') or '')).lower()
+                for c in gs.player1.cards_in_play
+            ):
+                linlin = _clone_first_seed(
+                    lambda c: c.card_type == "CHARACTER"
+                    and 'charlotte linlin' in (c.name or '').lower()
+                )
+                if linlin:
+                    linlin.is_resting = True
+                    linlin.has_attacked = True
+                    gs.player1.cards_in_play.append(linlin)
+                    gs._apply_keywords(linlin)
+
+        if card.id == "OP04-115":
+            while len(gs.player1.life_cards) < 2 and gs.player1.deck:
+                gs.player1.life_cards.append(gs.player1.deck.pop(0))
+
+            if not any('land of wano' in (getattr(c, 'card_origin', '') or '').lower() for c in gs.player1.cards_in_play):
+                wano_target = _clone_first_seed(
+                    lambda c: c.card_type == "CHARACTER"
+                    and 'land of wano' in (c.card_origin or '').lower()
+                    and c.id != card.id
+                )
+                if wano_target:
+                    gs.player1.cards_in_play.append(wano_target)
+                    gs._apply_keywords(wano_target)
+
+        if card.id == "OP04-119":
+            green_five = _clone_first_seed(
+                lambda c: c.card_type == "CHARACTER"
+                and 'green' in [color.lower() for color in (c.colors or [])]
+                and (getattr(c, 'cost', 0) or 0) == 5
+                and c.id != card.id
+            )
+            if green_five is None:
+                green_five = copy.deepcopy(card)
+                green_five.id = "GREEN-119-LIVE"
+                green_five.id_normal = "GREEN-119-LIVE"
+                green_five.name = "Green Five Test"
+                green_five.card_type = "CHARACTER"
+                green_five.cost = 5
+                green_five.power = 6000
+                green_five.colors = ["Green"]
+                green_five.card_origin = "Donquixote Pirates"
+                green_five.effect = ""
+                green_five.trigger = ""
+            gs.player1.hand.insert(0, green_five)
+
         # OP03-specific frontend test setup overrides from pending fixes.
         if card.id == "OP03-033":
             for _lc in game_manager.card_db.values():
@@ -1019,6 +1186,18 @@ def setup_socket_handlers(sio: socketio.AsyncServer, game_manager: GameManager):
                     )
                     for cand in candidates[:2]:
                         gs.player1.hand.append(copy.deepcopy(cand))
+
+        if card.id == "OP04-066":
+            gs.player1.life_cards = [
+                life_card for life_card in gs.player1.life_cards
+                if getattr(life_card, 'id', '') != card.id
+            ]
+            gs.player2.life_cards = [
+                life_card for life_card in gs.player2.life_cards
+                if getattr(life_card, 'id', '') != card.id
+            ]
+            gs.player1.life_cards.append(copy.deepcopy(card))
+            gs.player2.life_cards.append(copy.deepcopy(card))
 
         # Apply continuous effects now that the field is set up
         gs._apply_continuous_effects()

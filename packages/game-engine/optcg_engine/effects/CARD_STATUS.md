@@ -564,7 +564,7 @@
 | OP04-021 | Viola | CHARACTER | ✅ Verified | [On Your Opponent's Attack] ➁ (You may rest the specified number of DO… | When the opponent attacks and this card is on the field there should be a prompt if I want to rest 2 of my DON. If I choose to do so, I should be prompted if I want to rest up to 1 of my opponents DON!! cards. |
 | OP04-022 | Eric | CHARACTER | ✅ Verified | [Activate: Main] You may rest this Character: Rest up to 1 of your opp… |  |
 | OP04-023 | Kuro | CHARACTER | ✅ Verified |  |  |
-| OP04-024 | Sugar | CHARACTER | ⚠ Needs Fix | [Opponent's Turn] [Once Per Turn] When your opponent plays a Character… | When the opponent plays a character and this card is on the field, I should be prompted to rest up 1 of  my opponents characters. If I do so, then this character gets rested as well.  |
+| OP04-024 | Sugar | CHARACTER | ✅ Verified | [Opponent's Turn] [Once Per Turn] When your opponent plays a Character… | When the opponent plays a character and this card is on the field, I should be prompted to rest up 1 of  my opponents characters. If I do so, then this character gets rested as well. |
 | OP04-025 | Giolla | CHARACTER | ✅ Verified | [On Your Opponent's Attack] ➁ (You may rest the specified number of DO… | If this card is on the field and the opponent attacks, the controller of this card should be prompted to rest 2 DON!! if the choice is yes to rest 2 DON!! There should be an option to rest up to 1 of the opponents characters with a cost of 4 or less. |
 | OP04-026 | Senor Pink | CHARACTER | ✅ Verified | [When Attacking] ➀ (You may rest the specified number of DON!! cards i… | When I attack, I should be prompted if I want to rest 1 DON!! If I rest the DON!! and my leader is a Donquixote Pirate then I should be prompted to rest up to 1 of the opponents characters with a cost of 4 or less. This effect works, but it is showing me cards that are already rested. When I end the turn I should also be prompted to set up to 1 DON!! card as active. |
 | OP04-027 | Daddy Masterson | CHARACTER | ✅ Verified | [DON!! x1] [End of Your Turn] Set this Character as active. |  |
@@ -572,21 +572,21 @@
 | OP04-029 | Dellinger | CHARACTER | ✅ Verified | [End of Your Turn] Set up to 1 of your DON!! cards as active. | Player should be prompted if they want to set 1 DON!! as active. |
 | OP04-030 | Trebol | CHARACTER | ✅ Verified | [On Play] K.O. up to 1 of your opponent's rested Characters with a cos… | When the opponent attacks, the controller of this card should be prompted if they want to rest 2 DON!! if they do so then they should be prompted to rest one of the opponents 4 costs or less. |
 | OP04-031 | Donquixote Doflamingo | CHARACTER | ✅ Verified | [On Play] Up to a total of 3 of your opponent's rested Leader and Char… | The characters selected by this card should not become active on the next turn, they should remain rested. |
-| OP04-032 | Baby 5 | CHARACTER | ⚠ Needs Fix | [End of Your Turn] You may trash this Character: Set up to 2 of your D… | This card is still currently setting ALL rested DON!! as active, it should just be 2.  |
-| OP04-033 | Machvise | CHARACTER | ⚠ Needs Fix | [On Play] If your Leader has the {Donquixote Pirates} type, rest up to… | This card is also setting all of the DON!! as active at end of turn. It should only be 1.  |
+| OP04-032 | Baby 5 | CHARACTER | ✅ Verified | [End of Your Turn] You may trash this Character: Set up to 2 of your D… | When I press End Turn and it prompts me to use the Baby 5 effect, it should still pass the turn to the opponent after the effect takes place. |
+| OP04-033 | Machvise | CHARACTER | ✅ Verified | [On Play] If your Leader has the {Donquixote Pirates} type, rest up to… | When I press End Turn it should still pass the turn to the opponent, after the DON is set back to active. I currently have to press it again. |
 | OP04-034 | Lao.G | CHARACTER | ✅ Verified | [End of Your Turn] If you have 3 or more active DON!! cards, K.O. up t… |  |
 | OP04-035 | Spiderweb | EVENT | ✅ Verified | [Counter] Up to 1 of your Leader or Character cards gains +4000 power … | When the card is used as a trigger, only the TRIGGER text at the bottom should be activated unless it says otherwise. This card's trigger only gives +2000 power to a leader for the TURN. |
 | OP04-036 | Donquixote Family | EVENT | ✅ Verified | [Counter] Look at 5 cards from the top of your deck; reveal up to 1 {D… |  |
 | OP04-037 | Flapping Thread | EVENT | ✅ Verified | [Counter] If your Leader has the {Donquixote Pirates} type, up to 1 of… | I should be prompted to select a leader or character to give +2000 power to for the TURN. It currently is doing it automatically for the attacked character and doing it only for the battle. |
 | OP04-038 | The Weak Do Not Have the Right to Choose How They Die!!! | EVENT | ✅ Verified | [Main]/[Counter] Rest up to 1 of your opponent's Leader or Character c… | The card works as it should when using it on my turn as a main. But when I use it as a counter it only let's me rest an opponent's leader or character cards - I should also be able to KO up to 1 of the opponent's 6 cost or less cards. |
 | OP04-039 | Rebecca | LEADER | ✅ Verified | This Leader cannot attack. [Activate: Main] [Once Per Turn] ➀ (You may… |  |
-| OP04-040 | Queen | LEADER | ⚠ Needs Fix | [DON!! x1] [When Attacking] If you have a total of 4 or less cards in … | Implement this effect for this card: [DON!! x1] [When Attacking] If you have a total of 4 or less cards in your Life area and hand, draw 1 card. If you have a Character with a cost of 8 or more, you may add up to 1 card from the top of your deck to the top of your Life cards instead of drawing 1 card. |
+| OP04-040 | Queen | LEADER | ✅ Verified | [DON!! x1] [When Attacking] If you have a total of 4 or less cards in … | Currently, when I attach DON! to this leader and attack nothing is happening. It should be letting me draw 1 card, if there is a character with cost of 8 or more on the board, then I should be prompted if I want to draw 1 card or add 1 card from the top of the deck to the top of the life. Granted I have 4 or less life cards still. |
 | OP04-041 | Apis | CHARACTER | ✅ Verified | [On Play] You may trash 2 cards from your hand: Look at 5 cards from t… | It should prompt me to select which 2 cards I want to trash. |
 | OP04-042 | Ipponmatsu | CHARACTER | ✅ Verified | [On Play] Up to 1 of your <Slash> attribute Characters gains +3000 pow… |  |
 | OP04-043 | Ulti | CHARACTER | ✅ Verified | [DON!! x1] [When Attacking] Return up to 1 Character with a cost of 2 … |  |
 | OP04-044 | Kaido | CHARACTER | ✅ Verified | [On Play] Return up to 1 Character with a cost of 8 or less and up to … |  |
 | OP04-045 | King | CHARACTER | ✅ Verified | [On Play] Draw 1 card. |  |
-| OP04-046 | Queen | CHARACTER | ⚠ Needs Fix | [On Play] If your Leader has the {Animal Kingdom Pirates} type, look a… | Add Ice Oni to the top 7 of the deck so I can test this card.  |
+| OP04-046 | Queen | CHARACTER | ✅ Verified | [On Play] If your Leader has the {Animal Kingdom Pirates} type, look a… | Add 2 Plague Rounds and 2 Ice Oni cards in the top 7 cards of the deck. |
 | OP04-047 | Ice Oni | CHARACTER | ✅ Verified | [Your Turn] At the end of a battle in which this Character battles you… |  |
 | OP04-048 | Sasaki | CHARACTER | ✅ Verified | [On Play] Return all cards in your hand to your deck and shuffle your … | This card should add all the cards in hand back into the deck, and then shuffle the deck. Then based on how many cards you had in hand that you returned, you draw that same amount of cards. |
 | OP04-049 | Jack | CHARACTER | ✅ Verified | [On K.O.] Draw 1 card. |  |
@@ -601,14 +601,14 @@
 | OP04-062 | Bananagator | CHARACTER | ✅ Verified |  |  |
 | OP04-064 | Ms. All Sunday | CHARACTER | ✅ Verified | [On Play] Add up to 1 DON!! card from your DON!! deck and rest it. The… |  |
 | OP04-065 | Miss.Goldenweek(Marianne) | CHARACTER | ✅ Verified | [On Play] If your Leader's type includes "Baroque Works", up to 1 of y… |  |
-| OP04-066 | Miss.Valentine(Mikita) | CHARACTER | ⚠ Needs Fix | [On Play] Look at 5 cards from the top of your deck; reveal up to 1 ca… | Add this card to life so we can test the trigger.  |
+| OP04-066 | Miss.Valentine(Mikita) | CHARACTER | ⚠ Needs Fix | [On Play] Look at 5 cards from the top of your deck; reveal up to 1 ca… | This card is still not in the fucking life, so I cant test the trigger. Add this card to the top of both players life.  |
 | OP04-067 | Miss.MerryChristmas(Drophy) | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
 | OP04-077 | Ideo | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
 | OP04-078 | Oimo & Kashii | CHARACTER | ✅ Verified |  |  |
 | OP04-079 | Orlumbus | CHARACTER | ✅ Verified | [Activate: Main] [Once Per Turn] Give up to 1 of your opponent's Chara… |  |
 | OP04-081 | Cavendish | CHARACTER | ✅ Verified | [DON!! x1] This Character can also attack active Characters. [When Att… |  |
 | OP04-082 | Kyros | CHARACTER | ✅ Verified | If this Character would be K.O.'d, you may rest your Leader or 1 [Corr… | The On Play works great, there is an issue with the first part of the effect. If this character would EVER be KOd, I should be prompted if I want to rest my leader or corrida coliseum instead. Now if there is no leader to rest (it is already rested), and there is no corida coliseum, then this character would die. |
-| OP04-084 | Stussy | CHARACTER | ⚠ Needs Fix | [On Play] Look at 3 cards from the top of your deck and play up to 1 C… | Add a CP character with cost 2 or less to top 3 of deck so I can test this card.  |
+| OP04-084 | Stussy | CHARACTER | ✅ Verified | [On Play] Look at 3 cards from the top of your deck and play up to 1 C… | Add a fucking CP type to the top 3 you fucking retard. |
 | OP04-085 | Suleiman | CHARACTER | ✅ Verified | [On Play]/[When Attacking] If your Leader has the {Dressrosa} type, gi… |  |
 | OP04-086 | Chinjao | CHARACTER | ✅ Verified | [DON!! x1] When this Character battles and K.O.'s your opponent's Char… | When this character KOs an opponents character and has DON!! attached, it should draw 2 and then prompt me to trash 2. |
 | OP04-087 | Trafalgar Law | CHARACTER | ✅ Verified |  |  |
@@ -617,12 +617,12 @@
 | OP04-090 | Monkey.D.Luffy | CHARACTER | ✅ Verified | This Character can also attack active Characters. [Activate: Main] [On… | When this card gets set back to active by using the activate main, it should be able to attack again. Currently it says "Error: Cannot attack with that card". |
 | OP04-091 | Leo | CHARACTER | ✅ Verified | [On Play] You may rest your 1 Leader: If your Leader has the {Dressros… |  |
 | OP04-092 | Rebecca | CHARACTER | ✅ Verified | [On Play] Look at 3 cards from the top of your deck; reveal up to 1 {D… |  |
-| OP04-093 | Gum-Gum King Kong Gun | EVENT | ⚠ Needs Fix | [Main] Up to 1 of your {Dressrosa} type Characters gains +6000 power d… | This even should ALSO give double attack if there are 15 or more cards in trash. Currently it is just giving the +6000 power despite there being 15 cards in trash.  |
+| OP04-093 | Gum-Gum King Kong Gun | EVENT | ✅ Verified | [Main] Up to 1 of your {Dressrosa} type Characters gains +6000 power d… | When I give a character double attack, it STILL is not working. They only gain the power increase no DOUBLE ATTACK. |
 | OP04-094 | Trueno Bastardo | EVENT | ✅ Verified | [Main] Choose up to 1 of your opponent's Characters with a cost of 4 o… | I should be prompted to choose up to 1 of my opponents characters with a cost or 4 or less to KO. If I have more than 15 cards in my trash, I should be able to choose a character with a cost of 6 or less instead. |
 | OP04-095 | Barrier!! | EVENT | ✅ Verified | [Counter] Up to 1 of your Leader or Character cards gains +2000 power … | This card is not giving an additional +2000 power if I have 15 or more cards in trash. |
 | OP04-096 | Corrida Coliseum | STAGE | ✅ Verified | If your Leader has the {Dressrosa} type, your {Dressrosa} type Charact… | When the stage is out and leader is dressrosa type, it should allow ALL dressrosa type characters to attack ONLY characters on the turn they are played. |
 | OP04-098 | Toko | CHARACTER | ✅ Verified | [On Play] You may trash 2 {Land of Wano} type cards from your hand: If… |  |
-| OP04-099 | Olin | CHARACTER | ⚠ Needs Fix | Also treat this card's name as [Charlotte Linlin] according to the rul… | This cards name should also be treated as" [Charlotte Linlin]" |
+| OP04-099 | Olin | CHARACTER | ✅ Verified | Also treat this card's name as [Charlotte Linlin] according to the rul… | This cards name should also be treated as" [Charlotte Linlin]" |
 | OP04-100 | Capone"Gang"Bege | CHARACTER | ✅ Verified | [Trigger] Up to 1 of your opponent&#039;s Leader or Character cards ca… |  |
 | OP04-101 | Carmel | CHARACTER | ✅ Verified | [Your Turn] [On Play] Draw 1 card. |  |
 | OP04-102 | Kin'emon | CHARACTER | ✅ Verified | [Activate: Main] [Once Per Turn] ➀ (You may rest the specified number … |  |
@@ -637,12 +637,12 @@
 | OP04-112 | Yamato | CHARACTER | ✅ Verified | [On Play] K.O. up to 1 of your opponent's Characters with a cost equal… | The player should not be told what card was added to life. |
 | OP04-113 | Rabiyan | CHARACTER | ✅ Verified | [Trigger] Play this card. |  |
 | OP04-114 | Randolph | CHARACTER | ✅ Verified |  |  |
-| OP04-115 | Gun Modoki | EVENT | ⚠ Needs Fix | [Main] You may add 1 card from the top or bottom of your Life cards to… | This card should not reveal top or bottom of life to the player, they should have to select top or bottom not knowing what cards they are. Also, it is not giving the character Double Attack. Create a visual indicator when a card has double attack.  |
-| OP04-116 | Diable Jambe Joue Shot | EVENT | ⚠ Needs Fix | [Counter] Up to 1 of your Leader or Character cards gains +6000 power … | If the opponent and the player have a combined total of 4 or less life cards, the player should be prompted if they want to KO up to 1 of the opponents 2 costs or less.  |
+| OP04-115 | Gun Modoki | EVENT | ✅ Verified | [Main] You may add 1 card from the top or bottom of your Life cards to… | I am giving double attack to Yamato but when she deals damage it only does 1 damage. |
+| OP04-116 | Diable Jambe Joue Shot | EVENT | ✅ Verified | [Counter] Up to 1 of your Leader or Character cards gains +6000 power … | If the opponent and the player have a combined total of 4 or less life cards, the player should be prompted if they want to KO up to 1 of the opponents 2 costs or less. |
 | OP04-117 | Heavenly Fire | EVENT | ✅ Verified | [Main] Add up to 1 of your opponent's Characters with a cost of 3 or l… | Card not coded. |
 | OP04-118 | Nefeltari Vivi | CHARACTER | ✅ Verified | All of your red Characters with a cost of 3 or more other than this Ch… |  |
-| OP04-119 | Donquixote Rosinante | CHARACTER | ⚠ Needs Fix | [Opponent's Turn] If this Character is rested, your active Characters … | card not coded. |
-| OP04-053 | Page One | CHARACTER | ⚠ Needs Fix | [DON!! x1] [Once Per Turn] When you activate an Event, draw 1 card. Th… | I should be prompted to select which card I want to add to the bottom of the deck after the draw.  |
+| OP04-119 | Donquixote Rosinante | CHARACTER | ✅ Verified | [Opponent's Turn] If this Character is rested, your active Characters … | This card should prompt me first if I want to use the effect. |
+| OP04-053 | Page One | CHARACTER | ✅ Verified | [DON!! x1] [Once Per Turn] When you activate an Event, draw 1 card. Th… | I should be prompted to select which card I want to add to the bottom of the deck after the draw. |
 | OP04-060 | Crocodile | CHARACTER | ✅ Verified | [On Play] DON!! −2 (You may return the specified number of DON!! cards… |  |
 | OP04-063 | Franky | CHARACTER | ✅ Verified | [On Your Opponent's Attack] [Once Per Turn] DON!! −1 (You may return t… | This card is boosting by 2000 instead of 1000 |
 | OP04-068 | Yokozuna | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… | When I select a card to return to hand, if they have the same name it returns both. I.e, I chose to return Streusen to hand, and instead of returning 1 it returned both. |
@@ -650,12 +650,12 @@
 | OP04-070 | Mr.3(Galdino) | CHARACTER | ✅ Verified | [On Your Opponent's Attack] [Once Per Turn] DON!! −1 (You may return t… |  |
 | OP04-071 | Mr.4(Babe) | CHARACTER | ✅ Verified | [On Your Opponent's Attack] DON!! −1 (You may return the specified num… | This character is gaining +2000 power instead of +1000 power. |
 | OP04-072 | Mr.5(Gem) | CHARACTER | ✅ Verified | [On Your Opponent's Attack] [Once Per Turn] DON!! −2 (You may return t… |  |
-| OP04-073 | Mr.13 & Ms.Friday | CHARACTER | ⚠ Needs Fix | [Activate: Main] You may trash this Character and 1 of your Characters… | This card is adding 3 DON!! as rested, it should add 1 DON as active. Also, it is not trashing this character and the character with type "Baroque Works" |
+| OP04-073 | Mr.13 & Ms.Friday | CHARACTER | ✅ Verified | [Activate: Main] You may trash this Character and 1 of your Characters… | This card is adding 3 DON!! as rested, it should add 1 DON as active. Also, it is not trashing this character and the character with type "Baroque Works" |
 | OP04-074 | Colors Trap | EVENT | ✅ Verified | [Counter] DON!! −1 (You may return the specified number of DON!! cards… |  |
 | OP04-075 | Nez-Palm Cannon | EVENT | ✅ Verified | [Counter] Up to 1 of your Leader or Character cards gains +6000 power … |  |
 | OP04-076 | Weakness...Is an Unforgivable Sin. | EVENT | ✅ Verified | [Counter] DON!! −1 (You may return the specified number of DON!! cards… |  |
 | OP04-080 | Gyats | CHARACTER | ✅ Verified | [On Play] Up to 1 of your {Dressrosa} type Characters can also attack … |  |
-| OP04-111 | Hera | CHARACTER | ⚠ Needs Fix | [Activate: Main] You may trash 1 of your {Homies} type Characters othe… | Activating this card should not activate the trigger as it does currently. Though it is good that the trigger works, do not break the trigger in this fix. The activate main though should prompt me to trash 1 {Homies} type character that is NOT this character so it cannot be Hera. If this condition is fulfilled, then I should be prompted to select a Carlotte Linlin card to set as active.  |
+| OP04-111 | Hera | CHARACTER | ✅ Verified | [Activate: Main] You may trash 1 of your {Homies} type Characters othe… | [TRIGGER] Hera: Activating trigger — [Trigger] Play this card. Activating is still using the FUCKING TRIGGER U DUMB SHIT. IT SHOULD PROMPT ME TO TRASH 1 HOMIES TYPE CHARACTER, THEN REST THIS CHARACTER. IF I DO THIS THEN SET A CHARLOTTE LINLIN AS ACTIVE. |
 | OP04-059 | Iceburg | CHARACTER | ✅ Verified | [On Your Opponent's Attack] DON!! −1 (You may return the specified num… |  |
 
 | ID | Status | Type | Notes |
@@ -694,3 +694,12 @@
 | ID | Status | Type | Notes |
 |----|--------|------|-------|
 | OP05-010 | Nico Robin | CHARACTER | ✅ Verified | [On Play] K.O. up to 1 of your opponent's Characters with 1000 power o… |  |
+
+# Card Effect Status — OP06
+| OP06-008 | Schneider | CHARACTER | ✅ Verified |  |  |
+| OP06-010 | Douglas Bullet | CHARACTER | 🔲 To Do | If your Leader has the {FILM} type, this Character gains [Blocker]. (A… |  |
+| OP06-012 | Bear.King | CHARACTER | ✅ Verified | If your opponent has a Leader or Character with a base power of 6000 o… |  |
+
+| ID | Status | Type | Notes |
+|----|--------|------|-------|
+| OP06-005 | Gasparde | CHARACTER | ✅ Verified |  |  |

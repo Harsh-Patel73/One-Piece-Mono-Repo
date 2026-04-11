@@ -2898,7 +2898,8 @@ def op04_093_king_kong_gun(game_state, player, card):
     if not targets:
         return True
 
-    has_large_trash = len(player.trash) >= 15
+    effective_trash_count = len(player.trash) + (0 if card in player.trash else 1)
+    has_large_trash = effective_trash_count >= 15
 
     def callback(selected):
         if not selected:
@@ -3823,10 +3824,9 @@ def op04_119_rosinante_play(game_state, player, card):
     if not targets:
         return True
 
-    def callback(selected):
+    def play_callback(selected):
         if not selected:
             return
-        card.is_resting = True
         target_idx = int(selected[0]) if selected else -1
         if 0 <= target_idx < len(targets):
             chosen = targets[target_idx]
@@ -3840,10 +3840,28 @@ def op04_119_rosinante_play(game_state, player, card):
                 if chosen.effect and '[On Play]' in chosen.effect:
                     game_state._trigger_on_play_effects(chosen)
 
-    return create_target_choice(
-        game_state, player, targets,
-        "Choose up to 1 green Character with cost 5 to play from hand",
-        source_card=card, min_selections=0, max_selections=1, callback=callback
+    def use_callback(selected):
+        if not selected or selected[0] != "yes":
+            return
+        card.is_resting = True
+        create_target_choice(
+            game_state,
+            player,
+            targets,
+            "Choose up to 1 green Character with cost 5 to play from hand",
+            source_card=card,
+            min_selections=0,
+            max_selections=1,
+            callback=play_callback,
+        )
+
+    return _prompt_optional_yes_no(
+        game_state,
+        player,
+        card,
+        "Use Donquixote Rosinante's On Play effect and rest this Character?",
+        "Rest this Character",
+        use_callback,
     )
 
 

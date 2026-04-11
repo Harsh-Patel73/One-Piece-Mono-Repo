@@ -7,7 +7,11 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+SIM_BACKEND = ROOT.parent / "simulator" / "backend"
+if str(SIM_BACKEND) not in sys.path:
+    sys.path.insert(0, str(SIM_BACKEND))
 
+from game.effect_test_session import build_game_state
 from optcg_engine.effects.effect_registry import filter_by_cost_range, filter_by_max_cost
 from optcg_engine.effects.sets.op01_effects import op01_003_luffy_leader
 from optcg_engine.effects.sets.op04_effects import (
@@ -106,6 +110,34 @@ def make_player(name: str, prefix: str) -> Player:
     leader = make_card(f"{prefix}-leader", f"{name} Leader", card_type="Leader", cost=0, power=5000, life=0)
     deck = [make_card(f"{prefix}-deck-{idx}", f"{name} Deck {idx}", cost=idx % 6) for idx in range(12)]
     return Player(name, deck, leader, player_id=f"{prefix}-pid")
+
+
+def make_effect_test_card_data(
+    card_id: str,
+    name: str,
+    *,
+    card_type: str = "CHARACTER",
+    cost: int = 1,
+    power: int = 1000,
+    color: str = "Red",
+    card_origin: str = "Test",
+    effect: str = "",
+    trigger: str = "",
+) -> dict:
+    return {
+        "id": card_id,
+        "id_normal": card_id,
+        "name": name,
+        "cardType": card_type,
+        "Cost": cost,
+        "Power": power,
+        "Counter": 0,
+        "Color": color,
+        "Life": "",
+        "Effect": effect,
+        "Type": card_origin,
+        "Trigger": trigger,
+    }
 
 
 class PendingChoiceDispatchTests(unittest.TestCase):
@@ -1128,6 +1160,7 @@ class OP04RegressionTests(unittest.TestCase):
         homie.card_origin = "Homies"
         linlin = make_card("linlin", "Charlotte Linlin", cost=10, power=12000)
         linlin.is_resting = True
+        linlin.has_attacked = True
         self.player1.cards_in_play = [hera, homie, linlin]
 
         self.assertTrue(op04_111_hera(self.game, self.player1, hera))
@@ -1140,6 +1173,7 @@ class OP04RegressionTests(unittest.TestCase):
 
         self.assertIn(homie, self.player1.trash)
         self.assertFalse(linlin.is_resting)
+        self.assertFalse(linlin.has_attacked)
 
     def test_op04_111_activate_main_uses_activate_flow_without_trigger_side_effects(self) -> None:
         hera = make_card("OP04-111", "Hera", cost=5, power=3000)
@@ -1160,6 +1194,17 @@ class OP04RegressionTests(unittest.TestCase):
         self.assertIn(hera, self.player1.cards_in_play)
         self.assertTrue(hera.is_resting)
         self.assertFalse(linlin.is_resting)
+
+    def test_activate_main_does_not_fall_back_to_parser_for_unusable_hardcoded_activate(self) -> None:
+        hera = make_card("OP04-111", "Hera", cost=5, power=3000)
+        hera.card_origin = "Big Mom Pirates/Homies"
+        hera.effect = "[Activate: Main] You may trash 1 {Homies} type Character: Set up to 1 [Charlotte Linlin] Character as active."
+        self.player1.cards_in_play = [hera]
+
+        with patch("optcg_engine.effects.manager.get_effect_manager") as get_effect_manager:
+            self.assertFalse(self.game.activate_main_effect(0))
+
+        get_effect_manager.assert_not_called()
 
     def test_op04_073_activate_main_prompts_and_adds_one_active_don(self) -> None:
         mr13 = make_card("OP04-073", "Mr.13 & Ms.Friday", cost=1, power=2000)
@@ -1189,10 +1234,41 @@ class OP04RegressionTests(unittest.TestCase):
         self.assertFalse(rosinante.is_resting)
         self.assertIn(green_five, self.player1.hand)
 
+        self.assertEqual(["yes", "no"], [option["id"] for option in self.game.pending_choice.options])
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertTrue(rosinante.is_resting)
+        self.assertIsNotNone(self.game.pending_choice)
         self.assertTrue(self.game.resolve_pending_choice(["0"]))
         self.assertTrue(rosinante.is_resting)
         self.assertIn(green_five, self.player1.cards_in_play)
         self.assertNotIn(green_five, self.player1.hand)
+
+    def test_op04_119_rosinante_can_decline_the_optional_rest_and_play_effect(self) -> None:
+        rosinante = make_card("OP04-119", "Donquixote Rosinante", cost=2)
+        green_five = make_card("p1-hand-green5", "Green Five", cost=5)
+        green_five.colors = ["Green"]
+        self.player1.hand = [green_five]
+
+        self.assertTrue(op04_119_rosinante_play(self.game, self.player1, rosinante))
+        self.assertTrue(self.game.resolve_pending_choice(["no"]))
+
+        self.assertFalse(rosinante.is_resting)
+        self.assertIsNone(self.game.pending_choice)
+        self.assertIn(green_five, self.player1.hand)
+        self.assertNotIn(green_five, self.player1.cards_in_play)
+
+    def test_op04_119_rosinante_rests_before_prompting_for_the_green_five(self) -> None:
+        rosinante = make_card("OP04-119", "Donquixote Rosinante", cost=2)
+        self.player1.cards_in_play = [rosinante]
+        green_five = make_card("p1-hand-green5", "Green Five", cost=5)
+        green_five.colors = ["Green"]
+        self.player1.hand = [green_five]
+
+        self.assertTrue(op04_119_rosinante_play(self.game, self.player1, rosinante))
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+
+        self.assertTrue(rosinante.is_resting)
+        self.assertEqual(["p1-hand-green5"], [opt["card_id"] for opt in self.game.pending_choice.options])
 
     def test_op04_018_noop_without_alabasta_leader_still_counts_as_handled(self) -> None:
         event = make_card("OP04-018", "Vertigo Dance", card_type="EVENT", cost=1)
@@ -1275,6 +1351,20 @@ class OP04EngineRegressionTests(unittest.TestCase):
         self.assertTrue(op04_095_barrier_counter(self.game, self.player1, barrier))
         self.assertTrue(self.game.resolve_pending_choice(["0"]))
         self.assertEqual(4000, getattr(self.player1.leader, "_battle_power_modifier", 0))
+
+    def test_op04_093_counts_the_event_itself_toward_the_trash_threshold(self) -> None:
+        king_kong = make_card("OP04-093", "Gum-Gum King Kong Gun", card_type="EVENT", cost=3)
+        dressrosa = make_card("dressrosa", "Dressrosa", cost=5, power=6000)
+        dressrosa.card_origin = "Dressrosa"
+        self.player1.cards_in_play = [dressrosa]
+        self.player1.trash = [make_card(f"trash-{idx}", f"Trash {idx}", cost=1) for idx in range(14)]
+
+        self.assertTrue(op04_093_king_kong_gun(self.game, self.player1, king_kong))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+
+        self.assertEqual(6000, getattr(dressrosa, "power_modifier", 0))
+        self.assertTrue(dressrosa.has_doubleattack)
+        self.assertTrue(self.game._card_to_dict(dressrosa)["has_double_attack"])
 
     def test_op04_093_power_modifier_applies_to_real_battle_damage(self) -> None:
         king_kong = make_card("OP04-093", "Gum-Gum King Kong Gun", card_type="EVENT", cost=3)
@@ -1394,6 +1484,24 @@ class OP04EngineRegressionTests(unittest.TestCase):
         self.player2.deck = []
         self.player1.don_pool = []
         self.player2.don_pool = []
+        self.player1.leader.card_type = "LEADER"
+        self.player2.leader.card_type = "LEADER"
+
+    def _resolve_leader_attack(self, attacker: Card) -> None:
+        self.game.attack_with_card(attacker, -1)
+        self.assertIsNotNone(self.game.pending_attack)
+        self.assertTrue(self.game.respond_blocker(None))
+        self.assertTrue(self.game.respond_counter([]))
+        while self.game.awaiting_response == "trigger":
+            self.assertTrue(self.game.respond_trigger(False))
+
+    def _resolve_leader_attack_with_trigger_activation(self, attacker_index: int, *, activate: bool = True) -> None:
+        self.assertTrue(self.game.declare_attack(attacker_index, -1))
+        self.assertIsNotNone(self.game.pending_attack)
+        self.assertTrue(self.game.respond_blocker(None))
+        self.assertTrue(self.game.respond_counter([]))
+        self.assertEqual("trigger", self.game.awaiting_response)
+        self.assertTrue(self.game.respond_trigger(activate))
 
     def test_end_phase_prompts_for_deferred_don_activation(self) -> None:
         self.player1.don_pool = ["rested", "active", "rested"]
@@ -1405,6 +1513,32 @@ class OP04EngineRegressionTests(unittest.TestCase):
 
         self.assertEqual(["active", "active", "active"], self.player1.don_pool)
         self.assertEqual(0, getattr(self.player1, "activate_don_eot_count", 0))
+
+    def test_trigger_play_this_card_plays_each_identical_copy_from_life(self) -> None:
+        attacker_one = make_card("opp-attacker-1", "Opp Attacker 1", card_type="CHARACTER", power=6000)
+        attacker_two = make_card("opp-attacker-2", "Opp Attacker 2", card_type="CHARACTER", power=6000)
+        attacker_one.played_turn = 0
+        attacker_two.played_turn = 0
+        self.player2.cards_in_play = [attacker_one, attacker_two]
+        self.game.current_player = self.player2
+        self.game.opponent_player = self.player1
+
+        first_copy = make_card("ST01-002", "Usopp", card_type="CHARACTER", cost=2, power=3000)
+        first_copy.trigger = "[Trigger] Play this card."
+        second_copy = make_card("ST01-002", "Usopp", card_type="CHARACTER", cost=2, power=3000)
+        second_copy.trigger = "[Trigger] Play this card."
+        self.player1.life_cards = [first_copy, second_copy]
+
+        self._resolve_leader_attack_with_trigger_activation(0)
+        self.assertEqual(1, len(self.player1.cards_in_play))
+        self.assertTrue(any(card is second_copy for card in self.player1.cards_in_play))
+        self.assertEqual([], self.player1.trash)
+
+        self._resolve_leader_attack_with_trigger_activation(1)
+        self.assertEqual(2, len(self.player1.cards_in_play))
+        self.assertTrue(any(card is first_copy for card in self.player1.cards_in_play))
+        self.assertTrue(any(card is second_copy for card in self.player1.cards_in_play))
+        self.assertEqual([], self.player1.trash)
 
     def test_next_turn_waits_for_baby5_end_of_turn_prompt_before_switching_players(self) -> None:
         baby5 = make_card("OP04-032", "Baby 5", cost=3)
@@ -1582,6 +1716,46 @@ class OP04EngineRegressionTests(unittest.TestCase):
         self.assertIn(defender, self.player2.trash)
         self.assertEqual([draw_two], self.player1.hand)
 
+    def test_op04_093_double_attack_removes_two_life_in_live_attack_flow(self) -> None:
+        king_kong = make_card("OP04-093", "Gum-Gum King Kong Gun", card_type="EVENT", cost=3)
+        attacker = make_card("dressrosa-attacker", "Dressrosa Attacker", card_type="CHARACTER", cost=5, power=5000)
+        attacker.card_origin = "Dressrosa"
+        self.player1.cards_in_play = [attacker]
+        self.player1.trash = [make_card(f"trash-{idx}", f"Trash {idx}", cost=1) for idx in range(14)]
+        self.player2.life_cards = [
+            make_card("life-1", "Life 1"),
+            make_card("life-2", "Life 2"),
+            make_card("life-3", "Life 3"),
+        ]
+
+        self.assertTrue(op04_093_king_kong_gun(self.game, self.player1, king_kong))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self._resolve_leader_attack(attacker)
+
+        self.assertEqual(1, len(self.player2.life_cards))
+        self.assertTrue(attacker.has_doubleattack)
+
+    def test_op04_115_double_attack_removes_two_life_in_live_attack_flow(self) -> None:
+        gun_modoki = make_card("OP04-115", "Gun Modoki", card_type="EVENT", cost=1)
+        yamato = make_card("yamato", "Yamato", card_type="CHARACTER", cost=9, power=9000)
+        yamato.card_origin = "Land of Wano"
+        self.player1.cards_in_play = [yamato]
+        self.player1.life_cards = [make_card("bottom-life", "Bottom Life"), make_card("top-life", "Top Life")]
+        self.player2.life_cards = [
+            make_card("life-1", "Life 1"),
+            make_card("life-2", "Life 2"),
+            make_card("life-3", "Life 3"),
+        ]
+
+        self.assertTrue(op04_115_gun_modoki(self.game, self.player1, gun_modoki))
+        self.assertTrue(self.game.resolve_pending_choice(["yes"]))
+        self.assertTrue(self.game.resolve_pending_choice(["top"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self._resolve_leader_attack(yamato)
+
+        self.assertEqual(1, len(self.player2.life_cards))
+        self.assertTrue(yamato.has_doubleattack)
+
     def test_yokozuna_returns_only_the_selected_same_id_character(self) -> None:
         yokozuna = make_card("OP04-068", "Yokozuna", cost=2, power=3000)
         streusen_one = make_card("OP03-123", "Streusen", cost=2, power=2000)
@@ -1600,6 +1774,69 @@ class OP04EngineRegressionTests(unittest.TestCase):
         self.assertEqual(1, len(self.player2.cards_in_play))
         self.assertIs(self.player2.hand[0], streusen_two)
         self.assertIs(self.player2.cards_in_play[0], streusen_one)
+
+
+class EffectTesterSeedTests(unittest.TestCase):
+    def test_op04_046_preview_setup_seeds_two_plague_rounds_and_two_ice_oni(self) -> None:
+        card_data = make_effect_test_card_data(
+            "OP04-046",
+            "Queen",
+            card_type="CHARACTER",
+            color="Blue",
+            card_origin="Animal Kingdom Pirates",
+            effect="[On Play] Look at 7 cards from the top of your deck and reveal up to 2 [Plague Rounds] or [Ice Oni] and add them to your hand.",
+        )
+        _, player, _ = build_game_state(card_data, "on_play")
+        top_seven = player.deck[:7]
+
+        self.assertEqual(7, len(top_seven))
+        self.assertEqual(2, sum(card.name == "Plague Rounds" for card in top_seven))
+        self.assertEqual(2, sum(card.name == "Ice Oni" for card in top_seven))
+
+    def test_op04_066_preview_setup_places_card_on_top_of_both_life_stacks(self) -> None:
+        card_data = make_effect_test_card_data(
+            "OP04-066",
+            "Miss Valentine",
+            card_type="CHARACTER",
+            color="Blue",
+            card_origin="Baroque Works",
+            trigger="[Trigger] DON!! -1: Play this card.",
+        )
+        game_state, player, _ = build_game_state(card_data, "trigger")
+
+        self.assertEqual("OP04-066", player.life_cards[-1].id)
+        self.assertEqual("OP04-066", game_state.player2.life_cards[-1].id)
+
+    def test_op04_084_preview_setup_seeds_literal_cp_target_in_top_three(self) -> None:
+        card_data = make_effect_test_card_data(
+            "OP04-084",
+            "Stussy",
+            card_type="CHARACTER",
+            cost=4,
+            power=5000,
+            color="Black",
+            card_origin="Cipher Pol",
+            effect="[On Play] Look at 3 cards from the top of your deck; play up to 1 type {CP} Character card with a cost of 2 or less other than [Stussy].",
+        )
+        _, player, _ = build_game_state(card_data, "on_play")
+        top_three = player.deck[:3]
+
+        self.assertTrue(any((card.card_origin or "") == "CP" and (card.cost or 0) <= 2 for card in top_three))
+
+    def test_op04_119_preview_setup_seeds_a_green_cost_five_in_hand(self) -> None:
+        card_data = make_effect_test_card_data(
+            "OP04-119",
+            "Donquixote Rosinante",
+            card_type="CHARACTER",
+            cost=2,
+            power=2000,
+            color="Green",
+            card_origin="Donquixote Pirates",
+            effect="[On Play] You may rest this Character: Play up to 1 green Character card with a cost of 5 from your hand.",
+        )
+        _, player, _ = build_game_state(card_data, "on_play")
+
+        self.assertTrue(any("Green" in (card.colors or []) and (card.cost or 0) == 5 for card in player.hand))
 
 
 if __name__ == "__main__":
