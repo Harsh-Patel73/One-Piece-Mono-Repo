@@ -135,6 +135,16 @@ def check_life_count(player, count: int, op: str = 'le') -> bool:
     return life <= count
 
 
+def check_trash_count(player, count: int, op: str = 'ge') -> bool:
+    """Check player's trash count against a threshold."""
+    trash_count = len(getattr(player, 'trash', []))
+    if op == 'le': return trash_count <= count
+    if op == 'lt': return trash_count < count
+    if op == 'ge': return trash_count >= count
+    if op == 'eq': return trash_count == count
+    return trash_count >= count
+
+
 def filter_by_cost_range(cards: List['Card'], min_cost: int = None, max_cost: int = None) -> List['Card']:
     """Filter cards by inclusive base-cost range."""
     filtered = []
@@ -358,6 +368,21 @@ def create_target_choice(game_state: 'GameState', player: 'Player',
         callback_data=data
     )
     return True
+
+
+def create_cannot_attack_choice(game_state: 'GameState', player: 'Player',
+                                targets: List['Card'], source_card: 'Card' = None,
+                                prompt: str = None, callback: Callable = None) -> bool:
+    """Create a pending choice for preventing an opponent's character from attacking."""
+    return create_target_choice(
+        game_state,
+        player,
+        targets,
+        prompt=prompt or "Choose a Character that cannot attack this turn",
+        source_card=source_card,
+        callback_action="cannot_attack_target",
+        callback=callback,
+    )
 
 
 def search_top_cards(game_state: 'GameState', player: 'Player', look_count: int,
@@ -1672,7 +1697,9 @@ def create_hand_discard_choice(game_state: 'GameState', player: 'Player',
 
 def create_add_to_life_choice(game_state: 'GameState', player: 'Player',
                                targets: List['Card'], source_card: 'Card' = None,
-                               prompt: str = None, callback: Callable = None) -> bool:
+                               prompt: str = None, callback: Callable = None,
+                               owner: str = "opponent", position: str = "top",
+                               face_up: bool = False) -> bool:
     """Create a pending choice for adding a character to life.
 
     Args:
@@ -1691,7 +1718,6 @@ def create_add_to_life_choice(game_state: 'GameState', player: 'Player',
         return False
 
     snapshot = list(targets)
-    opponent = get_opponent(game_state, player)
     options = []
     for i, card in enumerate(snapshot):
         options.append({
@@ -1705,9 +1731,18 @@ def create_add_to_life_choice(game_state: 'GameState', player: 'Player',
         target_idx = int(selected[0]) if selected else -1
         if 0 <= target_idx < len(snapshot):
             target = snapshot[target_idx]
-            if _remove_card_instance(opponent.cards_in_play, target):
-                opponent.life_cards.append(target)
-                game_state._log(f"{target.name} was added to opponent's Life")
+            target_owner = player if owner == "player" else get_opponent(game_state, player)
+            if _remove_card_instance(target_owner.cards_in_play, target):
+                setattr(target, 'is_face_up', face_up)
+                if position == "bottom":
+                    target_owner.life_cards.insert(0, target)
+                else:
+                    target_owner.life_cards.append(target)
+                face_label = " face-up" if face_up else ""
+                game_state._log(
+                    f"{target.name} was added to {target_owner.name}'s Life"
+                    f"{face_label} at the {position}"
+                )
 
     game_state.pending_choice = PendingChoice(
         choice_id=f"add_life_{uuid.uuid4().hex[:8]}",
@@ -1723,6 +1758,9 @@ def create_add_to_life_choice(game_state: 'GameState', player: 'Player',
         callback_data={
             "player_id": player.player_id,
             "target_cards": _serialize_card_refs(snapshot),
+            "owner": owner,
+            "position": position,
+            "face_up": face_up,
         }
     )
     return True

@@ -20,6 +20,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, RotateCcw, Swords, Heart, Layers, Trash2, CheckCircle2, XCircle, SkipForward } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePlaytestSocket, PlaytestCard, PlaytestPlayer } from '../hooks/usePlaytestSocket'
+import { LifeStack } from '../components/LifeStack'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -878,13 +879,14 @@ function PlayerBoard({
           <div className="flex gap-3 flex-1 min-h-0">
             {/* Leader column (+ stages below) */}
             <div className="flex flex-col items-center gap-1">
+              <LifeStack cards={player.lifeCards} compact />
               {player.leader && (
                 <CardDisplay card={player.leader} size="large"
                   isSelected={selectedZone === 'leader' && selectedIndex === 0}
                   onClick={() => !isOpponent && onSelectCard('leader', 0)}
                   isOwnerTurn={isOwnerTurn} />
               )}
-              <div className="text-[9px] text-amber-200/50">LEADER</div>
+              <div className="text-[9px] text-amber-200/50">LIFE / LEADER</div>
               {/* Stage cards section — below leader */}
               {stageCards.length > 0 && (
                 <>

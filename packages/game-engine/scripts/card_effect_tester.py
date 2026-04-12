@@ -161,6 +161,30 @@ def _make_wano_char(index: int) -> Card:
     return c
 
 
+def _make_seed_card(card_id: str, name: str, card_type: str, cost: int, power: int,
+                    colors: List[str], origin: str, *, rested: bool = False) -> Card:
+    c = Card(
+        id=card_id,
+        id_normal=card_id,
+        name=name,
+        card_type=card_type,
+        cost=cost,
+        power=power,
+        counter=1000 if card_type == "CHARACTER" else None,
+        colors=colors,
+        life=None,
+        effect="",
+        image_link=None,
+        attribute="Strike",
+        card_origin=origin,
+        trigger=None,
+    )
+    c.is_resting = rested
+    c.attached_don = 0
+    c.power_modifier = 0
+    return c
+
+
 def _make_dummy_leader(life: int = 4) -> Card:
     c = Card(
         id="DUMMY-LEADER",
@@ -344,6 +368,116 @@ def build_game_state(test_card: Card, timing: str) -> Tuple[GameState, Player, C
 
     else:
         p1.cards_in_play.append(tc)
+
+    card_id = test_card.id
+
+    if card_id in {"OP05-002", "OP05-018", "OP05-020", "OP05-095"} and tc.card_type != "LEADER":
+        p1.leader = _make_seed_card("OP05-002", "Belo Betty", "LEADER", None, 5000, ["Red", "Yellow"], "Revolutionary Army")
+        p1.leader.life = 4
+
+    if card_id in {"OP05-041", "OP05-059"} and tc.card_type != "LEADER":
+        p1.leader = _make_seed_card("OP05-041", "Sakazuki", "LEADER", None, 5000, ["Blue", "Black"], "Navy")
+        p1.leader.life = 4
+
+    if card_id in {"OP05-077", "OP05-078"} and tc.card_type != "LEADER":
+        p1.don_pool = ["active"] * 8 + ["rested"] * 2
+
+    if card_id == "OP05-078" and tc.card_type != "LEADER":
+        p1.leader = _make_seed_card("KID-LEADER", "Kid Pirates Leader", "LEADER", None, 5000, ["Purple"], "Kid Pirates")
+        p1.leader.life = 4
+        p1.cards_in_play.append(_make_seed_card("KID-ALLY", "Kid Pirates Ally", "CHARACTER", 4, 5000, ["Purple"], "Kid Pirates"))
+
+    if card_id in {"OP05-099", "OP05-114", "OP05-115", "OP05-116"} and tc.card_type != "LEADER":
+        p1.leader = _make_seed_card("OP05-098", "Enel", "LEADER", None, 5000, ["Yellow"], "Sky Island")
+        p1.leader.life = 4
+
+    if card_id == "OP05-018":
+        p1.hand.insert(0, _make_seed_card("REV-018", "Rev Army Recruit", "CHARACTER", 4, 5000, ["Red"], "Revolutionary Army"))
+
+    if card_id == "OP05-020":
+        p2.cards_in_play.append(_make_seed_card("OPP-020", "Low Power Target", "CHARACTER", 2, 2000, ["Blue"], "Navy"))
+
+    if card_id in {"OP05-037", "OP05-038"}:
+        p1.hand.insert(0, _make_seed_card(f"HAND-{card_id}", "Discard Fodder", "CHARACTER", 2, 3000, ["Green"], "Donquixote Pirates"))
+
+    if card_id == "OP05-039":
+        p2.cards_in_play.append(_make_seed_card("OPP-039", "Rested Small Target", "CHARACTER", 3, 4000, ["Green"], "Donquixote Pirates", rested=True))
+
+    if card_id == "OP05-056":
+        p1.cards_in_play.append(_make_seed_card("ALLY-056", "Blue Ally", "CHARACTER", 3, 4000, ["Blue"], "Former Navy"))
+
+    if card_id == "OP05-057":
+        p1.cards_in_play.append(_make_seed_card("ALLY-057", "Own Small Character", "CHARACTER", 2, 3000, ["Blue"], "Navy"))
+
+    if card_id == "OP05-058":
+        p1.cards_in_play.append(_make_seed_card("SMALL-058-A", "Your Small Character", "CHARACTER", 3, 4000, ["Blue"], "Navy"))
+        p2.cards_in_play.append(_make_seed_card("SMALL-058-B", "Opp Small Character", "CHARACTER", 2, 3000, ["Blue"], "Navy"))
+        while len(p1.hand) < 7:
+            p1.hand.append(_make_dummy_card(700 + len(p1.hand)))
+        while len(p2.hand) < 7:
+            p2.hand.append(_make_dummy_card(800 + len(p2.hand)))
+
+    if card_id == "OP05-081":
+        p2.cards_in_play.append(_make_seed_card("OPP-081", "Cost Target", "CHARACTER", 4, 5000, ["Black"], "Dressrosa"))
+
+    if card_id == "OP05-082":
+        while len(p1.trash) < 2:
+            p1.trash.append(_make_seed_card(f"TRASH-082-{len(p1.trash)}", "Trash Seed", "CHARACTER", 2, 3000, ["Black"], "Dressrosa"))
+        while len(p2.hand) < 6:
+            p2.hand.append(_make_dummy_card(820 + len(p2.hand)))
+
+    if card_id == "OP05-084":
+        p1.cards_in_play = [c for c in p1.cards_in_play if c == tc]
+        p1.cards_in_play.append(_make_seed_card("CD-084", "Celestial Ally", "CHARACTER", 2, 3000, ["Black"], "Celestial Dragons"))
+
+    if card_id == "OP05-087":
+        p1.cards_in_play.append(_make_seed_card("ALLY-087", "Dressrosa Ally", "CHARACTER", 3, 4000, ["Black"], "Dressrosa"))
+        p2.cards_in_play.append(_make_seed_card("OPP-087", "Cost Five Target", "CHARACTER", 5, 6000, ["Black"], "Dressrosa"))
+
+    if card_id == "OP05-088":
+        while len(p1.trash) < 2:
+            p1.trash.append(_make_seed_card(f"TRASH-088-{len(p1.trash)}", "Trash Seed", "CHARACTER", 2, 3000, ["Black"], "Dressrosa"))
+        p1.trash.append(_make_seed_card("BLACK-088", "Recoverable Black 4", "CHARACTER", 4, 5000, ["Black"], "Dressrosa"))
+
+    if card_id == "OP05-089":
+        p1.cards_in_play.append(_make_seed_card("ALLY-089", "Black Ally", "CHARACTER", 2, 3000, ["Black"], "Celestial Dragons"))
+        p1.trash.append(_make_seed_card("BLACK-089", "Recoverable Black 1", "CHARACTER", 1, 2000, ["Black"], "Celestial Dragons"))
+
+    if card_id == "OP05-090":
+        p1.cards_in_play.append(_make_seed_card("DRESS-090", "Dressrosa Target", "CHARACTER", 4, 5000, ["Black"], "Dressrosa"))
+
+    if card_id == "OP05-093":
+        while len(p1.trash) < 3:
+            p1.trash.append(_make_seed_card(f"TRASH-093-OP05-{len(p1.trash)}", "Trash Seed", "CHARACTER", 2, 3000, ["Black"], "CP0"))
+        p2.cards_in_play.append(_make_seed_card("KO2-093", "Cost 2 Target", "CHARACTER", 2, 3000, ["Black"], "CP0"))
+        p2.cards_in_play.append(_make_seed_card("KO1-093", "Cost 1 Target", "CHARACTER", 1, 2000, ["Black"], "CP0"))
+
+    if card_id == "OP05-094":
+        p2.cards_in_play.append(_make_seed_card("PATCH-094", "Cost 3 Target", "CHARACTER", 3, 4000, ["Black"], "Dressrosa"))
+
+    if card_id == "OP05-096":
+        p1.cards_in_play.append(_make_seed_card("CD-096", "Celestial Noble", "CHARACTER", 2, 3000, ["Black"], "Celestial Dragons"))
+        p2.cards_in_play.append(_make_seed_card("LOW-096", "Cost 1 Target", "CHARACTER", 1, 2000, ["Black"], "Navy"))
+
+    if card_id == "OP05-097":
+        p1.hand.insert(0, _make_seed_card("CD-HAND-097", "Celestial Dragons Hand Card", "CHARACTER", 3, 4000, ["Black"], "Celestial Dragons"))
+
+    if card_id == "OP05-099":
+        if not p2.life_cards and p2.deck:
+            p2.life_cards.append(p2.deck.pop(0))
+
+    if card_id == "OP05-115":
+        p1.life_cards = p1.life_cards[:1]
+        while len(p1.hand) < 3:
+            p1.hand.append(_make_dummy_card(1150 + len(p1.hand)))
+
+    if card_id == "OP05-116":
+        p2.life_cards = p2.life_cards[:2]
+        p2.cards_in_play.append(_make_seed_card("ZAP-116", "Life-Count Target", "CHARACTER", 2, 3000, ["Yellow"], "Sky Island"))
+
+    if card_id == "OP05-119":
+        p1.cards_in_play.append(_make_seed_card("ALLY-119-A", "Bottom Deck Ally A", "CHARACTER", 4, 5000, ["Purple"], "Straw Hat Crew"))
+        p1.cards_in_play.append(_make_seed_card("ALLY-119-B", "Bottom Deck Ally B", "CHARACTER", 3, 4000, ["Purple"], "Straw Hat Crew"))
 
     return gs, p1, tc
 

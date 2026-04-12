@@ -80,6 +80,7 @@ class Player:
         for _ in range(count):
             if self.deck:
                 card = self.deck.pop(0)
+                setattr(card, 'is_face_up', False)
                 life_cards.append(card)
         return life_cards
 
@@ -1952,6 +1953,34 @@ class GameState:
             'can_attack_active': getattr(card, 'can_attack_active', False),
             'has_double_attack': getattr(card, 'has_doubleattack', False) or getattr(card, 'has_double_attack', False),
             'has_taunt': getattr(card, 'has_taunt', False),
+            'is_face_up': getattr(card, 'is_face_up', False),
+        }
+
+    def _life_card_to_dict(self, card: Card) -> dict:
+        """Serialize a life card, hiding face-down cards from the frontend."""
+        if getattr(card, 'is_face_up', False):
+            return self._card_to_dict(card)
+        return {
+            'id': 'hidden',
+            'name': 'Life Card',
+            'card_type': 'HIDDEN',
+            'cost': None,
+            'base_cost': None,
+            'power': None,
+            'base_power': None,
+            'counter': None,
+            'effect': None,
+            'trigger': None,
+            'attribute': None,
+            'image_url': None,
+            'image_link': None,
+            'is_resting': False,
+            'attached_don': 0,
+            'has_attacked': False,
+            'can_attack_active': False,
+            'has_double_attack': False,
+            'has_taunt': False,
+            'is_face_up': False,
         }
 
 
@@ -1973,6 +2002,7 @@ class GameState:
             'name': player.name,
             'leader': self._card_to_dict(player.leader) if player.leader else None,
             'life_count': len(player.life_cards),
+            'life_cards': [self._life_card_to_dict(c) for c in player.life_cards],
             'hand_count': len(player.hand),
             'hand': [self._card_to_dict(c) for c in player.hand] if is_viewer else [],
             'deck_count': len(player.deck),
@@ -2750,12 +2780,20 @@ class GameState:
                 target_cards = data.get("target_cards", [])
                 if 0 <= target_idx < len(target_cards):
                     target_info = target_cards[target_idx]
-                    opponent = self.player2 if player == self.player1 else self.player1
-                    for c in opponent.cards_in_play[:]:
+                    owner_key = data.get("owner", "opponent")
+                    target_owner = player if owner_key == "player" else (self.player2 if player == self.player1 else self.player1)
+                    position = data.get("position", "top")
+                    face_up = bool(data.get("face_up", False))
+                    for c in target_owner.cards_in_play[:]:
                         if c.id == target_info["id"]:
-                            opponent.cards_in_play.remove(c)
-                            opponent.life_cards.append(c)
-                            self._log(f"{c.name} was added to opponent's Life")
+                            target_owner.cards_in_play.remove(c)
+                            c.is_face_up = face_up
+                            if position == "bottom":
+                                target_owner.life_cards.insert(0, c)
+                            else:
+                                target_owner.life_cards.append(c)
+                            face_label = " face-up" if face_up else ""
+                            self._log(f"{c.name} was added to {target_owner.name}'s Life{face_label} at the {position}")
                             break
 
             elif action == "replace_field_card":

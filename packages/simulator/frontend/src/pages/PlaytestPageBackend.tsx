@@ -11,6 +11,7 @@ import { ArrowLeft, RotateCcw, Swords, Shield, Zap, Heart, Layers, Trash2 } from
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePlaytestSocket, PlaytestCard, PlaytestPlayer } from '../hooks/usePlaytestSocket'
 import { useDeckStore } from '../store/deckStore'
+import { LifeStack } from '../components/LifeStack'
 
 export function PlaytestPageBackend() {
   const navigate = useNavigate()
@@ -803,6 +804,7 @@ function PlayerBoard({
       <div className="flex gap-4 flex-1">
         {/* Leader */}
         <div className="flex flex-col items-center">
+          <LifeStack cards={player.lifeCards} />
           {player.leader && (
             <CardDisplay
               card={player.leader}
@@ -813,7 +815,7 @@ function PlayerBoard({
               isOwnerTurn={isOwnerTurn}
             />
           )}
-          <div className="text-[10px] text-amber-200/60 mt-1">LEADER</div>
+          <div className="text-[10px] text-amber-200/60 mt-1">LIFE / LEADER</div>
         </div>
 
         {/* Field */}

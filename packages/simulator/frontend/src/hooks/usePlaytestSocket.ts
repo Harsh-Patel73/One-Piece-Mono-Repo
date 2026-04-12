@@ -35,6 +35,7 @@ interface BackendCard {
   has_double_attack?: boolean
   has_banish?: boolean
   has_rush?: boolean
+  is_face_up?: boolean
 }
 
 interface BackendPlayer {
@@ -42,6 +43,7 @@ interface BackendPlayer {
   name: string
   leader: BackendCard
   life_count: number
+  life_cards?: BackendCard[]
   hand_count: number
   hand: BackendCard[]
   deck_count: number
@@ -137,6 +139,7 @@ export interface PlaytestCard {
   hasDoubleAttack?: boolean
   hasBanish?: boolean
   hasRush?: boolean
+  isFaceUp?: boolean
 }
 
 export interface PlaytestPlayer {
@@ -241,33 +244,38 @@ function convertCard(card: BackendCard, index: number): PlaytestCard {
     hasDoubleAttack: card.has_double_attack ?? false,
     hasBanish: card.has_banish ?? false,
     hasRush: card.has_rush ?? false,
+    isFaceUp: card.is_face_up ?? false,
   }
 }
 
 // Convert backend player to frontend player
 function convertPlayer(player: BackendPlayer): PlaytestPlayer {
+  const lifeCards = player.life_cards && player.life_cards.length > 0
+    ? player.life_cards.map((c, i) => convertCard(c, i))
+    : Array(player.life_count).fill(null).map((_, i) => ({
+        instanceId: `life-${i}`,
+        id: 'hidden',
+        name: 'Life Card',
+        cardType: 'HIDDEN',
+        cost: null,
+        baseCost: null,
+        power: null,
+        basePower: null,
+        counter: null,
+        effect: null,
+        trigger: null,
+        attribute: null,
+        imageUrl: null,
+        isResting: false,
+        attachedDon: 0,
+        hasAttacked: false,
+        canAttackActive: false,
+        isFaceUp: false,
+      }))
   return {
     name: player.name,
     leader: player.leader ? convertCard(player.leader, 0) : null,
-    lifeCards: Array(player.life_count).fill(null).map((_, i) => ({
-      instanceId: `life-${i}`,
-      id: 'hidden',
-      name: 'Life Card',
-      cardType: 'HIDDEN',
-      cost: null,
-      baseCost: null,
-      power: null,
-      basePower: null,
-      counter: null,
-      effect: null,
-      trigger: null,
-      attribute: null,
-      imageUrl: null,
-      isResting: false,
-      attachedDon: 0,
-      hasAttacked: false,
-      canAttackActive: false,
-    })),
+    lifeCards,
     hand: player.hand.map((c, i) => convertCard(c, i)),
     deck: Array(player.deck_count).fill(null).map((_, i) => ({
       instanceId: `deck-${i}`,
