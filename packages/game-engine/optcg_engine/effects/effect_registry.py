@@ -173,7 +173,7 @@ def filter_active(cards: List['Card']) -> List['Card']:
     return [card for card in cards if not getattr(card, 'is_resting', False)]
 
 
-def draw_cards(player: 'Player', count: int) -> List['Card']:
+def draw_cards(player: 'Player', count: int, game_state: 'GameState' = None) -> List['Card']:
     """Draw cards from deck."""
     import traceback
     print(f"[DEBUG] draw_cards called: count={count}")
@@ -185,6 +185,17 @@ def draw_cards(player: 'Player', count: int) -> List['Card']:
             player.hand.append(card)
             drawn.append(card)
     print(f"[DEBUG] drew {len(drawn)} cards: {[c.name for c in drawn]}")
+    if drawn and game_state is not None:
+        from ..game_engine import GamePhase
+
+        if getattr(game_state, "current_player", None) is player and getattr(game_state, "phase", None) != GamePhase.DRAW:
+            draw_triggers = list(player.cards_in_play)
+            if getattr(player, "leader", None):
+                draw_triggers.append(player.leader)
+            for _ in drawn:
+                for card in draw_triggers:
+                    if card and has_hardcoded_effect(card.id, "on_draw"):
+                        execute_hardcoded_effect(game_state, player, card, "on_draw")
     return drawn
 
 

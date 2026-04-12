@@ -690,6 +690,18 @@
 | OP05-083 | Sterry | CHARACTER | ✅ Verified |  |  |
 | OP05-085 | Nefeltari Cobra | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
 | OP05-086 | Nefeltari Vivi | CHARACTER | ✅ Verified | If you have 10 or more cards in your trash, this Character gains [Bloc… |  |
+| OP05-001 | Sabo | LEADER | ⚠ Needs Fix | [DON!! x1] [Opponent's Turn] [Once Per Turn] If your Character with 50… | This card is a little tricky, when there is a DON!! on this leader, if a character that is on this player's field would be KOd, whether by effects OR battle on the OPPONENTS TURN only, then ONCE PER TURN, we can just give that character -1000 power instead. The prompt to use leader effect should show up when a character loses a battle.  |
+| OP05-003 | Inazuma | CHARACTER | ⚠ Needs Fix | If you have a Character with 7000 power or more other than this Charac… | When another character on the player's field has a power of 7000 or more, OTHER than this character. Then this character would gain rush.  |
+| OP05-004 | Emporio.Ivankov | CHARACTER | ⚠ Needs Fix | [Activate: Main] [Once Per Turn] If this Character has 7000 power or m… | When this character has a power of 7000 or more (this includes when it is given DON!!), I should be prompted to select a Revolutionary Army type character with 5000 power or less in my hand to play out.  |
+| OP05-005 | Karasu | CHARACTER | ⚠ Needs Fix | [On Play] If your Leader has the {Revolutionary Army} type, give up to… | This card should be able to target leaders as well to reduce their power.  |
+| OP05-006 | Koala | CHARACTER | ✅ Verified | [On Play] If your Leader has the {Revolutionary Army} type, give up to… |  |
+| OP05-007 | Sabo | CHARACTER | ⚠ Needs Fix | [On Play] K.O. up to 2 of your opponent's Characters with a total powe… | This card currently KOs automatically, there should be a prompt to select 2 cards that combined have a power of 4000 or less. i.e, 0 power and 4000 power, 1000 power and 3000 power, etc.  |
+| OP05-008 | Chaka | CHARACTER | ✅ Verified | [DON!! x1] [Activate: Main] [Once Per Turn] Give up to 2 rested DON!! … |  |
+| OP05-014 | Pell | CHARACTER | ✅ Verified | [DON!! x1] [When Attacking] Give up to 1 of your opponent's Characters… |  |
+| OP05-018 | Emporio Energy Hormone | EVENT | ✅ Verified | [Counter] Up to 1 of your Leader or Character cards gains +3000 power … |  |
+| OP05-023 | Vergo | CHARACTER | ⚠ Needs Fix | [DON!! x1] [When Attacking] K.O. up to 1 of your opponent's rested Cha… | I select a rested character with cost 3 or less but it does not actually KO it.  |
+| OP05-026 | Sarquiss | CHARACTER | ⚠ Needs Fix | [DON!! x1] [When Attacking] [Once Per Turn] You may rest 1 of your Cha… | When this card uses it's effect to become active again it should once again be able to attack.  |
+| OP05-030 | Donquixote Rosinante | CHARACTER | ⚠ Needs Fix | [Blocker] (After your opponent declares an attack, you may rest this c… | When a rested character is KOd, there should be a prompt to trash this card instead and protect that card that was KOd.  |
 
 | ID | Status | Type | Notes |
 |----|--------|------|-------|

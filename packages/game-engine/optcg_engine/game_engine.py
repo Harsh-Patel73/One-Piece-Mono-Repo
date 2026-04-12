@@ -283,11 +283,12 @@ class Player:
     def reset_for_new_turn(self):
         """Reset cards and DON for a new turn (Refresh Phase)."""
         # Unrest leader (unless prevented by an effect)
-        if not getattr(self.leader, 'cannot_unrest', False):
+        if not getattr(self.leader, 'cannot_unrest', False) and not getattr(self.leader, 'birdcage_lock', False):
             self.leader.is_resting = False
         else:
             # Clear the one-time prevention flag after it takes effect
             self.leader.cannot_unrest = False
+            self.leader.birdcage_lock = False
             print(f"{self.leader.name} cannot be set to Active this turn")
         self.leader.has_attacked = False
         for attr in list(vars(self.leader).keys()):
@@ -297,11 +298,12 @@ class Player:
         # Unrest all characters and return attached DON
         for c in self.cards_in_play:
             # Check if this card is prevented from unresting
-            if not getattr(c, 'cannot_unrest', False):
+            if not getattr(c, 'cannot_unrest', False) and not getattr(c, 'birdcage_lock', False):
                 c.is_resting = False
             else:
                 # Clear the one-time prevention flag after it takes effect
                 c.cannot_unrest = False
+                c.birdcage_lock = False
                 print(f"{c.name} cannot be set to Active this turn")
             c.has_attacked = False
             # Return attached DON to pool
@@ -511,6 +513,181 @@ class GameState:
             return self._deck_order_holding.pop(unique_id)
         return None
 
+    def _find_card_owner(self, card: Card) -> Optional[Player]:
+        """Find the player that currently owns the provided leader or in-play card."""
+        if card is self.player1.leader or card in self.player1.cards_in_play:
+            return self.player1
+        if card is self.player2.leader or card in self.player2.cards_in_play:
+            return self.player2
+        return None
+
+    def _find_in_play_card_by_id(self, card_id: str) -> Optional[Card]:
+        """Find a leader or in-play card by id."""
+        for card in [self.player1.leader, *self.player1.cards_in_play, self.player2.leader, *self.player2.cards_in_play]:
+            if card and card.id == card_id:
+                return card
+        return None
+
+    def _resolve_ko_prevention_choice(self, prevented: bool) -> str:
+        """Continue a pending K.O. prevention flow after the player chooses to use or decline it."""
+        context = getattr(self, "_pending_ko_context", None)
+        if not context:
+            return "ko"
+
+        if prevented:
+            target = self._find_in_play_card_by_id(context["target_id"])
+            if target:
+                self._log(f"{target.name} was saved from being K.O.'d")
+            return self._finalize_character_ko(context, "prevented")
+
+        context["candidate_index"] += 1
+        return self._continue_character_ko_attempt()
+
+    def _finalize_character_ko(self, context: Dict[str, Any], result: str) -> str:
+        """Finalize a character K.O. attempt and run any completion callback."""
+        target = self._find_in_play_card_by_id(context["target_id"])
+        owner = self.player1 if context["owner_index"] == 0 else self.player2
+        controller = self.player1 if context.get("controller_index") == 0 else self.player2 if context.get("controller_index") == 1 else None
+        attacker = self._find_in_play_card_by_id(context["attacker_id"]) if context.get("attacker_id") else None
+        callback = context.get("after_resolve")
+        self._pending_ko_context = None
+
+        if result == "ko" and target and target in owner.cards_in_play:
+            owner.cards_in_play.remove(target)
+            owner.trash.append(target)
+            self._log(f"{target.name} was K.O.'d")
+
+            effect_manager = get_effect_manager()
+            effect_manager.on_ko(self, owner, target)
+
+            if controller and controller.leader:
+                from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
+                if has_hardcoded_effect(controller.leader.id, 'on_opponent_ko'):
+                    execute_hardcoded_effect(self, controller, controller.leader, 'on_opponent_ko')
+
+        if callback:
+            callback(result, owner, target, attacker)
+
+        return result
+
+    def _continue_character_ko_attempt(self) -> str:
+        """Run the next K.O. prevention candidate, or finish the K.O. if none prevent it."""
+        context = getattr(self, "_pending_ko_context", None)
+        if not context:
+            return "ko"
+
+        owner = self.player1 if context["owner_index"] == 0 else self.player2
+        target = self._find_in_play_card_by_id(context["target_id"])
+        if not target or target not in owner.cards_in_play:
+            return self._finalize_character_ko(context, "prevented")
+
+        from .effects.effect_registry import execute_hardcoded_effect, has_hardcoded_effect
+
+        candidates = context["candidates"]
+        while context["candidate_index"] < len(candidates):
+            candidate_id = candidates[context["candidate_index"]]
+            candidate = self._find_in_play_card_by_id(candidate_id)
+            if not candidate or not has_hardcoded_effect(candidate.id, "on_ko_prevention"):
+                context["candidate_index"] += 1
+                continue
+
+            result = execute_hardcoded_effect(self, owner, candidate, "on_ko_prevention")
+            if self.pending_choice:
+                return "pending"
+            if result:
+                return self._finalize_character_ko(context, "prevented")
+            context["candidate_index"] += 1
+
+        return self._finalize_character_ko(context, "ko")
+
+    def _queue_kyros_ko_prevention(self, player: Player, card: Card, on_decline: Optional[Callable[[], None]] = None) -> bool:
+        """Prompt for Kyros's Rebecca/Corrida Coliseum K.O. replacement."""
+        context = getattr(self, "_pending_ko_context", None)
+        if not context or context.get("target_id") != card.id:
+            return False
+
+        options: List[Dict[str, str]] = []
+        replacements: List[Card] = []
+        leader = getattr(player, "leader", None)
+        if leader and not getattr(leader, "is_resting", False):
+            replacements.append(leader)
+            options.append({"id": str(len(options)), "label": f"Rest {leader.name}"})
+        for field_card in player.cards_in_play:
+            if field_card is card:
+                continue
+            if getattr(field_card, "name", "") == "Corrida Coliseum" and not getattr(field_card, "is_resting", False):
+                replacements.append(field_card)
+                options.append({"id": str(len(options)), "label": f"Rest {field_card.name}"})
+
+        if not replacements:
+            return False
+
+        choice = PendingChoice(
+            choice_id=f"kyros_prevent_{uuid.uuid4().hex[:8]}",
+            choice_type="select_target",
+            prompt="Choose a card to rest instead of this Character being K.O.'d",
+            options=options,
+            min_selections=1,
+            max_selections=1,
+            source_card_id=card.id,
+            source_card_name=card.name,
+        )
+
+        def callback(selected: List[str]) -> None:
+            target_idx = int(selected[0]) if selected else -1
+            if 0 <= target_idx < len(replacements):
+                replacement = replacements[target_idx]
+                replacement.is_resting = True
+                self._log(f"{replacement.name} was rested instead")
+                self._resolve_ko_prevention_choice(True)
+                return
+            if on_decline:
+                on_decline()
+            self._resolve_ko_prevention_choice(False)
+
+        choice.callback = callback
+        self.pending_choice = choice
+        return True
+
+    def _attempt_character_ko(self, target: Card, by_effect: bool = False,
+                               attacker: Optional[Card] = None, controller: Optional[Player] = None,
+                               after_resolve: Optional[Callable[[str, Player, Optional[Card], Optional[Card]], None]] = None) -> str:
+        """Attempt to K.O. a character, honoring hardcoded prevention effects when present."""
+        owner = self._find_card_owner(target)
+        if owner is None or target not in owner.cards_in_play:
+            return "prevented"
+
+        if by_effect and getattr(target, 'cannot_be_ko_by_effects', False):
+            self._log(f"{target.name} cannot be K.O.'d by effects")
+            if after_resolve:
+                after_resolve("prevented", owner, target, attacker)
+            return "prevented"
+
+        from .effects.effect_registry import has_hardcoded_effect
+
+        candidates: List[str] = []
+        if has_hardcoded_effect(target.id, "on_ko_prevention"):
+            candidates.append(target.id)
+        for field_card in owner.cards_in_play:
+            if field_card is target:
+                continue
+            if has_hardcoded_effect(field_card.id, "on_ko_prevention"):
+                candidates.append(field_card.id)
+        if owner.leader and has_hardcoded_effect(owner.leader.id, "on_ko_prevention"):
+            candidates.append(owner.leader.id)
+
+        self._pending_ko_context = {
+            "target_id": target.id,
+            "owner_index": 0 if owner is self.player1 else 1,
+            "controller_index": None if controller is None else (0 if controller is self.player1 else 1),
+            "attacker_id": getattr(attacker, "id", None),
+            "by_effect": by_effect,
+            "candidate_index": 0,
+            "candidates": candidates,
+            "after_resolve": after_resolve,
+        }
+        return self._continue_character_ko_attempt()
+
     def next_turn(self):
         """Advance to the next turn."""
         # End phase: check hand limit
@@ -628,6 +805,8 @@ class GameState:
                 leader_has_temp = getattr(player.leader, '_temp_doubleattack', False)
                 player.leader.has_doubleattack = leader_has_innate or leader_has_temp
                 player.leader.has_double_attack = player.leader.has_doubleattack
+            if hasattr(player.leader, 'birdcage_lock'):
+                player.leader.birdcage_lock = False
             for card in player.cards_in_play:
                 if hasattr(card, 'power_modifier'):
                     card.power_modifier = getattr(card, '_sticky_power_modifier', 0)
@@ -644,6 +823,8 @@ class GameState:
                     card.has_banish = getattr(card, '_innate_banish', False)
                 if hasattr(card, 'blocker_disabled'):
                     card.blocker_disabled = False
+                if hasattr(card, 'birdcage_lock'):
+                    card.birdcage_lock = False
                 # Reset conditional Rush (continuous effects re-set if conditions met)
                 if hasattr(card, 'has_rush') and not getattr(card, '_innate_rush', False):
                     card.has_rush = getattr(card, '_temporary_rush_until_turn', -1) >= self.turn_count
@@ -1594,24 +1775,23 @@ class GameState:
                     self._finish_attack()
                     return
 
-                # KO character
-                o.cards_in_play.remove(defender)
-                o.trash.append(defender)
-                self._log(f"{attacker.name} KO's {defender.name}!")
-                if getattr(attacker, 'set_active_on_ko', False) and not getattr(attacker, 'op02_094_used', False):
-                    attacker._set_active_after_battle_resolution = True
-                    attacker.op02_094_used = True
+                def after_battle_ko(result: str, _owner: Player, target: Optional[Card], _attacker: Optional[Card]) -> None:
+                    if result == "ko" and target:
+                        self._log(f"{attacker.name} KO's {target.name}!")
+                        if getattr(attacker, 'set_active_on_ko', False) and not getattr(attacker, 'op02_094_used', False):
+                            attacker._set_active_after_battle_resolution = True
+                            attacker.op02_094_used = True
+                    self._finish_attack()
 
-                # Trigger ON_KO effects
-                effect_manager = get_effect_manager()
-                effect_manager.on_ko(self, o, defender)
-
-                # Trigger on_opponent_ko for the attacking player's leader (e.g. Kaido)
-                from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
-                if p.leader and has_hardcoded_effect(p.leader.id, 'on_opponent_ko'):
-                    execute_hardcoded_effect(self, p, p.leader, 'on_opponent_ko')
-
-                self._finish_attack()
+                result = self._attempt_character_ko(
+                    defender,
+                    by_effect=False,
+                    attacker=attacker,
+                    controller=p,
+                    after_resolve=after_battle_ko,
+                )
+                if result == "pending":
+                    return
         else:
             self._log(f"{attacker.name}'s attack is defended (Defense: {total_defense}).")
             self._finish_attack()
@@ -1696,6 +1876,37 @@ class GameState:
         self._log(f"  {life_card.name} added to hand")
         return False
 
+    def _defer_trigger_followup(self, player: Player, life_card: Card) -> None:
+        """Remember a trigger-played life card while a follow-up pending choice resolves."""
+        self._pending_trigger_followup = {
+            "player_index": 0 if player is self.player1 else 1,
+            "life_card": life_card,
+        }
+
+    def _complete_trigger_followup(self, *, played: bool = False, to_hand: bool = False) -> None:
+        """Finalize a deferred trigger resolution after a pending choice finishes."""
+        followup = getattr(self, "_pending_trigger_followup", None)
+        if not followup:
+            return
+
+        player = self.player1 if followup["player_index"] == 0 else self.player2
+        life_card = followup["life_card"]
+        del self._pending_trigger_followup
+
+        if played:
+            pass
+        elif to_hand:
+            if life_card not in player.hand:
+                player.hand.append(life_card)
+                self._log(f"  {life_card.name} added to hand")
+        else:
+            if life_card not in player.trash:
+                player.trash.append(life_card)
+                self._log(f"  {life_card.name} sent to trash (trigger used)")
+
+        if self.pending_attack and self.awaiting_response != "trigger" and not self.pending_choice:
+            self._continue_after_life_card()
+
     def respond_trigger(self, activate: bool) -> bool:
         """Respond to a trigger prompt — activate the trigger or decline.
 
@@ -1737,6 +1948,9 @@ class GameState:
                 hardcoded_ran = execute_hardcoded_effect(self, player, life_card, "trigger")
                 if any(card is life_card for card in player.cards_in_play):
                     card_was_played = True
+                if self.pending_choice:
+                    self._defer_trigger_followup(player, life_card)
+                    return True
 
             # Fall back to parser-based trigger effects if no hardcoded handler
             if not hardcoded_ran:
