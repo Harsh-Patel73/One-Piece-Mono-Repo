@@ -12,7 +12,7 @@ if str(SIM_BACKEND) not in sys.path:
     sys.path.insert(0, str(SIM_BACKEND))
 
 from game.effect_test_session import build_game_state
-from optcg_engine.effects.effect_registry import filter_by_cost_range, filter_by_max_cost
+from optcg_engine.effects.effect_registry import draw_cards, filter_by_cost_range, filter_by_max_cost, has_hardcoded_effect
 from optcg_engine.effects.sets.op01_effects import op01_003_luffy_leader
 from optcg_engine.effects.sets.op04_effects import (
     op04_001_vivi_activate,
@@ -103,23 +103,93 @@ from optcg_engine.effects.sets.op05_effects import (
     op05_043_ulti,
     op05_045_stainless,
     op05_046_dalmatian,
+    op05_047_hawkins_block,
+    op05_048_bastille,
+    op05_049_haccha,
+    op05_050_hina,
+    op05_051_borsalino,
+    op05_052_maynard,
+    op05_053_mozambia,
+    op05_054_garp,
+    op05_055_drake_play,
+    op05_056_barrels,
+    op05_057_hound_blaze,
+    op05_057_hound_blaze_trigger,
+    op05_058_waste_of_human_life,
+    op05_058_waste_of_human_life_trigger,
+    op05_059_world_of_violence,
+    op05_059_world_of_violence_trigger,
+    op05_060_luffy_leader,
+    op05_061_usohachi,
+    op05_062_onami,
+    op05_063_orobi,
+    op05_064_killer,
+    op05_066_jinbe_continuous,
+    op05_067_zorojuurou,
+    op05_068_chopaemon,
+    op05_069_law,
+    op05_070_franosuke,
+    op05_071_bepo,
+    op05_072_honekichi,
+    op05_073_doublefinger_play,
+    op05_073_doublefinger_trigger,
+    op05_074_kid_don_return,
+    op05_075_mr1,
+    op05_077_gamma_knife,
+    op05_078_punk_rotten,
+    op05_079_viola,
+    op05_080_elizabello,
+    op05_082_shirahoshi,
+    op05_090_riku_play,
+    op05_090_riku_ko,
+    op05_091_rebecca_play,
+    op05_093_lucci,
+    op05_096_500_million,
+    op05_100_enel_protection,
+    op05_101_ohm_play,
+    op05_104_conis,
+    op05_105_satori,
+    op05_109_pagaya,
+    op05_111_hotori,
+    op05_112_mckinley_ko,
+    op05_115_amaru_trigger,
+    op05_119_luffy_play,
     op05_009_tohtoh,
     op05_015_betty,
     op05_016_morley,
     op05_016_morley_trigger,
     op05_017_lindbergh,
     op05_017_lindbergh_trigger,
+    op05_021_revolutionary_army_hq,
     op05_019_fire_fist,
     op05_019_fire_fist_trigger,
     op05_020_four_thousand_brick_fist,
     op05_020_four_thousand_brick_fist_trigger,
     op05_022_rosinante_eot,
+    op05_024_kuween,
+    op05_025_gladius,
     op05_003_inazuma,
     op05_004_ivankov,
     op05_005_karasu_attack,
     op05_007_sabo,
     op05_023_vergo,
+    op05_027_law,
+    op05_028_doflamingo,
     op05_026_sarquiss,
+    op05_031_buffalo,
+    op05_036_monet_block,
+    op05_002_betty_leader,
+    op05_006_koala,
+    op05_008_chaka,
+    op05_010_robin,
+    op05_011_kuma_play,
+    op05_011_kuma_trigger,
+    op05_013_bunny_joe,
+    op05_014_pell,
+    op05_018_emporio_energy_hormone,
+    op05_018_emporio_energy_hormone_trigger,
+    op05_076_when_youre_at_sea,
+    op05_076_when_youre_at_sea_trigger,
 )
 from optcg_engine.game_engine import GamePhase, GameState, PendingChoice, Player
 from optcg_engine.models.cards import Card
@@ -1833,6 +1903,31 @@ class OP04EngineRegressionTests(unittest.TestCase):
         self.assertEqual(-1000, getattr(protected, "power_modifier", 0))
         self.assertTrue(getattr(sabo, "op05_001_used", False))
 
+    def test_op05_002_belo_betty_trashes_cost_and_buffs_up_to_three_for_turn(self) -> None:
+        leader = make_card("OP05-002", "Belo Betty", card_type="LEADER", power=5000, life=4)
+        cost_card = make_card("betty-cost", "Betty Cost", card_type="CHARACTER", power=2000)
+        cost_card.card_origin = "Revolutionary Army"
+        rev_one = make_card("rev-1", "Rev One", card_type="CHARACTER", power=4000)
+        rev_one.card_origin = "Revolutionary Army"
+        rev_two = make_card("rev-2", "Rev Two", card_type="CHARACTER", power=4000)
+        rev_two.trigger = "[Trigger] Draw 1."
+        rev_three = make_card("rev-3", "Rev Three", card_type="CHARACTER", power=5000)
+        rev_three.card_origin = "Revolutionary Army"
+        self.player1.leader = leader
+        self.player1.hand = [cost_card]
+        self.player1.cards_in_play = [rev_one, rev_two, rev_three]
+
+        self.assertTrue(op05_002_betty_leader(self.game, self.player1, leader))
+        self.assertTrue(self.game.resolve_pending_choice(["pay"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0", "1", "2"]))
+
+        self.assertIn(cost_card, self.player1.trash)
+        self.assertEqual(3000, getattr(rev_one, "power_modifier", 0))
+        self.assertEqual(3000, getattr(rev_two, "power_modifier", 0))
+        self.assertEqual(3000, getattr(rev_three, "power_modifier", 0))
+        self.assertEqual(self.game.turn_count, getattr(rev_one, "power_modifier_expires_on_turn", -1))
+
     def test_op05_003_inazuma_gains_rush_from_other_7000_character(self) -> None:
         inazuma = make_card("OP05-003", "Inazuma", card_type="CHARACTER", power=5000)
         ally = make_card("ally-7000", "Ally", card_type="CHARACTER", power=6000)
@@ -1858,6 +1953,79 @@ class OP04EngineRegressionTests(unittest.TestCase):
         self.assertIn(rev_target, self.player1.cards_in_play)
         self.assertNotIn(rev_target, self.player1.hand)
         self.assertTrue(getattr(ivankov, "op05_004_used", False))
+
+    def test_op05_006_008_010_011_013_014_018_batch(self) -> None:
+        koala = make_card("OP05-006", "Koala", card_type="CHARACTER", power=4000)
+        chaka = make_card("OP05-008", "Chaka", card_type="CHARACTER", power=5000)
+        robin = make_card("OP05-010", "Nico Robin", card_type="CHARACTER", power=3000)
+        kuma = make_card("OP05-011", "Bartholomew Kuma", card_type="CHARACTER", power=4000)
+        bunny = make_card("OP05-013", "Bunny Joe", card_type="CHARACTER", power=1000)
+        pell = make_card("OP05-014", "Pell", card_type="CHARACTER", power=5000)
+        hormone = make_card("OP05-018", "Emporio Energy Hormone", card_type="EVENT", cost=1)
+
+        self.player1.leader.card_origin = "Revolutionary Army"
+        koala_target = make_card("koala-target", "Koala Target", card_type="CHARACTER", power=4000)
+        low_one = make_card("low-one", "Low One", card_type="CHARACTER", power=1000)
+        low_two = make_card("low-two", "Low Two", card_type="CHARACTER", power=2000)
+        pell_target = make_card("pell-target", "Pell Target", card_type="CHARACTER", power=5000)
+        self.player2.cards_in_play = [koala_target, low_one, low_two, pell_target]
+
+        self.assertTrue(op05_006_koala(self.game, self.player1, koala))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(-3000, getattr(koala_target, "power_modifier", 0))
+        self.assertEqual(self.game.turn_count, getattr(koala_target, "power_modifier_expires_on_turn", -1))
+
+        leader_target = self.player1.leader
+        chaka.attached_don = 1
+        self.player1.don_pool = ["rested", "rested", "active"]
+        self.assertTrue(op05_008_chaka(self.game, self.player1, chaka))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(2, getattr(leader_target, "attached_don", 0))
+
+        self.assertTrue(op05_010_robin(self.game, self.player1, robin))
+        self.assertTrue(self.game.resolve_pending_choice(["1"]))
+        self.assertIn(low_one, self.player2.trash)
+
+        boosted_low = make_card("boosted-low", "Boosted Low", card_type="CHARACTER", power=1000)
+        boosted_low.power_modifier = 1000
+        self.player2.cards_in_play = [boosted_low, low_two]
+        self.assertTrue(op05_011_kuma_play(self.game, self.player1, kuma))
+        self.assertTrue(self.game.resolve_pending_choice(["1"]))
+        self.assertIn(low_two, self.player2.trash)
+        self.assertNotIn(boosted_low, self.player2.trash)
+
+        self.player1.leader.colors = ["Red", "Blue"]
+        self.assertTrue(op05_011_kuma_trigger(self.game, self.player1, kuma))
+        self.assertIn(kuma, self.player1.cards_in_play)
+        self.assertEqual(self.game.turn_count, getattr(kuma, "played_turn", -1))
+
+        self.assertTrue(op05_013_bunny_joe(self.game, self.player1, bunny))
+        self.assertTrue(bunny.has_blocker)
+
+        pell.attached_don = 1
+        self.player2.cards_in_play = [pell_target]
+        self.assertTrue(op05_014_pell(self.game, self.player1, pell))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(-2000, getattr(pell_target, "power_modifier", 0))
+        self.assertEqual(self.game.turn_count, getattr(pell_target, "power_modifier_expires_on_turn", -1))
+
+        counter_target = make_card("counter-target", "Counter Target", card_type="CHARACTER", power=5000)
+        rev_play = make_card("rev-play", "Rev Play", card_type="CHARACTER", power=5000)
+        rev_play.card_origin = "Revolutionary Army"
+        self.player1.cards_in_play = [counter_target]
+        self.player1.hand = [rev_play]
+        self.assertTrue(op05_018_emporio_energy_hormone(self.game, self.player1, hormone))
+        self.assertTrue(self.game.resolve_pending_choice(["1"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(3000, getattr(counter_target, "_battle_power_modifier", 0))
+        self.assertIn(rev_play, self.player1.cards_in_play)
+
+        trigger_rev = make_card("trigger-rev", "Trigger Rev", card_type="CHARACTER", power=4000)
+        trigger_rev.card_origin = "Revolutionary Army"
+        self.player1.hand = [trigger_rev]
+        self.assertTrue(op05_018_emporio_energy_hormone_trigger(self.game, self.player1, hormone))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn(trigger_rev, self.player1.cards_in_play)
 
     def test_op05_005_karasu_attack_can_target_leader(self) -> None:
         karasu = make_card("OP05-005", "Karasu", card_type="CHARACTER", power=6000)
@@ -2088,6 +2256,129 @@ class OP04EngineRegressionTests(unittest.TestCase):
         self.player1.hand.append(make_card("hand-6", "Hand 6", card_type="CHARACTER"))
         self.assertFalse(op05_022_rosinante_eot(self.game, self.player1, leader))
         self.assertTrue(leader.is_resting)
+
+    def test_op05_021_revolutionary_army_hq_prompts_before_paying_cost_and_searches(self) -> None:
+        stage = make_card("OP05-021", "Revolutionary Army HQ", card_type="STAGE", cost=2)
+        discard = make_card("discard", "Discard", card_type="CHARACTER", power=1000)
+        target = make_card("rev-target", "Rev Target", card_type="CHARACTER", cost=3, power=5000)
+        target.card_origin = "Revolutionary Army"
+        filler_one = make_card("filler-one", "Filler One", card_type="CHARACTER", cost=1)
+        filler_two = make_card("filler-two", "Filler Two", card_type="CHARACTER", cost=2)
+        tail = make_card("tail", "Tail", card_type="CHARACTER", cost=4)
+        self.player1.hand = [discard]
+        self.player1.deck = [target, filler_one, filler_two, tail]
+
+        self.assertTrue(op05_021_revolutionary_army_hq(self.game, self.player1, stage))
+        self.assertFalse(stage.is_resting)
+        self.assertFalse(getattr(stage, "main_activated_this_turn", False))
+        self.assertTrue(self.game.resolve_pending_choice(["use"]))
+        self.assertFalse(stage.is_resting)
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(stage.is_resting)
+        self.assertTrue(getattr(stage, "main_activated_this_turn", False))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        while self.game.pending_choice is not None:
+            self.assertTrue(self.game.resolve_pending_choice(["0"]))
+
+        self.assertIn(discard, self.player1.trash)
+        self.assertIn(target, self.player1.hand)
+        self.assertEqual(["Tail", "Filler One", "Filler Two"], [card.name for card in self.player1.deck])
+
+    def test_op05_024_025_027_028_031_036_076_batch(self) -> None:
+        kuween = make_card("OP05-024", "Kuween", card_type="CHARACTER", cost=2, power=3000)
+        self.assertTrue(op05_024_kuween(self.game, self.player1, kuween))
+        self.assertTrue(kuween.has_blocker)
+
+        gladius = make_card("OP05-025", "Gladius", card_type="CHARACTER", cost=4, power=5000)
+        rest_target = make_card("rest-target", "Rest Target", card_type="CHARACTER", cost=4, power=4000)
+        rest_target.cost_modifier = -1
+        self.player2.cards_in_play = [rest_target, make_card("opp-stage", "Opp Stage", card_type="STAGE", cost=1)]
+        self.assertTrue(op05_025_gladius(self.game, self.player1, gladius))
+        self.assertTrue(self.game.resolve_pending_choice(["use"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(gladius.is_resting)
+        self.assertTrue(rest_target.is_resting)
+
+        law = make_card("OP05-027", "Trafalgar Law", card_type="CHARACTER", cost=3, power=4000)
+        law_target = make_card("law-target", "Law Target", card_type="CHARACTER", cost=4, power=4000)
+        law_target.cost_modifier = -1
+        self.player1.cards_in_play = [law]
+        self.player2.cards_in_play = [law_target]
+        self.assertTrue(op05_027_law(self.game, self.player1, law))
+        self.assertTrue(self.game.resolve_pending_choice(["use"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn(law, self.player1.trash)
+        self.assertTrue(law_target.is_resting)
+
+        doflamingo = make_card("OP05-028", "Donquixote Doflamingo", card_type="CHARACTER", cost=3, power=5000)
+        ko_target = make_card("ko-target", "KO Target", card_type="CHARACTER", cost=3, power=4000)
+        ko_target.cost_modifier = -1
+        ko_target.is_resting = True
+        self.player1.cards_in_play = [doflamingo]
+        self.player2.cards_in_play = [ko_target]
+        self.assertTrue(op05_028_doflamingo(self.game, self.player1, doflamingo))
+        self.assertTrue(self.game.resolve_pending_choice(["use"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn(doflamingo, self.player1.trash)
+        self.assertIn(ko_target, self.player2.trash)
+
+        buffalo = make_card("OP05-031", "Buffalo", card_type="CHARACTER", cost=2, power=4000)
+        rested_cost_one = make_card("rested-1", "Rested One", card_type="CHARACTER", cost=1, power=1000)
+        rested_cost_two = make_card("rested-2", "Rested Two", card_type="CHARACTER", cost=2, power=3000)
+        rested_cost_one.is_resting = True
+        rested_cost_two.is_resting = True
+        self.player1.cards_in_play = [buffalo, rested_cost_one, rested_cost_two]
+        self.assertTrue(op05_031_buffalo(self.game, self.player1, buffalo))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertFalse(rested_cost_one.is_resting)
+        self.assertTrue(getattr(buffalo, "op05_031_used", False))
+
+        buffalo_no_target = make_card("OP05-031", "Buffalo", card_type="CHARACTER", cost=2, power=4000)
+        rested_a = make_card("rested-a", "Rested A", card_type="CHARACTER", cost=2, power=3000)
+        rested_b = make_card("rested-b", "Rested B", card_type="CHARACTER", cost=3, power=3000)
+        rested_a.is_resting = True
+        rested_b.is_resting = True
+        self.player1.cards_in_play = [buffalo_no_target, rested_a, rested_b]
+        self.game.pending_choice = None
+        self.assertTrue(op05_031_buffalo(self.game, self.player1, buffalo_no_target))
+        self.assertIsNone(self.game.pending_choice)
+        self.assertFalse(getattr(buffalo_no_target, "op05_031_used", False))
+
+        monet = make_card("OP05-036", "Monet", card_type="CHARACTER", cost=4, power=5000)
+        monet_target = make_card("monet-target", "Monet Target", card_type="CHARACTER", cost=5, power=4000)
+        monet_target.cost_modifier = -1
+        self.player2.cards_in_play = [monet_target]
+        self.assertTrue(op05_036_monet_block(self.game, self.player1, monet))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(monet_target.is_resting)
+
+        event = make_card("OP05-076", "When You're at Sea You Fight against Pirates!!", card_type="EVENT", cost=1)
+        search_target = make_card("sea-target", "Sea Target", card_type="CHARACTER", cost=3, power=4000)
+        search_target.card_origin = "Heart Pirates"
+        sea_fill_one = make_card("sea-fill-one", "Sea Fill One", card_type="CHARACTER", cost=2)
+        sea_fill_two = make_card("sea-fill-two", "Sea Fill Two", card_type="CHARACTER", cost=1)
+        sea_tail = make_card("sea-tail", "Sea Tail", card_type="CHARACTER", cost=5)
+        self.player1.hand = []
+        self.player1.deck = [search_target, sea_fill_one, sea_fill_two, sea_tail]
+        self.assertTrue(has_hardcoded_effect("OP05-076", "main"))
+        self.assertFalse(has_hardcoded_effect("OP05-076", "on_play"))
+        self.assertTrue(op05_076_when_youre_at_sea(self.game, self.player1, event))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        while self.game.pending_choice is not None:
+            self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn(search_target, self.player1.hand)
+
+        trigger_target = make_card("trigger-sea-target", "Trigger Sea Target", card_type="CHARACTER", cost=4, power=5000)
+        trigger_target.card_origin = "Kid Pirates"
+        trigger_fill_one = make_card("trigger-fill-one", "Trigger Fill One", card_type="CHARACTER", cost=2)
+        trigger_fill_two = make_card("trigger-fill-two", "Trigger Fill Two", card_type="CHARACTER", cost=1)
+        self.player1.hand = []
+        self.player1.deck = [trigger_target, trigger_fill_one, trigger_fill_two]
+        self.assertTrue(op05_076_when_youre_at_sea_trigger(self.game, self.player1, event))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        while self.game.pending_choice is not None:
+            self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn(trigger_target, self.player1.hand)
 
     def test_op05_029_doflamingo_prompts_optional_don_then_rests_target(self) -> None:
         doffy = make_card("OP05-029", "Donquixote Doflamingo", card_type="CHARACTER", power=5000)
@@ -2356,6 +2647,644 @@ class OP04EngineRegressionTests(unittest.TestCase):
         self.assertIn(keep, self.player1.hand)
         self.assertNotIn(bottom, self.player1.hand)
         self.assertEqual(bottom, self.player1.deck[-1])
+
+    def test_op05_047_hawkins_draws_and_gains_battle_power(self) -> None:
+        hawkins = make_card("OP05-047", "Basil Hawkins", card_type="CHARACTER", cost=4, power=5000)
+        self.player1.hand = [make_card("h1", "H1"), make_card("h2", "H2"), make_card("h3", "H3")]
+        drawn = make_card("hawkins-draw", "Hawkins Draw", card_type="EVENT", cost=1, power=0)
+        self.player1.deck = [drawn]
+
+        self.assertTrue(op05_047_hawkins_block(self.game, self.player1, hawkins))
+        self.assertIn(drawn, self.player1.hand)
+        self.assertEqual(1000, getattr(hawkins, "_battle_power_modifier", 0))
+
+    def test_op05_048_bastille_can_bottom_deck_any_owner_character(self) -> None:
+        bastille = make_card("OP05-048", "Bastille", card_type="CHARACTER", cost=5, power=6000)
+        bastille.attached_don = 1
+        own_target = make_card("bastille-own", "Bastille Own", card_type="CHARACTER", cost=2, power=3000)
+        opp_target = make_card("bastille-opp", "Bastille Opp", card_type="CHARACTER", cost=2, power=3000)
+        self.player1.cards_in_play = [own_target]
+        self.player2.cards_in_play = [opp_target]
+
+        self.assertTrue(op05_048_bastille(self.game, self.player1, bastille))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertNotIn(own_target, self.player1.cards_in_play)
+        self.assertEqual(own_target, self.player1.deck[-1])
+
+    def test_op05_049_haccha_can_return_any_owner_character(self) -> None:
+        haccha = make_card("OP05-049", "Haccha", card_type="CHARACTER", cost=6, power=7000)
+        haccha.attached_don = 1
+        own_target = make_card("haccha-own", "Haccha Own", card_type="CHARACTER", cost=3, power=3000)
+        opp_target = make_card("haccha-opp", "Haccha Opp", card_type="CHARACTER", cost=3, power=3000)
+        self.player1.cards_in_play = [own_target]
+        self.player2.cards_in_play = [opp_target]
+
+        self.assertTrue(op05_049_haccha(self.game, self.player1, haccha))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertNotIn(own_target, self.player1.cards_in_play)
+        self.assertIn(own_target, self.player1.hand)
+
+    def test_op05_050_hina_draws_if_five_or_less_cards_in_hand(self) -> None:
+        hina = make_card("OP05-050", "Hina", card_type="CHARACTER", cost=3, power=4000)
+        self.player1.hand = [make_card(f"hina-{idx}", f"Hina {idx}") for idx in range(5)]
+        drawn = make_card("hina-draw", "Hina Draw", card_type="EVENT", cost=1, power=0)
+        self.player1.deck = [drawn]
+
+        self.assertTrue(op05_050_hina(self.game, self.player1, hina))
+        self.assertIn(drawn, self.player1.hand)
+
+    def test_op05_051_borsalino_can_bottom_deck_any_owner_character(self) -> None:
+        borsalino = make_card("OP05-051", "Borsalino", card_type="CHARACTER", cost=7, power=8000)
+        own_target = make_card("bors-own", "Bors Own", card_type="CHARACTER", cost=4, power=4000)
+        opp_target = make_card("bors-opp", "Bors Opp", card_type="CHARACTER", cost=4, power=4000)
+        self.player1.cards_in_play = [own_target]
+        self.player2.cards_in_play = [opp_target]
+
+        self.assertTrue(op05_051_borsalino(self.game, self.player1, borsalino))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertNotIn(own_target, self.player1.cards_in_play)
+        self.assertEqual(own_target, self.player1.deck[-1])
+
+    def test_op05_052_maynard_sets_blocker_flag(self) -> None:
+        maynard = make_card("OP05-052", "Maynard", card_type="CHARACTER", cost=2, power=2000)
+        self.assertTrue(op05_052_maynard(self.game, self.player1, maynard))
+        self.assertTrue(maynard.has_blocker)
+
+    def test_op05_053_mozambia_triggers_once_per_turn_on_draw_outside_draw_phase(self) -> None:
+        mozambia = make_card("OP05-053", "Mozambia", card_type="CHARACTER", cost=1, power=2000)
+        first = make_card("moz-draw-1", "Moz Draw 1", card_type="EVENT", cost=1, power=0)
+        second = make_card("moz-draw-2", "Moz Draw 2", card_type="EVENT", cost=1, power=0)
+        self.player1.cards_in_play = [mozambia]
+        self.player1.deck = [first, second]
+        self.game.phase = GamePhase.MAIN
+
+        draw_cards(self.player1, 1, game_state=self.game)
+        self.assertEqual(2000, getattr(mozambia, "power_modifier", 0))
+        self.assertTrue(getattr(mozambia, "op05_053_used", False))
+
+        draw_cards(self.player1, 1, game_state=self.game)
+        self.assertEqual(2000, getattr(mozambia, "power_modifier", 0))
+
+    def test_op05_054_garp_draws_two_then_bottom_decks_two_in_order(self) -> None:
+        garp = make_card("OP05-054", "Monkey.D.Garp", card_type="CHARACTER", cost=3, power=3000)
+        hand_a = make_card("garp-a", "Garp A", card_type="CHARACTER", cost=1, power=1000)
+        hand_b = make_card("garp-b", "Garp B", card_type="CHARACTER", cost=2, power=2000)
+        draw_c = make_card("garp-c", "Garp C", card_type="EVENT", cost=3, power=0)
+        draw_d = make_card("garp-d", "Garp D", card_type="CHARACTER", cost=4, power=4000)
+        self.player1.hand = [hand_a, hand_b]
+        self.player1.deck = [draw_c, draw_d]
+
+        self.assertTrue(op05_054_garp(self.game, self.player1, garp))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(self.game.resolve_pending_choice(["2"]))
+        self.assertIn(hand_b, self.player1.hand)
+        self.assertIn(draw_c, self.player1.hand)
+        self.assertNotIn(hand_a, self.player1.hand)
+        self.assertNotIn(draw_d, self.player1.hand)
+        self.assertEqual(draw_d, self.player1.deck[-2])
+        self.assertEqual(hand_a, self.player1.deck[-1])
+
+    def test_op05_055_drake_reorders_top_cards_top_or_bottom(self) -> None:
+        drake = make_card("OP05-055", "X.Drake", card_type="CHARACTER", cost=5, power=6000)
+        card_a = make_card("drake-a", "Drake A", card_type="CHARACTER", cost=1, power=1000)
+        card_b = make_card("drake-b", "Drake B", card_type="CHARACTER", cost=2, power=2000)
+        card_c = make_card("drake-c", "Drake C", card_type="EVENT", cost=3, power=0)
+        tail = make_card("drake-tail", "Drake Tail", card_type="CHARACTER", cost=4, power=4000)
+        self.player1.deck = [card_a, card_b, card_c, tail]
+
+        self.assertTrue(op05_055_drake_play(self.game, self.player1, drake))
+        self.assertTrue(self.game.resolve_pending_choice(["top"]))
+        self.assertTrue(self.game.resolve_pending_choice(["1"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(card_b, self.player1.deck[0])
+        self.assertEqual(card_a, self.player1.deck[1])
+        self.assertEqual(card_c, self.player1.deck[2])
+        self.assertEqual(tail, self.player1.deck[3])
+
+    def test_op05_056_barrels_only_targets_other_characters_and_draws(self) -> None:
+        barrels = make_card("OP05-056", "X.Barrels", card_type="CHARACTER", cost=2, power=2000)
+        own_char = make_card("barrels-own", "Barrels Own", card_type="CHARACTER", cost=2, power=3000)
+        own_stage = make_card("barrels-stage", "Barrels Stage", card_type="STAGE", cost=2, power=0)
+        drawn = make_card("barrels-draw", "Barrels Draw", card_type="EVENT", cost=1, power=0)
+        self.player1.cards_in_play = [barrels, own_char, own_stage]
+        self.player1.deck = [drawn]
+
+        self.assertTrue(op05_056_barrels(self.game, self.player1, barrels))
+        self.assertEqual(1, len(self.game.pending_choice.options))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertNotIn(own_char, self.player1.cards_in_play)
+        self.assertIn(own_stage, self.player1.cards_in_play)
+        self.assertIn(drawn, self.player1.hand)
+
+    def test_op05_057_hound_blaze_main_and_trigger(self) -> None:
+        event = make_card("OP05-057", "Hound Blaze", card_type="EVENT", cost=2, power=0)
+        own = make_card("hound-own", "Hound Own", card_type="CHARACTER", cost=4, power=5000)
+        own_low = make_card("hound-low", "Hound Low", card_type="CHARACTER", cost=2, power=2000)
+        opp_low = make_card("hound-opp-low", "Hound Opp Low", card_type="CHARACTER", cost=2, power=2000)
+        trigger_target = make_card("hound-trigger", "Hound Trigger", card_type="CHARACTER", cost=3, power=3000)
+        self.player1.cards_in_play = [own, own_low]
+        self.player2.cards_in_play = [opp_low]
+
+        self.assertTrue(op05_057_hound_blaze(self.game, self.player1, event))
+        self.assertTrue(self.game.resolve_pending_choice(["1"]))
+        self.assertEqual(3000, getattr(own, "power_modifier", 0))
+        self.assertEqual(self.game.turn_count, getattr(own, "power_modifier_expires_on_turn", -1))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertNotIn(own_low, self.player1.cards_in_play)
+        self.assertEqual(own_low, self.player1.deck[-1])
+
+        self.player1.cards_in_play = [own]
+        self.player2.cards_in_play = [trigger_target]
+        self.assertTrue(op05_057_hound_blaze_trigger(self.game, self.player1, event))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertNotIn(trigger_target, self.player2.cards_in_play)
+        self.assertIn(trigger_target, self.player2.hand)
+
+    def test_op05_058_waste_of_human_life_main_and_trigger(self) -> None:
+        event = make_card("OP05-058", "It's a Waste of Human Life!!", card_type="EVENT", cost=8, power=0)
+        p1_low = make_card("waste-p1-low", "Waste P1 Low", card_type="CHARACTER", cost=3, power=3000)
+        p1_high = make_card("waste-p1-high", "Waste P1 High", card_type="CHARACTER", cost=4, power=4000)
+        p2_low = make_card("waste-p2-low", "Waste P2 Low", card_type="CHARACTER", cost=2, power=2000)
+        p2_high = make_card("waste-p2-high", "Waste P2 High", card_type="CHARACTER", cost=4, power=4000)
+        self.player1.cards_in_play = [p1_low, p1_high]
+        self.player2.cards_in_play = [p2_low, p2_high]
+        self.player1.hand = [make_card(f"waste-p1-{i}", f"Waste P1 {i}") for i in range(7)]
+        self.player2.hand = [make_card(f"waste-p2-{i}", f"Waste P2 {i}") for i in range(6)]
+
+        self.assertTrue(op05_058_waste_of_human_life(self.game, self.player1, event))
+        self.assertNotIn(p1_low, self.player1.cards_in_play)
+        self.assertNotIn(p2_low, self.player2.cards_in_play)
+        self.assertIn(p1_high, self.player1.cards_in_play)
+        self.assertIn(p2_high, self.player2.cards_in_play)
+        self.assertTrue(self.game.resolve_pending_choice(["0", "1"]))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(5, len(self.player1.hand))
+        self.assertEqual(5, len(self.player2.hand))
+
+        trig_p1 = make_card("waste-trig-p1", "Waste Trigger P1", card_type="CHARACTER", cost=2, power=2000)
+        trig_p2 = make_card("waste-trig-p2", "Waste Trigger P2", card_type="CHARACTER", cost=2, power=2000)
+        self.player1.cards_in_play = [trig_p1]
+        self.player2.cards_in_play = [trig_p2]
+        self.assertTrue(op05_058_waste_of_human_life_trigger(self.game, self.player1, event))
+        self.assertNotIn(trig_p1, self.player1.cards_in_play)
+        self.assertNotIn(trig_p2, self.player2.cards_in_play)
+
+    def test_op05_059_world_of_violence_main_and_trigger(self) -> None:
+        event = make_card("OP05-059", "Let Us Begin the World of Violence!!!", card_type="EVENT", cost=5, power=0)
+        self.player1.leader.colors = ["Blue", "Black"]
+        draw_one = make_card("violence-draw-1", "Violence Draw 1", card_type="EVENT", cost=1, power=0)
+        draw_two = make_card("violence-draw-2", "Violence Draw 2", card_type="EVENT", cost=1, power=0)
+        draw_three = make_card("violence-draw-3", "Violence Draw 3", card_type="EVENT", cost=1, power=0)
+        own_target = make_card("violence-own", "Violence Own", card_type="CHARACTER", cost=5, power=5000)
+        self.player1.deck = [draw_one, draw_two, draw_three]
+        self.player1.cards_in_play = [own_target]
+
+        self.assertTrue(op05_059_world_of_violence(self.game, self.player1, event))
+        self.assertIn(draw_one, self.player1.hand)
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertNotIn(own_target, self.player1.cards_in_play)
+        self.assertIn(own_target, self.player1.hand)
+
+        self.assertTrue(op05_059_world_of_violence_trigger(self.game, self.player1, event))
+        self.assertIn(draw_two, self.player1.hand)
+        self.assertIn(draw_three, self.player1.hand)
+
+    def test_op05_060_luffy_leader_prompts_and_adds_one_active_don(self) -> None:
+        leader = self.player1.leader
+        life_one = make_card("luffy-life-1", "Luffy Life 1", card_type="EVENT", cost=1, power=0)
+        life_two = make_card("luffy-life-2", "Luffy Life 2", card_type="CHARACTER", cost=2, power=2000)
+        self.player1.life_cards = [life_one, life_two]
+        self.player1.don_pool = ["rested", "active", "rested"]
+
+        self.assertTrue(op05_060_luffy_leader(self.game, self.player1, leader))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["use"]))
+        self.assertIn(life_two, self.player1.hand)
+        self.assertEqual([life_one], self.player1.life_cards)
+        self.assertEqual(4, len(self.player1.don_pool))
+        self.assertEqual("active", self.player1.don_pool[-1])
+        self.assertTrue(getattr(leader, "op05_060_used", False))
+        self.assertFalse(op05_060_luffy_leader(self.game, self.player1, leader))
+
+    def test_op05_061_usohachi_prompts_up_to_one_cost_four_or_less(self) -> None:
+        usohachi = make_card("OP05-061", "Uso-Hachi", card_type="CHARACTER", cost=3, power=4000)
+        target = make_card("usohachi-target", "Uso-Hachi Target", card_type="CHARACTER", cost=4, power=5000)
+        too_large = make_card("usohachi-large", "Uso-Hachi Large", card_type="CHARACTER", cost=5, power=6000)
+        usohachi.attached_don = 1
+        self.player1.don_pool = ["active"] * 8
+        self.player2.cards_in_play = [target, too_large]
+
+        self.assertTrue(op05_061_usohachi(self.game, self.player1, usohachi))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertEqual(0, self.game.pending_choice.min_selections)
+        self.assertEqual(1, len(self.game.pending_choice.options))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(target.is_resting)
+        self.assertFalse(too_large.is_resting)
+
+    def test_op05_062_onami_gains_blocker_only_at_ten_don(self) -> None:
+        onami = make_card("OP05-062", "O-Nami", card_type="CHARACTER", cost=1, power=1000)
+        self.player1.don_pool = ["active"] * 9
+
+        self.assertTrue(op05_062_onami(self.game, self.player1, onami))
+        self.assertFalse(onami.has_blocker)
+        self.assertFalse(getattr(onami, "_continuous_blocker", False))
+
+        self.player1.don_pool = ["active"] * 10
+        self.assertTrue(op05_062_onami(self.game, self.player1, onami))
+        self.assertTrue(onami.has_blocker)
+        self.assertTrue(getattr(onami, "_continuous_blocker", False))
+
+    def test_op05_063_orobi_prompts_optional_ko_for_cost_three_or_less(self) -> None:
+        orobi = make_card("OP05-063", "O-Robi", card_type="CHARACTER", cost=4, power=5000)
+        target = make_card("orobi-target", "O-Robi Target", card_type="CHARACTER", cost=3, power=3000)
+        too_large = make_card("orobi-large", "O-Robi Large", card_type="CHARACTER", cost=4, power=4000)
+        self.player1.don_pool = ["active"] * 8
+        self.player2.cards_in_play = [target, too_large]
+
+        self.assertTrue(op05_063_orobi(self.game, self.player1, orobi))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertEqual(0, self.game.pending_choice.min_selections)
+        self.assertEqual(1, len(self.game.pending_choice.options))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertNotIn(target, self.player2.cards_in_play)
+        self.assertIn(target, self.player2.trash)
+        self.assertIn(too_large, self.player2.cards_in_play)
+
+    def test_op05_064_killer_searches_top_five_and_bottom_decks_rest_in_order(self) -> None:
+        killer = make_card("OP05-064", "Killer", card_type="CHARACTER", cost=1, power=2000)
+        junk = make_card("killer-junk", "Killer Junk", card_type="EVENT", cost=1, power=0)
+        kid_target = make_card("killer-kid", "Kid Target", card_type="CHARACTER", cost=2, power=3000)
+        kid_target.card_origin = "Kid Pirates"
+        same_name = make_card("killer-copy", "Killer", card_type="CHARACTER", cost=1, power=2000)
+        same_name.card_origin = "Kid Pirates"
+        tail = make_card("killer-tail", "Killer Tail", card_type="CHARACTER", cost=3, power=4000)
+        self.player1.deck = [junk, kid_target, same_name, tail]
+
+        self.assertTrue(op05_064_killer(self.game, self.player1, killer))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["1"]))
+        self.assertIn(kid_target, self.player1.hand)
+        self.assertTrue(self.game.resolve_pending_choice(["2"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual([tail, junk, same_name], self.player1.deck)
+
+    def test_op05_066_jinbe_only_gains_opponent_turn_power_at_ten_don(self) -> None:
+        jinbe = make_card("OP05-066", "Jinbe", card_type="CHARACTER", cost=5, power=6000)
+        jinbe._sticky_power_modifier = 500
+
+        self.player1.don_pool = ["active"] * 10
+        self.game.current_player = self.player1
+        self.assertTrue(op05_066_jinbe_continuous(self.game, self.player1, jinbe))
+        self.assertEqual(500, getattr(jinbe, "power_modifier", 0))
+
+        self.game.current_player = self.player2
+        self.assertTrue(op05_066_jinbe_continuous(self.game, self.player1, jinbe))
+        self.assertEqual(1500, getattr(jinbe, "power_modifier", 0))
+
+        self.player1.don_pool = ["active"] * 9
+        self.assertTrue(op05_066_jinbe_continuous(self.game, self.player1, jinbe))
+        self.assertEqual(500, getattr(jinbe, "power_modifier", 0))
+
+    def test_op05_067_zorojuurou_adds_one_active_don_at_three_life_or_less(self) -> None:
+        zoro = make_card("OP05-067", "Zoro-Juurou", card_type="CHARACTER", cost=3, power=4000)
+        self.player1.life_cards = [
+            make_card("zoro-life-1", "Zoro Life 1", card_type="EVENT", cost=1, power=0),
+            make_card("zoro-life-2", "Zoro Life 2", card_type="EVENT", cost=1, power=0),
+            make_card("zoro-life-3", "Zoro Life 3", card_type="EVENT", cost=1, power=0),
+        ]
+        self.player1.don_pool = ["rested", "active"]
+
+        self.assertTrue(op05_067_zorojuurou(self.game, self.player1, zoro))
+        self.assertEqual(3, len(self.player1.don_pool))
+        self.assertEqual("active", self.player1.don_pool[-1])
+
+    def test_op05_068_chopaemon_prompts_optional_restand_for_valid_targets(self) -> None:
+        chopa = make_card("OP05-068", "Chopa-Emon", card_type="CHARACTER", cost=2, power=3000)
+        valid = make_card("chopa-valid", "Chopa Valid", card_type="CHARACTER", cost=4, power=6000)
+        valid.colors = ["Purple"]
+        valid.card_origin = "Straw Hat Crew"
+        valid.is_resting = True
+        wrong_color = make_card("chopa-color", "Chopa Color", card_type="CHARACTER", cost=4, power=6000)
+        wrong_color.colors = ["Blue"]
+        wrong_color.card_origin = "Straw Hat Crew"
+        wrong_color.is_resting = True
+        too_big = make_card("chopa-big", "Chopa Big", card_type="CHARACTER", cost=4, power=7000)
+        too_big.colors = ["Purple"]
+        too_big.card_origin = "Straw Hat Crew"
+        too_big.is_resting = True
+        self.player1.cards_in_play = [chopa, valid, wrong_color, too_big]
+        self.player1.don_pool = ["active"] * 8
+
+        self.assertTrue(op05_068_chopaemon(self.game, self.player1, chopa))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertEqual(0, self.game.pending_choice.min_selections)
+        self.assertEqual(1, len(self.game.pending_choice.options))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertFalse(valid.is_resting)
+        self.assertTrue(wrong_color.is_resting)
+        self.assertTrue(too_big.is_resting)
+
+    def test_op05_069_law_searches_top_five_for_heart_pirates(self) -> None:
+        law = make_card("OP05-069", "Trafalgar Law", card_type="CHARACTER", cost=3, power=5000)
+        junk = make_card("law-junk", "Law Junk", card_type="EVENT", cost=1, power=0)
+        heart_target = make_card("law-heart", "Law Heart", card_type="CHARACTER", cost=2, power=2000)
+        heart_target.card_origin = "Heart Pirates"
+        off_type = make_card("law-off", "Law Off", card_type="CHARACTER", cost=2, power=2000)
+        off_type.card_origin = "Test"
+        tail = make_card("law-tail", "Law Tail", card_type="CHARACTER", cost=4, power=4000)
+        self.player1.deck = [junk, heart_target, off_type, tail]
+        self.player1.don_pool = ["active"] * 2
+        self.player2.don_pool = ["active"] * 3
+
+        self.assertTrue(op05_069_law(self.game, self.player1, law))
+        self.assertTrue(self.game.resolve_pending_choice(["1"]))
+        self.assertIn(heart_target, self.player1.hand)
+        self.assertTrue(self.game.resolve_pending_choice(["2"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual([tail, junk, off_type], self.player1.deck)
+
+    def test_op05_070_franosuke_gains_and_loses_rush_with_condition(self) -> None:
+        franosuke = make_card("OP05-070", "Fra-Nosuke", card_type="CHARACTER", cost=5, power=4000)
+
+        franosuke.attached_don = 1
+        self.player1.don_pool = ["active"] * 8
+        self.assertTrue(op05_070_franosuke(self.game, self.player1, franosuke))
+        self.assertTrue(franosuke.has_rush)
+
+        self.player1.don_pool = ["active"] * 7
+        self.assertTrue(op05_070_franosuke(self.game, self.player1, franosuke))
+        self.assertFalse(franosuke.has_rush)
+
+    def test_op05_071_bepo_applies_turn_limited_optional_minus_two_thousand(self) -> None:
+        bepo = make_card("OP05-071", "Bepo", card_type="CHARACTER", cost=3, power=5000)
+        target = make_card("bepo-target", "Bepo Target", card_type="CHARACTER", cost=4, power=6000)
+        self.player1.don_pool = ["active"] * 2
+        self.player2.don_pool = ["active"] * 4
+        self.player2.cards_in_play = [target]
+
+        self.assertTrue(op05_071_bepo(self.game, self.player1, bepo))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertEqual(0, self.game.pending_choice.min_selections)
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(-2000, getattr(target, "power_modifier", 0))
+        self.assertEqual(self.game.turn_count, getattr(target, "power_modifier_expires_on_turn", -1))
+
+    def test_op05_072_honekichi_prompts_up_to_two_targets(self) -> None:
+        honekichi = make_card("OP05-072", "Hone-Kichi", card_type="CHARACTER", cost=4, power=6000)
+        target_one = make_card("hk-1", "HK One", card_type="CHARACTER", cost=3, power=5000)
+        target_two = make_card("hk-2", "HK Two", card_type="CHARACTER", cost=4, power=6000)
+        self.player1.don_pool = ["active"] * 8
+        self.player2.cards_in_play = [target_one, target_two]
+
+        self.assertTrue(op05_072_honekichi(self.game, self.player1, honekichi))
+        self.assertTrue(self.game.resolve_pending_choice(["0", "1"]))
+
+        self.assertEqual(-2000, getattr(target_one, "power_modifier", 0))
+        self.assertEqual(-2000, getattr(target_two, "power_modifier", 0))
+
+    def test_op05_073_doublefinger_on_play_and_trigger(self) -> None:
+        doublefinger = make_card("OP05-073", "Miss Doublefinger(Zala)", card_type="CHARACTER", cost=4, power=4000)
+        discard = make_card("df-discard", "Discard", card_type="CHARACTER", cost=1)
+        self.player1.hand = [discard]
+        self.player1.don_pool = ["active"]
+
+        self.assertTrue(op05_073_doublefinger_play(self.game, self.player1, doublefinger))
+        self.assertTrue(self.game.resolve_pending_choice(["use"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn(discard, self.player1.trash)
+        self.assertIn("rested", self.player1.don_pool)
+
+        self.player1.cards_in_play = []
+        self.player1.don_pool = ["active", "rested"]
+        self.assertTrue(op05_073_doublefinger_trigger(self.game, self.player1, doublefinger))
+        if self.game.pending_choice is not None:
+            self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn(doublefinger, self.player1.cards_in_play)
+
+    def test_op05_074_and_075_don_return_and_play_prompt(self) -> None:
+        kid = make_card("OP05-074", 'Eustass"Captain"Kid', card_type="CHARACTER", cost=5, power=6000)
+        mr1 = make_card("OP05-075", "Mr.1(Daz.Bonez)", card_type="CHARACTER", cost=1, power=1000)
+        baroque = make_card("bw-1", "Baroque", card_type="CHARACTER", cost=3, power=4000)
+        baroque.card_origin = "Baroque Works"
+        self.player1.hand = [baroque]
+        self.player1.don_pool = ["active", "active"]
+        self.game.current_player = self.player2
+        self.game.opponent_player = self.player1
+
+        self.assertTrue(op05_075_mr1(self.game, self.player1, mr1))
+        self.assertTrue(self.game.resolve_pending_choice(["use"]))
+        while self.game.pending_choice is not None:
+            self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn(baroque, self.player1.cards_in_play)
+
+        self.game.current_player = self.player1
+        self.game.opponent_player = self.player2
+        before = len(self.player1.don_pool)
+        self.assertTrue(op05_074_kid_don_return(self.game, self.player1, kid))
+        self.assertGreaterEqual(len(self.player1.don_pool), before)
+
+    def test_op05_077_and_078_apply_turn_limited_power_changes(self) -> None:
+        gamma = make_card("OP05-077", "Gamma Knife", card_type="EVENT", cost=2)
+        rotten = make_card("OP05-078", "Punk Rotten", card_type="EVENT", cost=2)
+        opp_target = make_card("gamma-target", "Gamma Target", card_type="CHARACTER", cost=5, power=7000)
+        kid_target = make_card("kid-target", "Kid Target", card_type="CHARACTER", cost=5, power=6000)
+        kid_target.card_origin = "Kid Pirates"
+        self.player1.don_pool = ["active", "active"]
+        self.player2.cards_in_play = [opp_target]
+        self.player1.cards_in_play = [kid_target]
+
+        self.assertTrue(op05_077_gamma_knife(self.game, self.player1, gamma))
+        while self.game.pending_choice is not None:
+            self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(-5000, getattr(opp_target, "power_modifier", 0))
+
+        self.player1.don_pool = ["active", "active"]
+        self.assertTrue(op05_078_punk_rotten(self.game, self.player1, rotten))
+        while self.game.pending_choice is not None:
+            self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(5000, getattr(kid_target, "power_modifier", 0))
+
+    def test_op05_079_and_082_bottom_trash_effects_chain_correctly(self) -> None:
+        viola = make_card("OP05-079", "Viola", card_type="CHARACTER", cost=2, power=3000)
+        shirahoshi = make_card("OP05-082", "Shirahoshi", card_type="CHARACTER", cost=1, power=0)
+        opp_t1 = make_card("opp-t1", "Opp T1", cost=1)
+        opp_t2 = make_card("opp-t2", "Opp T2", cost=1)
+        opp_t3 = make_card("opp-t3", "Opp T3", cost=1)
+        self.player2.trash = [opp_t1, opp_t2, opp_t3]
+
+        self.assertTrue(op05_079_viola(self.game, self.player1, viola))
+        while self.game.pending_choice is not None:
+            self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual([], self.player2.trash)
+        self.assertEqual(["opp-t3", "opp-t2", "opp-t1"], [card.id for card in self.player2.deck[-3:]])
+
+        own_t1 = make_card("own-t1", "Own T1", cost=1)
+        own_t2 = make_card("own-t2", "Own T2", cost=1)
+        discard_target = make_card("opp-hand", "Opp Hand", cost=1)
+        self.player1.trash = [own_t1, own_t2]
+        self.player2.hand = [discard_target] + [make_card(f"opp-h{idx}", f"Opp H{idx}", cost=1) for idx in range(5)]
+        self.assertTrue(op05_082_shirahoshi(self.game, self.player1, shirahoshi))
+        self.assertTrue(self.game.resolve_pending_choice(["use"]))
+        while self.game.pending_choice is not None:
+            self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(5, len(self.player2.hand))
+
+    def test_op05_080_elizabello_and_090_riku_apply_battle_and_turn_power(self) -> None:
+        elizabello = make_card("OP05-080", "Elizabello II", card_type="CHARACTER", cost=4, power=5000)
+        riku = make_card("OP05-090", "Riku Doldo III", card_type="CHARACTER", cost=4, power=5000)
+        dressrosa = make_card("dressrosa", "Dressrosa", card_type="CHARACTER", cost=3, power=4000)
+        dressrosa.card_origin = "Dressrosa"
+        self.player1.trash = [make_card(f"trash-{idx}", f"Trash {idx}", cost=1) for idx in range(20)]
+        self.player1.cards_in_play = [dressrosa]
+
+        self.assertTrue(op05_080_elizabello(self.game, self.player1, elizabello))
+        self.assertTrue(self.game.resolve_pending_choice(["use"]))
+        self.assertTrue(getattr(elizabello, "has_doubleattack", False))
+        self.assertEqual(10000, getattr(elizabello, "_battle_power_modifier", 0))
+
+        self.assertTrue(op05_090_riku_play(self.game, self.player1, riku))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(2000, getattr(dressrosa, "power_modifier", 0))
+
+        dressrosa.power_modifier = 0
+        self.assertTrue(op05_090_riku_ko(self.game, self.player1, riku))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertEqual(2000, getattr(dressrosa, "power_modifier", 0))
+
+    def test_op05_091_rebecca_and_093_lucci_chain_their_followups(self) -> None:
+        rebecca = make_card("OP05-091", "Rebecca", card_type="CHARACTER", cost=4, power=0)
+        lucci = make_card("OP05-093", "Rob Lucci", card_type="CHARACTER", cost=4, power=6000)
+        trash_target = make_card("reb-trash", "Trash Black", card_type="CHARACTER", cost=3, power=3000)
+        hand_target = make_card("reb-hand", "Hand Black", card_type="CHARACTER", cost=2, power=2000)
+        trash_target.colors = ["Black"]
+        hand_target.colors = ["Black"]
+        self.player1.trash = [trash_target] + [make_card(f"lucci-trash-{idx}", f"Lucci Trash {idx}", cost=1) for idx in range(3)]
+        self.player1.hand = [hand_target]
+
+        self.assertTrue(op05_091_rebecca_play(self.game, self.player1, rebecca))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(hand_target.is_resting)
+        self.assertIn(hand_target, self.player1.cards_in_play)
+
+        cost2 = make_card("cost2", "Cost 2", card_type="CHARACTER", cost=2, power=2000)
+        cost1 = make_card("cost1", "Cost 1", card_type="CHARACTER", cost=1, power=1000)
+        self.player2.cards_in_play = [cost2, cost1]
+
+        self.assertTrue(op05_093_lucci(self.game, self.player1, lucci))
+        self.assertTrue(self.game.resolve_pending_choice(["use"]))
+        while self.game.pending_choice is not None:
+            self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn(cost2, self.player2.trash)
+        self.assertIn(cost1, self.player2.trash)
+
+    def test_op05_096_100_and_101_use_prompted_followups(self) -> None:
+        five_hundred = make_card("OP05-096", "I Bid 500 Million!!", card_type="EVENT", cost=3)
+        enel = make_card("OP05-100", "Enel", card_type="CHARACTER", cost=7, power=7000)
+        ohm = make_card("OP05-101", "Ohm", card_type="CHARACTER", cost=4, power=5000)
+        celestial = make_card("celestial", "Saint Charlos", card_type="CHARACTER", cost=3, power=0)
+        celestial.card_origin = "Celestial Dragons"
+        opp_target = make_card("opp-cost1", "Opp Cost1", card_type="CHARACTER", cost=1, power=2000)
+        draw_card = make_card("draw-card", "Draw Card", card_type="CHARACTER", cost=1)
+        holly = make_card("holly", "Holly", card_type="CHARACTER", cost=2, power=3000)
+        self.player1.cards_in_play = [celestial]
+        self.player1.deck = [draw_card, holly, make_card("ohm-2", "Ohm 2"), make_card("ohm-3", "Ohm 3"), make_card("ohm-4", "Ohm 4"), make_card("ohm-5", "Ohm 5")]
+        self.player2.cards_in_play = [opp_target]
+
+        self.assertTrue(op05_096_500_million(self.game, self.player1, five_hundred))
+        self.assertTrue(self.game.resolve_pending_choice(["life_bottom"]))
+        while self.game.pending_choice is not None:
+            self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIs(opp_target, self.player2.life_cards[0])
+        self.assertTrue(getattr(opp_target, "is_face_up", False))
+        self.assertIn(draw_card, self.player1.hand)
+
+        self.player1.life_cards = [make_card("life-1", "Life 1", cost=1)]
+        self.assertTrue(op05_100_enel_protection(self.game, self.player1, enel))
+        self.assertTrue(self.game.resolve_pending_choice(["use"]))
+        self.assertEqual(1, len(self.player1.trash))
+
+        self.player1.hand = []
+        self.player1.deck = [holly, make_card("ohm-a", "Ohm A"), make_card("ohm-b", "Ohm B"), make_card("ohm-c", "Ohm C"), make_card("ohm-d", "Ohm D")]
+        self.assertTrue(op05_101_ohm_play(self.game, self.player1, ohm))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        while self.game.pending_choice is not None:
+            self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn(holly, self.player1.cards_in_play)
+
+    def test_op05_104_105_109_and_112_resolve_card_flow_prompts(self) -> None:
+        conis = make_card("OP05-104", "Conis", card_type="CHARACTER", cost=1, power=0)
+        satori = make_card("OP05-105", "Satori", card_type="CHARACTER", cost=5, power=5000)
+        pagaya = make_card("OP05-109", "Pagaya", card_type="CHARACTER", cost=1, power=1000)
+        mckinley = make_card("OP05-112", "Captain McKinley", card_type="CHARACTER", cost=3, power=3000)
+        stage = make_card("stage", "Stage", card_type="STAGE", cost=1)
+        hand_one = make_card("h1", "H1", cost=1)
+        hand_two = make_card("h2", "H2", cost=1)
+        sky = make_card("sky", "Sky", card_type="CHARACTER", cost=1, power=1000)
+        sky.card_origin = "Sky Island"
+        self.player1.stage = stage
+        self.player1.hand = [hand_one, hand_two, sky]
+        self.player1.deck = [make_card("draw-1", "Draw 1", cost=1), make_card("draw-2", "Draw 2", cost=1)]
+
+        self.assertTrue(op05_104_conis(self.game, self.player1, conis))
+        self.assertTrue(self.game.resolve_pending_choice(["use"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIsNone(self.player1.stage)
+
+        self.player1.hand = [make_card("satori-cost", "Cost", cost=1)]
+        self.assertTrue(op05_105_satori(self.game, self.player1, satori))
+        self.assertTrue(self.game.resolve_pending_choice(["use"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn(satori, self.player1.cards_in_play)
+
+        self.player1.hand = [make_card("p1", "P1", cost=1), make_card("p2", "P2", cost=1)]
+        self.player1.deck = [make_card("p3", "P3", cost=1), make_card("p4", "P4", cost=1)]
+        self.assertTrue(op05_109_pagaya(self.game, self.player1, pagaya))
+        self.assertIsNotNone(self.game.pending_choice)
+        self.assertTrue(self.game.resolve_pending_choice(["0", "1"]))
+        self.assertEqual(2, len(self.player1.trash))
+
+        self.player1.hand = [sky]
+        self.assertTrue(op05_112_mckinley_ko(self.game, self.player1, mckinley))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn(sky, self.player1.cards_in_play)
+
+    def test_op05_111_115_and_119_follow_ordered_resolution(self) -> None:
+        hotori = make_card("OP05-111", "Hotori", card_type="CHARACTER", cost=3, power=3000)
+        kotori = make_card("kotori", "Kotori", card_type="CHARACTER", cost=3, power=3000)
+        amaru = make_card("OP05-115", "Two-Hundred Million Volts Amaru", card_type="EVENT", cost=2)
+        luffy = make_card("OP05-119", "Monkey.D.Luffy", card_type="CHARACTER", cost=10, power=12000)
+        opp_target = make_card("opp-low", "Opp Low", card_type="CHARACTER", cost=3, power=3000)
+        extra_one = make_card("extra-1", "Extra 1", card_type="CHARACTER", cost=2, power=2000)
+        extra_two = make_card("extra-2", "Extra 2", card_type="CHARACTER", cost=3, power=3000)
+        self.player1.hand = [kotori, make_card("a1", "A1", cost=1), make_card("a2", "A2", cost=1)]
+        self.player2.cards_in_play = [opp_target]
+
+        self.assertTrue(op05_111_hotori(self.game, self.player1, hotori))
+        self.assertTrue(self.game.resolve_pending_choice(["use"]))
+        self.assertTrue(self.game.resolve_pending_choice(["bottom"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertIn(kotori, self.player1.cards_in_play)
+        self.assertIs(opp_target, self.player2.life_cards[0])
+
+        self.player1.deck = [make_card("life-add", "Life Add", cost=1)]
+        self.assertTrue(op05_115_amaru_trigger(self.game, self.player1, amaru))
+        self.assertTrue(self.game.resolve_pending_choice(["pay"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0", "1"]))
+        self.assertEqual("life-add", self.player1.life_cards[-1].id)
+
+        self.player1.cards_in_play = [luffy, extra_one, extra_two]
+        self.player1.don_pool = ["active"] * 10
+        self.assertTrue(op05_119_luffy_play(self.game, self.player1, luffy))
+        self.assertTrue(self.game.resolve_pending_choice([str(i) for i in range(10)]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(self.game.resolve_pending_choice(["0"]))
+        self.assertTrue(self.player1.extra_turn)
+        self.assertNotIn(extra_one, self.player1.cards_in_play)
+        self.assertNotIn(extra_two, self.player1.cards_in_play)
 
 
 class EffectTesterSeedTests(unittest.TestCase):
