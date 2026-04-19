@@ -690,18 +690,79 @@
 | OP05-083 | Sterry | CHARACTER | ✅ Verified |  |  |
 | OP05-085 | Nefeltari Cobra | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
 | OP05-086 | Nefeltari Vivi | CHARACTER | ✅ Verified | If you have 10 or more cards in your trash, this Character gains [Bloc… |  |
-| OP05-001 | Sabo | LEADER | ⚠ Needs Fix | [DON!! x1] [Opponent's Turn] [Once Per Turn] If your Character with 50… | This card is a little tricky, when there is a DON!! on this leader, if a character that is on this player's field would be KOd, whether by effects OR battle on the OPPONENTS TURN only, then ONCE PER TURN, we can just give that character -1000 power instead. The prompt to use leader effect should show up when a character loses a battle.  |
-| OP05-003 | Inazuma | CHARACTER | ⚠ Needs Fix | If you have a Character with 7000 power or more other than this Charac… | When another character on the player's field has a power of 7000 or more, OTHER than this character. Then this character would gain rush.  |
-| OP05-004 | Emporio.Ivankov | CHARACTER | ⚠ Needs Fix | [Activate: Main] [Once Per Turn] If this Character has 7000 power or m… | When this character has a power of 7000 or more (this includes when it is given DON!!), I should be prompted to select a Revolutionary Army type character with 5000 power or less in my hand to play out.  |
-| OP05-005 | Karasu | CHARACTER | ⚠ Needs Fix | [On Play] If your Leader has the {Revolutionary Army} type, give up to… | This card should be able to target leaders as well to reduce their power.  |
+| OP05-001 | Sabo | LEADER | ✅ Verified | [DON!! x1] [Opponent's Turn] [Once Per Turn] If your Character with 50… | This card is a little tricky, when there is a DON!! on this leader, if a character that is on this player's field would be KOd, whether by effects OR battle on the OPPONENTS TURN only, then ONCE PER TURN, we can just give that character -1000 power instead. The prompt to use leader effect should show up when a character loses a battle. |
+| OP05-003 | Inazuma | CHARACTER | ✅ Verified | If you have a Character with 7000 power or more other than this Charac… | When another character on the player's field has a power of 7000 or more, OTHER than this character. Then this character would gain rush. |
+| OP05-004 | Emporio.Ivankov | CHARACTER | ✅ Verified | [Activate: Main] [Once Per Turn] If this Character has 7000 power or m… | When this character has a power of 7000 or more (this includes when it is given DON!!), I should be prompted to select a Revolutionary Army type character with 5000 power or less in my hand to play out. |
+| OP05-005 | Karasu | CHARACTER | ✅ Verified | [On Play] If your Leader has the {Revolutionary Army} type, give up to… | This card should be able to target leaders as well to reduce their power. |
 | OP05-006 | Koala | CHARACTER | ✅ Verified | [On Play] If your Leader has the {Revolutionary Army} type, give up to… |  |
-| OP05-007 | Sabo | CHARACTER | ⚠ Needs Fix | [On Play] K.O. up to 2 of your opponent's Characters with a total powe… | This card currently KOs automatically, there should be a prompt to select 2 cards that combined have a power of 4000 or less. i.e, 0 power and 4000 power, 1000 power and 3000 power, etc.  |
+| OP05-007 | Sabo | CHARACTER | ✅ Verified | [On Play] K.O. up to 2 of your opponent's Characters with a total powe… | This card currently KOs automatically, there should be a prompt to select 2 cards that combined have a power of 4000 or less. i.e, 0 power and 4000 power, 1000 power and 3000 power, etc. |
 | OP05-008 | Chaka | CHARACTER | ✅ Verified | [DON!! x1] [Activate: Main] [Once Per Turn] Give up to 2 rested DON!! … |  |
 | OP05-014 | Pell | CHARACTER | ✅ Verified | [DON!! x1] [When Attacking] Give up to 1 of your opponent's Characters… |  |
 | OP05-018 | Emporio Energy Hormone | EVENT | ✅ Verified | [Counter] Up to 1 of your Leader or Character cards gains +3000 power … |  |
-| OP05-023 | Vergo | CHARACTER | ⚠ Needs Fix | [DON!! x1] [When Attacking] K.O. up to 1 of your opponent's rested Cha… | I select a rested character with cost 3 or less but it does not actually KO it.  |
-| OP05-026 | Sarquiss | CHARACTER | ⚠ Needs Fix | [DON!! x1] [When Attacking] [Once Per Turn] You may rest 1 of your Cha… | When this card uses it's effect to become active again it should once again be able to attack.  |
-| OP05-030 | Donquixote Rosinante | CHARACTER | ⚠ Needs Fix | [Blocker] (After your opponent declares an attack, you may rest this c… | When a rested character is KOd, there should be a prompt to trash this card instead and protect that card that was KOd.  |
+| OP05-023 | Vergo | CHARACTER | ✅ Verified | [DON!! x1] [When Attacking] K.O. up to 1 of your opponent's rested Cha… | I select a rested character with cost 3 or less but it does not actually KO it. |
+| OP05-026 | Sarquiss | CHARACTER | ⚠ Needs Fix | [DON!! x1] [When Attacking] [Once Per Turn] You may rest 1 of your Cha… | When this card is set to active again it should be able to attack again, currently it is not.  |
+| OP05-030 | Donquixote Rosinante | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… | When a rested character is KOd, there should be a prompt to trash this card instead and protect that card that was KOd. |
+| OP05-002 | Belo Betty | LEADER | ✅ Verified | [Activate: Main] [Once Per Turn] You may trash 1 {Revolutionary Army} … |  |
+| OP05-015 | Belo Betty | CHARACTER | ✅ Verified | [On Play] Look at 5 cards from the top of your deck; reveal up to 1 {R… |  |
+| OP05-016 | Morley | CHARACTER | ✅ Verified | [When Attacking] If this Character has 7000 power or more, your oppone… |  |
+| OP05-017 | Lindbergh | CHARACTER | ✅ Verified | [When Attacking] If this Character has 7000 power or more, K.O. up to … |  |
+| OP05-032 | Pica | CHARACTER | ✅ Verified | [End of Your Turn] ①: Set this Character as active. [Once Per Turn] If… |  |
+| OP05-033 | Baby 5 | CHARACTER | ✅ Verified | [Activate: Main] ➀ (You may rest the specified number of DON!! cards i… |  |
+| OP05-034 | Baby 5 | CHARACTER | ✅ Verified | [Activate: Main] ➀ (You may rest the specified number of DON!! cards i… |  |
+| OP05-037 | Because the Side of Justice Will Be Whichever Side Wins!! | EVENT | ✅ Verified | [Counter] You may trash 1 card from your hand: Up to 1 of your Leader … |  |
+| OP05-040 | Birdcage | STAGE | ✅ Verified | If your Leader is [Donquixote Doflamingo], all Characters with a cost … |  |
+| OP05-041 | Sakazuki | LEADER | ✅ Verified | [Activate: Main] [Once Per Turn] You may trash 1 card from your hand: … |  |
+| OP05-042 | Issho | CHARACTER | ✅ Verified | [On Play] Up to 1 of your opponent's Characters with a cost of 7 or le… |  |
+| OP05-045 | Stainless | CHARACTER | ✅ Verified | [Activate: Main] You may trash 1 card from your hand and rest this Cha… |  |
+| OP05-046 | Dalmatian | CHARACTER | ✅ Verified | [On K.O.] Draw 1 card and place 1 card from your hand at the bottom of… |  |
+| OP05-053 | Mozambia | CHARACTER | ✅ Verified | [Your Turn] [Once Per Turn] When you draw a card outside of your Draw … |  |
+| OP05-054 | Monkey.D.Garp | CHARACTER | ✅ Verified | [On Play] Draw 2 cards and place 2 cards from your hand at the bottom … |  |
+| OP05-055 | X.Drake | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
+| OP05-056 | X.Barrels | CHARACTER | ✅ Verified | [On Play] You may place 1 of your Characters other than this Character… |  |
+| OP05-060 | Monkey.D.Luffy | LEADER | ✅ Verified | [Activate: Main] [Once Per Turn] You may add 1 card from the top of yo… |  |
+| OP05-064 | Killer | CHARACTER | ✅ Verified | [On Play] Look at 5 cards from the top of your deck; reveal up to 1 {K… |  |
+| OP05-066 | Jinbe | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
+| OP05-068 | Chopa-Emon | CHARACTER | ✅ Verified | [On Play] If you have 8 or more DON!! cards on your field, set up to 1… |  |
+| OP05-072 | Hone-Kichi | CHARACTER | ✅ Verified | [On Play] If you have 8 or more DON!! cards on your field, give up to … |  |
+| OP05-073 | Miss Doublefinger(Zala) | CHARACTER | ✅ Verified | [On Play] You may trash 1 card from your hand: Add up to 1 DON!! card … |  |
+| OP05-081 | One-Legged Toy Soldier | CHARACTER | ✅ Verified | [Activate: Main] You may trash this Character: Give up to 1 of your op… |  |
+| OP05-082 | Shirahoshi | CHARACTER | ⚠ Needs Fix | [Activate: Main] You may rest this Character and place 2 cards from yo… | Okay for the sake of clarity. Let's say Player 1 (P1) is the owner of shirahoshi, when they activate this card it should prompt P1 to select 2 cards in their trash to send to the bottom of the deck in an order that they choose. if they do this, then P2 needs to select a card from their hand to trash if they have 6 or more cards in their hand.  |
+| OP05-084 | Saint Charlos | CHARACTER | ✅ Verified | [Your Turn] If the only Characters on your field are {Celestial Dragon… |  |
+| OP05-087 | Hakuba | CHARACTER | ✅ Verified | [DON!! x1] [When Attacking] You may K.O. 1 of your Characters other th… |  |
+| OP05-089 | Saint Mjosgard | CHARACTER | ✅ Verified | [Activate: Main] ➀ (You may rest the specified number of DON!! cards i… |  |
+| OP05-090 | Riku Doldo III | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
+| OP05-091 | Rebecca | CHARACTER | ⚠ Needs Fix | [Blocker] [On Play] Add up to 1 black Character card with a cost of 3 … | When this card is played it should prompt the player to add a black character card with a cost of 3 to 7 other than a card with the name Rebecca to their hand from the trash. Even if they do not do this they should then be prompted to play 1 black character card with a cost of 3 or less from their hand rested.  |
+| OP05-092 | Saint Rosward | CHARACTER | ✅ Verified | [Your Turn] If the only Characters on your field are {Celestial Dragon… |  |
+| OP05-102 | Gedatsu | CHARACTER | ✅ Verified | [On Play] K.O. up to 1 of your opponent's Characters with a cost equal… |  |
+| OP05-105 | Satori | CHARACTER | ✅ Verified | [Trigger] You may trash 1 card from your hand: Play this card. |  |
+| OP05-106 | Shura | CHARACTER | ✅ Verified | [On Play] Look at 5 cards from the top of your deck; reveal up to 1 {S… |  |
+| OP05-108 | Nola | CHARACTER | ✅ Verified |  |  |
+| OP05-110 | Holly | CHARACTER | ✅ Verified |  |  |
+| OP05-113 | Yama | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
+| OP05-117 | Upper Yard | STAGE | ✅ Verified | [On Play] Look at 5 cards from the top of your deck; reveal up to 1 {S… |  |
+| OP05-118 | Kaido | CHARACTER | ✅ Verified | [On Play] Draw 4 cards if your opponent has 3 or less Life cards. |  |
+| OP05-009 | Toh-Toh | CHARACTER | ⚠ Needs Fix | [On Play] Draw 1 card if your Leader has 0 power or less. | Give the leader 0 power for the sake of this testing.  |
+| OP05-029 | Donquixote Doflamingo | CHARACTER | ⚠ Needs Fix | [On Your Opponent's Attack] [Once Per Turn] ➀ (You may rest the specif… | This card is not coded, when the opponent attacks I am not prompted as I should be to select if I want to rest 1 DON!! and if I do rest the 1 DON!! I should be prompted to select an opponent's character with cost of 6 or less to rest.  |
+| OP05-038 | Charlestone | EVENT | ⚠ Needs Fix | [Counter] Up to 1 of your Leader or Character cards gains +4000 power … | Currently it gives the +4000 power, but it should also prompt me to set up to 3 DON!! cards as active if I do trash the card from hand.  |
+| OP05-039 | Stick-Stickem Meteora | EVENT | ✅ Verified | [Counter] Up to 1 of your Leader or Character cards gains +4000 power … |  |
+| OP05-043 | Ulti | CHARACTER | ⚠ Needs Fix | [On Play] If your Leader is multicolored, look at 3 cards from the top… | Leader needs to be multicolored so I can test this effect.  |
+| OP05-057 | Hound Blaze | EVENT | ⚠ Needs Fix | [Main] Up to 1 of your Leader or Character cards gains +3000 power dur… | This card should give a leader or character +3000 power, that should be a prompt to the player. Then I should be prompted to place 1 character with a cost of 2 or less to the bottom of the owner's deck.  |
+| OP05-058 | It's a Waste of Human Life!! | EVENT | ⚠ Needs Fix | [Main] Place all Characters with a cost of 3 or less at the bottom of … | When this card is played all characters with acost of 8 or less should be sent to the bottom of the owner's deck. Then both players need to select which cards to trash from their hand until they both have 5 cards each in hand.  |
+| OP05-059 | Let Us Begin the World of Violence!!! | EVENT | ⚠ Needs Fix | [Main] If your Leader is multicolored, draw 1 card. Then, return up to… | Leader needs to be multicolored so we can test this card  |
+| OP05-067 | Zoro-Juurou | CHARACTER | ✅ Verified | [When Attacking] If you have 3 or less Life cards, add up to 1 DON!! c… |  |
+| OP05-069 | Trafalgar Law | CHARACTER | ⚠ Needs Fix | [When Attacking] If your opponent has more DON!! cards on their field … | Opponent needs to have more DON!! so I can test this card.  |
+| OP05-071 | Bepo | CHARACTER | ⚠ Needs Fix | [When Attacking] If your opponent has more DON!! cards on their field … | Opponent needs to have more DON!! so I can test this card.  |
+| OP05-075 | Mr.1(Daz.Bonez) | CHARACTER | ⚠ Needs Fix | [On Your Opponent's Attack] [Once Per Turn] DON!! −1 (You may return t… | The on your opponent's attack prompt should still pop up even if I do not have a valid target to play. I should just be able to choose not to use the effect. Currently when the opponent attacks there is no prompt at all.  |
+| OP05-077 | Gamma Knife | EVENT | ⚠ Needs Fix | [Main] DON!! −1 (You may return the specified number of DON!! cards fr… | I should be prompted when I play this card if I want to DON!! -1. If I do, then I should be prompted to select an opponent's character to give -5000 power for the turn.  |
+| OP05-078 | Punk Rotten | EVENT | ⚠ Needs Fix | [Main] DON!! −1 (You may return the specified number of DON!! cards fr… | Make the leader a Kid Pirates type so I can test.  |
+| OP05-079 | Viola | CHARACTER | ⚠ Needs Fix | [On Play] Your opponent places 3 cards from their trash at the bottom … | Put cards in the opponent's trash so I can test this card.  |
+| OP05-080 | Elizabello II | CHARACTER | ⚠ Needs Fix | [When Attacking] [Once Per Turn] You may return 20 cards from your tra… | Add 20 cards to the trash instead of 10.  |
+| OP05-088 | Mansherry | CHARACTER | ⚠ Needs Fix | [Activate: Main] ➀ (You may rest the specified number of DON!! cards i… | This card will not let me activate the effect. But what it should do is: Prompt the player to rest 1 DON!!, if they choose to do so, they can then rest this character and place 2 cards from their trash to the bottom of their deck in an order that they choose. If they do this then they should be prompted to select a black character card with a cost of 3 to 5 from the trash to their hand. Ensure this simulation has all of the relevant cards to do this.  |
+| OP05-093 | Rob Lucci | CHARACTER | ⚠ Needs Fix | [On Play] You may place 3 cards from your trash at the bottom of your … | I am only prompted to select 1 card when I am choosign the 3 to send from trash to the bottom of the deck. The KO does work as intended, but the cards are also still in the trash not moved to bottom of the deck.  |
+| OP05-094 | Haute Couture Patch★Work | EVENT | ⚠ Needs Fix | [Main] Give up to 1 of your opponent's Characters −3 cost during this … | This card will not even let me play it out.  |
+| OP05-095 | Dragon Claw | EVENT | ⚠ Needs Fix | [Counter] Up to 1 of your Leader or Character cards gains +4000 power … | Add 15 cards to the trash in this simulation so I can test.  |
+| OP05-097 | Mary Geoise | STAGE | ✅ Verified | [Your Turn] The cost of playing {Celestial Dragons} type Character car… |  |
+| OP05-098 | Enel | LEADER | ⚠ Needs Fix | [Opponent's Turn] [Once Per Turn] When your number of Life cards becom… | When this leader reaches 0 life on their opponent's turn they should be prompted if they want to add 1 card from the top of their deck to their life. And then they should be prompted to trash 1 card from hand (if they have a card in hand they HAVE to do this), if they do not have a card in hand this step is skipped.  |
 
 | ID | Status | Type | Notes |
 |----|--------|------|-------|
@@ -709,9 +770,38 @@
 
 # Card Effect Status — OP06
 | OP06-008 | Schneider | CHARACTER | ✅ Verified |  |  |
-| OP06-010 | Douglas Bullet | CHARACTER | 🔲 To Do | If your Leader has the {FILM} type, this Character gains [Blocker]. (A… |  |
+| OP06-010 | Douglas Bullet | CHARACTER | ✅ Verified | If your Leader has the {FILM} type, this Character gains [Blocker]. (A… |  |
 | OP06-012 | Bear.King | CHARACTER | ✅ Verified | If your opponent has a Leader or Character with a base power of 6000 o… |  |
+| OP06-001 | Uta | LEADER | ✅ Verified | [When Attacking] You may trash 1 {FILM} type card from your hand: Give… |  |
+| OP06-002 | Inazuma | CHARACTER | ✅ Verified | If this Character has 7000 power or more, this Character gains [Banish… |  |
+| OP06-004 | Baron Omatsuri | CHARACTER | ✅ Verified | [On Play] Play up to 1 [Lily Carnation] from your hand. |  |
+| OP06-007 | Shanks | CHARACTER | ✅ Verified | [On Play] K.O. up to 1 of your opponent's Characters with 10000 power … |  |
+| OP06-009 | Shuraiya | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
+| OP06-013 | Monkey.D.Luffy | CHARACTER | ✅ Verified | [On Play] Look at 3 cards from the top of your deck; reveal up to 1 {F… |  |
+| OP06-015 | Lily Carnation | CHARACTER | ✅ Verified | [Activate: Main] [Once Per Turn] You may trash 1 of your Characters wi… |  |
+| OP06-016 | Raise Max | CHARACTER | ✅ Verified | [Activate: Main] You may place this Character at the bottom of the own… |  |
+| OP06-017 | Meteor-Strike of Love | EVENT | ✅ Verified | [Main]/[Counter] You may add 1 card from the top of your Life cards to… |  |
+| OP06-019 | Blue Dragon Seal Water Stream | EVENT | ✅ Verified | [Main] K.O. up to 1 of your opponent's Characters with 5000 power or l… |  |
+| OP06-021 | Perona | LEADER | ✅ Verified | [Activate: Main] [Once Per Turn] Choose one: • Rest up to 1 of your op… |  |
+| OP06-113 | Raki | CHARACTER | ✅ Verified | If you have a {Shandian Warrior} type Character other than [Raki], thi… |  |
+| OP06-110 | Nekomamushi | CHARACTER | ✅ Verified | [DON!! x2] This Character can also attack your opponent's active Chara… |  |
+| OP06-105 | Genbo | CHARACTER | ✅ Verified |  |  |
+| OP06-104 | Kikunojo | CHARACTER | ✅ Verified | [On K.O.] If your opponent has 3 or less Life cards, add up to 1 card … |  |
 
 | ID | Status | Type | Notes |
 |----|--------|------|-------|
 | OP06-005 | Gasparde | CHARACTER | ✅ Verified |  |  |
+
+# Card Effect Status — OP07
+| OP07-003 | Outlook III | CHARACTER | ✅ Verified | [Activate: Main] You may trash this Character: Give up to 2 of your op… |  |
+| OP07-005 | Carina | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
+| OP07-007 | Dice | CHARACTER | ✅ Verified |  |  |
+| OP07-008 | Mr. Tanaka | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
+| OP07-011 | Bluejam | CHARACTER | ✅ Verified | [DON!! x1] [When Attacking] K.O. up to 1 of your opponent's Characters… |  |
+| OP07-012 | Porchemy | CHARACTER | ✅ Verified | [On Play] Give up to 1 of your opponent's Characters −1000 power durin… |  |
+| OP07-013 | Masked Deuce | CHARACTER | ✅ Verified | [On Play] If your Leader is [Portgas.D.Ace], look at 5 cards from the … |  |
+| OP07-014 | Moda | CHARACTER | ⚠ Needs Fix | [Your Turn] [On Play] Up to 1 of your [Portgas.D.Ace] cards gains +200… | Should prompt the player to select which Portgas D. Ace card to give +2000 power for the turn. It currently does it automatically.  |
+
+| ID | Status | Type | Notes |
+|----|--------|------|-------|
+| OP07-002 | Ain | CHARACTER | ✅ Verified | [On Play] Set the power of up to 1 of your opponent's Characters to 0 … |  |

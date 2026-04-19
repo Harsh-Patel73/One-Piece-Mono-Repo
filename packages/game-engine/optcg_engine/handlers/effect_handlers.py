@@ -23,8 +23,14 @@ def trigger_effect(card_id: str, game_state: 'GameState', card: 'Card', timing: 
     Returns:
         True if any effect was executed
     """
-    if not has_hardcoded_effect(card_id, timing):
-        return False
+    # "main" is an alias for "on_play" on event cards
+    timings_to_try = [timing]
+    if timing.lower() == "on_play":
+        timings_to_try.append("main")
 
     player = game_state.current_player
-    return execute_hardcoded_effect(game_state, player, card, timing)
+    executed = False
+    for t in timings_to_try:
+        if has_hardcoded_effect(card_id, t):
+            executed = execute_hardcoded_effect(game_state, player, card, t) or executed
+    return executed

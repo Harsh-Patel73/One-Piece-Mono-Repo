@@ -959,7 +959,7 @@ def create_power_effect_choice(game_state: 'GameState', player: 'Player',
     sign = "+" if power_amount >= 0 else ""
     game_state.pending_choice = PendingChoice(
         choice_id=f"power_{uuid.uuid4().hex[:8]}",
-        choice_type="select_target",
+        choice_type="select_cards" if max_selections > 1 else "select_target",
         prompt=prompt or f"Choose up to {max_selections} Character(s) to give {sign}{power_amount} power",
         options=options,
         min_selections=min_selections,

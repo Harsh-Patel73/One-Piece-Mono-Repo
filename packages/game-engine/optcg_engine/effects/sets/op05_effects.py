@@ -162,13 +162,15 @@ def _queue_bottom_from_hand_any_order(game_state, player, cards, count, source_c
     return True
 
 
-def _queue_bottom_from_trash_any_order(game_state, player, count, source_card=None):
+def _queue_bottom_from_trash_any_order(game_state, player, count, source_card=None, on_complete=None):
     from ...game_engine import PendingChoice
 
     source_name = source_card.name if source_card else ""
     source_id = source_card.id if source_card else ""
     exact_count = min(count, len(player.trash))
     if exact_count <= 0:
+        if on_complete:
+            on_complete()
         return True
 
     def queue_next(remaining, ordered):
@@ -178,6 +180,8 @@ def _queue_bottom_from_trash_any_order(game_state, player, count, source_card=No
                     player.trash.remove(chosen)
                     player.deck.append(chosen)
                     game_state._log(f"{chosen.name} was placed at the bottom of {player.name}'s deck")
+            if on_complete:
+                on_complete()
             return
 
         snapshot = list(remaining)
@@ -1572,10 +1576,9 @@ def op05_026_sarquiss(game_state, player, card):
                         target = rest_snap[target_idx]
                         target.is_resting = True
                         game_state._log(f"{target.name} was rested")
-                        card.is_resting = False
-                        card.has_attacked = False
+                        card._set_active_after_battle_resolution = True
                         card.op05_026_used = True
-                        game_state._log(f"{card.name} was set active")
+                        game_state._log(f"{card.name} will be set active after battle resolves")
 
                 create_rest_choice(
                     game_state,
@@ -1691,7 +1694,7 @@ def op05_029_doflamingo(game_state, player, card):
         return False
     opponent = get_opponent(game_state, player)
     targets = [c for c in opponent.cards_in_play if _is_character(c) and _effective_cost(c) <= 6]
-    if not targets or not any(state == "active" for state in player.don_pool[:_free_don_count(player)]):
+    if not any(state == "active" for state in player.don_pool[:_free_don_count(player)]):
         return False
 
     def mode_callback(selected):
@@ -1700,15 +1703,16 @@ def op05_029_doflamingo(game_state, player, card):
         if not _rest_active_don(player, 1):
             return
         card.op05_029_used = True
-        create_rest_choice(
-            game_state,
-            player,
-            list(targets),
-            source_card=card,
-            min_selections=0,
-            max_selections=1,
-            prompt="Choose up to 1 opponent Character with cost 6 or less to rest",
-        )
+        if targets:
+            create_rest_choice(
+                game_state,
+                player,
+                list(targets),
+                source_card=card,
+                min_selections=0,
+                max_selections=1,
+                prompt="Choose up to 1 opponent Character with cost 6 or less to rest",
+            )
 
     return create_mode_choice(
         game_state,
@@ -1721,8 +1725,6 @@ def op05_029_doflamingo(game_state, player, card):
         prompt="Rest 1 DON!! to rest up to 1 opponent Character with cost 6 or less?",
         callback=mode_callback,
     )
-    return False
-    return False
 
 
 # --- OP05-030: Donquixote Rosinante ---
@@ -2596,15 +2598,17 @@ def op05_075_mr1(game_state, player, card):
     if getattr(card, 'op05_075_used', False):
         return False
     targets = [c for c in player.hand if _is_character(c) and _has_type(c, 'Baroque Works') and (getattr(c, 'cost', 0) or 0) <= 3]
-    if not targets or len(player.don_pool) < 1:
+    if len(player.don_pool) < 1:
         return False
 
     def resolve_effect():
         card.op05_075_used = True
-        create_play_from_hand_choice(
-            game_state, player, targets, source_card=card,
-            prompt="Choose up to 1 {Baroque Works} Character with cost 3 or less to play from your hand"
-        )
+        current_targets = [c for c in player.hand if _is_character(c) and _has_type(c, 'Baroque Works') and (getattr(c, 'cost', 0) or 0) <= 3]
+        if current_targets:
+            create_play_from_hand_choice(
+                game_state, player, current_targets, source_card=card,
+                prompt="Choose up to 1 {Baroque Works} Character with cost 3 or less to play from your hand"
+            )
 
     def mode_cb(selected):
         if not selected or selected[0] != "use":
@@ -2718,17 +2722,7 @@ def op05_082_shirahoshi(game_state, player, card):
             if not selected or selected[0] != "use":
                 return
             card.is_resting = True
-            _queue_bottom_from_trash_any_order(game_state, player, 2, source_card=card)
-            previous_choice = game_state.pending_choice
-            if previous_choice:
-                original_cb = previous_choice.callback
-
-                def chained_cb(chosen):
-                    if original_cb:
-                        original_cb(chosen)
-                    finish_effect()
-
-                previous_choice.callback = chained_cb
+            _queue_bottom_from_trash_any_order(game_state, player, 2, source_card=card, on_complete=finish_effect)
 
         return create_mode_choice(
             game_state, player,
@@ -2822,22 +2816,16 @@ def op05_088_mansherry(game_state, player, card):
             if not selected or selected[0] != "use" or not _rest_active_don(player, 1):
                 return
             card.is_resting = True
-            _queue_bottom_from_trash_any_order(game_state, player, 2, source_card=card)
-            previous_choice = game_state.pending_choice
-            if previous_choice:
-                original_cb = previous_choice.callback
 
-                def chained_cb(chosen):
-                    if original_cb:
-                        original_cb(chosen)
-                    create_add_from_trash_choice(
-                        game_state, player,
-                        [c for c in player.trash if _is_character(c) and 'Black' in getattr(c, 'colors', []) and 3 <= (getattr(c, 'cost', 0) or 0) <= 5],
-                        source_card=card,
-                        prompt="Choose up to 1 black Character card with cost 3 to 5 from your trash to add to your hand"
-                    )
+            def retrieve_from_trash():
+                create_add_from_trash_choice(
+                    game_state, player,
+                    [c for c in player.trash if _is_character(c) and 'Black' in getattr(c, 'colors', []) and 3 <= (getattr(c, 'cost', 0) or 0) <= 5],
+                    source_card=card,
+                    prompt="Choose up to 1 black Character card with cost 3 to 5 from your trash to add to your hand"
+                )
 
-                previous_choice.callback = chained_cb
+            _queue_bottom_from_trash_any_order(game_state, player, 2, source_card=card, on_complete=retrieve_from_trash)
 
         return create_mode_choice(
             game_state, player,
@@ -3025,17 +3013,7 @@ def op05_093_lucci(game_state, player, card):
     def mode_cb(selected):
         if not selected or selected[0] != "use":
             return
-        _queue_bottom_from_trash_any_order(game_state, player, 3, source_card=card)
-        previous_choice = game_state.pending_choice
-        if previous_choice:
-            original_cb = previous_choice.callback
-
-            def chained_cb(chosen):
-                if original_cb:
-                    original_cb(chosen)
-                resolve_effect()
-
-            previous_choice.callback = chained_cb
+        _queue_bottom_from_trash_any_order(game_state, player, 3, source_card=card, on_complete=resolve_effect)
 
     return create_mode_choice(
         game_state, player,

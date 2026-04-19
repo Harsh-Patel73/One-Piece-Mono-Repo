@@ -1746,6 +1746,17 @@ class GameState:
                 attack['double_attack_processed'] = False
                 attack['has_banish'] = has_banish
 
+                # Fire on_life_zero for defender leader when life drops to 0
+                if len(o.life_cards) == 0 and o.leader:
+                    from .effects.effect_registry import has_hardcoded_effect as _hlz_has, execute_hardcoded_effect as _hlz_exec
+                    if _hlz_has(o.leader.id, 'on_life_zero'):
+                        _hlz_exec(self, o, o.leader, 'on_life_zero')
+                        if self.pending_choice:
+                            attack['life_zero_pending'] = True
+                            attack['life_zero_lc'] = life_card
+                            attack['life_zero_ht'] = has_trigger
+                            return
+
                 # Handle life card (may prompt for trigger)
                 paused = self._handle_life_card(o, life_card, has_trigger, has_banish, attacker)
                 if paused:
@@ -3162,6 +3173,22 @@ class GameState:
                         and self.pending_attack.get('_needs_attack_resolution')):
                     self.pending_attack.pop('_needs_attack_resolution', None)
                     self._resolve_attack_damage()
+
+                # Resume combat paused for on_life_zero pending choice
+                if (not self.pending_choice
+                        and self.pending_attack
+                        and self.pending_attack.get('life_zero_pending')):
+                    self.pending_attack.pop('life_zero_pending')
+                    lz_life_card = self.pending_attack.pop('life_zero_lc')
+                    lz_has_trigger = self.pending_attack.pop('life_zero_ht')
+                    lz_attack = self.pending_attack
+                    lz_o = lz_attack['defender_player']
+                    lz_attacker = lz_attack['attacker']
+                    lz_has_banish = lz_attack.get('has_banish', False)
+                    lz_paused = self._handle_life_card(lz_o, lz_life_card, lz_has_trigger, lz_has_banish, lz_attacker)
+                    if not lz_paused:
+                        self._continue_after_life_card()
+
             # else: a new choice was set during processing — leave it in place
             return True
 

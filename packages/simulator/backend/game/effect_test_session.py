@@ -590,7 +590,7 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
         p1.leader = _card("OP05-002", "Belo Betty", "LEADER", None, 5000, ["Red", "Yellow"], "Revolutionary Army")
         p1.leader.life = 4
 
-    if card_id in {"OP05-041", "OP05-059"} and tc.card_type != "LEADER":
+    if card_id in {"OP05-041", "OP05-043", "OP05-059"} and tc.card_type != "LEADER":
         p1.leader = _card("OP05-041", "Sakazuki", "LEADER", None, 5000, ["Blue", "Black"], "Navy")
         p1.leader.life = 4
 
@@ -615,6 +615,9 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
 
     if card_id in {"OP05-037", "OP05-038"}:
         p1.hand.insert(0, _card(f"HAND-{card_id}", "Discard Fodder", "CHARACTER", 2, 3000, ["Green"], "Donquixote Pirates"))
+
+    if card_id == "OP05-038":
+        p1.don_pool = ["active"] * 7 + ["rested"] * 3
 
     if card_id == "OP05-039":
         p2.cards_in_play.append(_card("OPP-039", "Rested Small Target", "CHARACTER", 3, 4000, ["Green"], "Donquixote Pirates", rested=True))
@@ -694,6 +697,35 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
     if card_id == "OP05-119":
         p1.cards_in_play.append(_card("ALLY-119-A", "Bottom Deck Ally A", "CHARACTER", 4, 5000, ["Purple"], "Straw Hat Crew"))
         p1.cards_in_play.append(_card("ALLY-119-B", "Bottom Deck Ally B", "CHARACTER", 3, 4000, ["Purple"], "Straw Hat Crew"))
+
+    if card_id == "OP05-009":
+        p2.leader.power = 0
+
+    if card_id == "OP05-026":
+        p1.cards_in_play.append(_card("ALLY-026", "Baroque Works Ally", "CHARACTER", 3, 4000, ["Red", "Black"], "Baroque Works"))
+
+    if card_id in {"OP05-069", "OP05-071"}:
+        p2.don_pool = ["active"] * 8
+
+    if card_id == "OP05-079":
+        while len(p2.trash) < 3:
+            p2.trash.append(_card(f"P2TRASH-079-{len(p2.trash)}", "Opponent Trash Seed", "CHARACTER", 2, 3000, ["Green"], "Baroque Works"))
+
+    if card_id == "OP05-080":
+        while len(p1.trash) < 20:
+            p1.trash.append(_card(f"TRASH-080-{len(p1.trash)}", "Trash Seed", "CHARACTER", 2, 3000, ["Black"], "Dressrosa"))
+
+    if card_id == "OP05-091":
+        p1.trash.append(_card("BLACK-091-A", "Black Cost 5 Char A", "CHARACTER", 5, 6000, ["Black"], "Dressrosa"))
+        p1.trash.append(_card("BLACK-091-B", "Black Cost 4 Char B", "CHARACTER", 4, 5000, ["Black"], "Dressrosa"))
+        p1.hand.insert(0, _card("HAND-091", "Black Cost 3 Char", "CHARACTER", 3, 4000, ["Black"], "Dressrosa"))
+
+    if card_id == "OP05-095":
+        while len(p1.trash) < 15:
+            p1.trash.append(_card(f"TRASH-095-{len(p1.trash)}", "Trash Seed", "CHARACTER", 2, 3000, ["Black"], "CP0"))
+
+    if card_id == "OP05-098" and tc.card_type == "LEADER":
+        p1.life_cards = p1.life_cards[:1]
 
     return gs, p1, tc
 
