@@ -14,6 +14,60 @@ from ..effect_registry import (
 )
 
 
+def _play_this_card_from_trigger(game_state, player, card):
+    """Move the trigger card to the field if it is not already there."""
+    for zone in (player.hand, player.life_cards, player.trash):
+        if card in zone:
+            zone.remove(card)
+            break
+    if card not in player.cards_in_play:
+        card.is_resting = False
+        setattr(card, "played_turn", game_state.turn_count)
+        player.cards_in_play.append(card)
+        game_state._apply_keywords(card)
+        game_state._log(f"{player.name} played {card.name} from Trigger")
+    return True
+
+
+def _bottom_cards_from_hand(game_state, player, count, source_card, prompt):
+    from ...game_engine import PendingChoice
+    import uuid as _uuid
+    if len(player.hand) <= count:
+        moved = list(player.hand)
+        player.hand.clear()
+        player.deck.extend(moved)
+        for moved_card in moved:
+            game_state._log(f"{moved_card.name} was placed at the bottom of deck")
+        return True
+    snapshot = list(player.hand)
+
+    def _bottom_cb(selected):
+        indices = sorted([int(s) for s in selected], reverse=True)
+        for idx in indices:
+            if 0 <= idx < len(player.hand):
+                moved_card = player.hand.pop(idx)
+                player.deck.append(moved_card)
+                game_state._log(f"{moved_card.name} was placed at the bottom of deck")
+
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"op07_bottom_hand_{_uuid.uuid4().hex[:8]}",
+        choice_type="select_cards",
+        prompt=prompt,
+        options=[{
+            "id": str(i),
+            "label": f"{c.name} (Cost: {getattr(c, 'cost', 0) or 0})",
+            "card_id": c.id,
+            "card_name": c.name,
+        } for i, c in enumerate(snapshot)],
+        min_selections=count,
+        max_selections=count,
+        source_card_id=source_card.id if source_card else None,
+        source_card_name=source_card.name if source_card else None,
+        callback=_bottom_cb,
+    )
+    return True
+
+
 # =============================================================================
 # LEADER EFFECTS
 # =============================================================================
@@ -197,7 +251,7 @@ def op07_004_dadan(game_state, player, card):
     if not player.hand:
         return True
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
 
     hand_opts = [{"id": str(i), "label": f"{c.name} (Cost: {c.cost or 0})",
@@ -262,7 +316,7 @@ def op07_006_sterry(game_state, player, card):
     if not (player.leader and not getattr(player.leader, 'is_resting', False)):
         return True
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
 
     leader_ref = player.leader
@@ -831,7 +885,7 @@ def op07_047_law(game_state, player, card):
     game_state._log("Trafalgar Law returned to hand")
     opponent = get_opponent(game_state, player)
     if len(opponent.hand) >= 6 and opponent.hand:
-        from ..game_engine import PendingChoice
+        from ...game_engine import PendingChoice
         import uuid
         opp_snap = list(opponent.hand)
         opts = [{"id": str(i), "label": f"{c.name} (Cost: {c.cost or 0})",
@@ -882,7 +936,7 @@ def op07_048_doflamingo(game_state, player, card):
     cost_ok = (getattr(revealed, 'cost', 0) or 0) <= 4
     game_state._log(f"Doflamingo revealed: {revealed.name}")
     if is_warlord and is_char and cost_ok:
-        from ..game_engine import PendingChoice
+        from ...game_engine import PendingChoice
         import uuid
 
         def play_cb(selected):
@@ -1018,7 +1072,7 @@ def op07_053_ace_play(game_state, player, card):
     if not player.hand:
         return True
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
 
     hand_snap_ref = [list(player.hand)]  # mutable ref for closure
@@ -1353,7 +1407,7 @@ def op07_080_kaku(game_state, player, card):
     if len(cp_cards) < 2:
         return True
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     opponent = get_opponent(game_state, player)
     cp_snap = cp_cards[:2]
@@ -1420,7 +1474,7 @@ def op07_083_gecko_moria_black(game_state, player, card):
     if len(tb_cards) < 4:
         return False
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     tb_snap = tb_cards[:4]
 
@@ -1553,7 +1607,7 @@ def op07_091_luffy_black(game_state, player, card):
     def do_bottom_choice():
         if not cost_4_plus:
             return
-        from ..game_engine import PendingChoice
+        from ...game_engine import PendingChoice
         import uuid
         snap = list(cost_4_plus)
         opts = [{"id": str(i), "label": f"{c.name} (Cost: {c.cost or 0})",
@@ -1610,7 +1664,7 @@ def op07_092_joseph(game_state, player, card):
     if len(cp_cards) < 2:
         return True
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     opponent = get_opponent(game_state, player)
     cp_snap = cp_cards[:2]
@@ -1684,7 +1738,7 @@ def op07_093_rob_lucci(game_state, player, card):
         do_opp_trash()
         return True
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     trash_snap = list(player.trash)
     opts = [{"id": str(i), "label": f"{c.name} (Cost: {c.cost or 0})",
@@ -2095,7 +2149,7 @@ def op07_118_sabo(game_state, player, card):
                 game_state._log(f"{player.name} trashed {c.name} for Sabo's effect")
         do_ko_chain()
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     hand_opts = [{"id": str(i), "label": f"{c.name} (Cost: {c.cost or 0})",
                   "card_id": c.id, "card_name": c.name} for i, c in enumerate(player.hand)]
@@ -2291,3 +2345,409 @@ def op07_117_egghead_stage(game_state, player, card):
             c.is_resting = False
             game_state._log(f"Egghead Stage: {c.name} set active")
     return True
+
+
+# =============================================================================
+# OP07 MISSING EVENT / STAGE EFFECTS AND PRINTED TRIGGERS
+# =============================================================================
+
+@register_effect("OP07-016", "on_play", "[Main] Revolutionary Army Character +2000, then opponent Character -1000")
+def op07_016_galaxy_wink(game_state, player, card):
+    targets = [c for c in player.cards_in_play if 'Revolutionary Army' in (getattr(c, 'card_origin', '') or '')]
+    opponent = get_opponent(game_state, player)
+
+    def _after_buff(_selected):
+        opp_targets = list(opponent.cards_in_play)
+        if opp_targets:
+            create_power_effect_choice(game_state, player, opp_targets, -1000, source_card=card,
+                                       prompt="Galaxy Wink: Give up to 1 opponent Character -1000 power",
+                                       min_selections=0)
+
+    if targets:
+        return create_power_effect_choice(game_state, player, targets, 2000, source_card=card,
+                                          prompt="Galaxy Wink: Give up to 1 Revolutionary Army Character +2000 power",
+                                          min_selections=0, callback=_after_buff)
+    _after_buff([])
+    return True
+
+
+@register_effect("OP07-016", "trigger", "[Trigger] Activate this card's Main effect")
+def op07_016_galaxy_wink_trigger(game_state, player, card):
+    return op07_016_galaxy_wink(game_state, player, card)
+
+
+@register_effect("OP07-017", "on_play", "[Main] K.O. opponent Character 3000 power or less and Stage cost 1 or less")
+def op07_017_dragon_breath(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    char_targets = [
+        c for c in opponent.cards_in_play
+        if getattr(c, 'card_type', '') == 'CHARACTER'
+        and (getattr(c, 'power', 0) or 0) + getattr(c, 'power_modifier', 0) <= 3000
+    ]
+    stage_targets = [
+        c for c in opponent.cards_in_play
+        if getattr(c, 'card_type', '') == 'STAGE' and (getattr(c, 'cost', 0) or 0) <= 1
+    ]
+
+    def _ko_stage_after(_selected):
+        if stage_targets:
+            create_ko_choice(game_state, player, stage_targets, source_card=card,
+                             prompt="Dragon Breath: K.O. up to 1 opponent Stage cost 1 or less",
+                             min_selections=0)
+
+    if char_targets:
+        return create_ko_choice(game_state, player, char_targets, source_card=card,
+                                prompt="Dragon Breath: K.O. up to 1 opponent Character with 3000 power or less",
+                                min_selections=0, callback=_ko_stage_after)
+    _ko_stage_after([])
+    return True
+
+
+@register_effect("OP07-017", "trigger", "[Trigger] Activate this card's Main effect")
+def op07_017_dragon_breath_trigger(game_state, player, card):
+    return op07_017_dragon_breath(game_state, player, card)
+
+
+@register_effect("OP07-018", "counter", "[Counter] Revolutionary Army Character +2000 until end of next turn")
+def op07_018_keep_out(game_state, player, card):
+    targets = [c for c in player.cards_in_play if 'Revolutionary Army' in (getattr(c, 'card_origin', '') or '')]
+    if not targets:
+        return True
+    return create_power_effect_choice(game_state, player, targets, 2000, source_card=card,
+                                      prompt="KEEP OUT: Choose up to 1 Revolutionary Army Character to give +2000 power",
+                                      min_selections=0)
+
+
+@register_effect("OP07-018", "trigger", "[Trigger] Activate this card's Counter effect")
+def op07_018_keep_out_trigger(game_state, player, card):
+    return op07_018_keep_out(game_state, player, card)
+
+
+@register_effect("OP07-035", "counter", "[Counter] +2000 power, +1000 more if 3+ Characters")
+def op07_035_karmic_punishment(game_state, player, card):
+    amount = 3000 if len(player.cards_in_play) >= 3 else 2000
+    targets = [player.leader] if player.leader else []
+    targets += list(player.cards_in_play)
+    if not targets:
+        return True
+    return create_power_effect_choice(game_state, player, targets, amount, source_card=card,
+                                      prompt=f"Karmic Punishment: Choose up to 1 Leader/Character to give +{amount} power",
+                                      min_selections=0)
+
+
+@register_effect("OP07-035", "trigger", "[Trigger] K.O. up to 1 opponent rested Character cost 4 or less")
+def op07_035_karmic_punishment_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play if c.is_resting and (getattr(c, 'cost', 0) or 0) <= 4]
+    if not targets:
+        return True
+    return create_ko_choice(game_state, player, targets, source_card=card,
+                            prompt="[Trigger] Karmic Punishment: K.O. up to 1 opponent rested Character cost 4 or less",
+                            min_selections=0)
+
+
+@register_effect("OP07-036", "on_play", "[Main] Leader/Character +3000; may rest own cost 3+ to rest opponent cost 5-")
+def op07_036_asura_demon(game_state, player, card):
+    from ...game_engine import PendingChoice
+    import uuid as _uuid
+    power_targets = ([player.leader] if player.leader else []) + list(player.cards_in_play)
+
+    def _after_power(_selected):
+        own_rest_targets = [c for c in player.cards_in_play if not c.is_resting and (getattr(c, 'cost', 0) or 0) >= 3]
+        opponent = get_opponent(game_state, player)
+        opp_targets = [c for c in opponent.cards_in_play if not c.is_resting and (getattr(c, 'cost', 0) or 0) <= 5]
+        if not own_rest_targets or not opp_targets:
+            return
+
+        def _rest_own_then_opponent(selected):
+            if selected:
+                idx = int(selected[0])
+                if 0 <= idx < len(own_rest_targets):
+                    own_rest_targets[idx].is_resting = True
+                    create_rest_choice(game_state, player, opp_targets, source_card=card,
+                                       prompt="Asura Demon: Rest up to 1 opponent Character cost 5 or less",
+                                       min_selections=0)
+
+        game_state.pending_choice = PendingChoice(
+            choice_id=f"op07_036_{_uuid.uuid4().hex[:8]}",
+            choice_type="select_cards",
+            prompt="Asura Demon: You may rest 1 of your cost 3+ Characters",
+            options=[{"id": str(i), "label": f"{c.name} (Cost: {getattr(c, 'cost', 0) or 0})",
+                      "card_id": c.id, "card_name": c.name} for i, c in enumerate(own_rest_targets)],
+            min_selections=0,
+            max_selections=1,
+            source_card_id=card.id,
+            source_card_name=card.name,
+            callback=_rest_own_then_opponent,
+        )
+
+    if power_targets:
+        return create_power_effect_choice(game_state, player, power_targets, 3000, source_card=card,
+                                          prompt="Asura Demon: Give up to 1 Leader/Character +3000 power",
+                                          min_selections=0, callback=_after_power)
+    _after_power([])
+    return True
+
+
+@register_effect("OP07-036", "trigger", "[Trigger] Rest up to 1 opponent Character cost 4 or less")
+def op07_036_asura_demon_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play if not c.is_resting and (getattr(c, 'cost', 0) or 0) <= 4]
+    if not targets:
+        return True
+    return create_rest_choice(game_state, player, targets, source_card=card,
+                              prompt="[Trigger] Asura Demon: Rest up to 1 opponent Character cost 4 or less",
+                              min_selections=0)
+
+
+@register_effect("OP07-055", "counter", "[Counter] +4000 power, then return up to 1 own Character to hand")
+def op07_055_snake_dance(game_state, player, card):
+    own_targets = [player.leader] if player.leader else []
+    own_targets += list(player.cards_in_play)
+
+    def _after_power(_selected):
+        if player.cards_in_play:
+            create_return_to_hand_choice(game_state, player, list(player.cards_in_play), source_card=card,
+                                         prompt="Snake Dance: Return up to 1 of your Characters to hand",
+                                         optional=True)
+
+    if own_targets:
+        return create_power_effect_choice(game_state, player, own_targets, 4000, source_card=card,
+                                          prompt="Snake Dance: Choose up to 1 Leader/Character to give +4000 power",
+                                          min_selections=0, callback=_after_power)
+    _after_power([])
+    return True
+
+
+@register_effect("OP07-055", "trigger", "[Trigger] You may return own Character: return opponent cost 5 or less")
+def op07_055_snake_dance_trigger(game_state, player, card):
+    if not player.cards_in_play:
+        return True
+    opponent = get_opponent(game_state, player)
+    opp_targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 5]
+
+    def _return_opp_after_own(_selected):
+        if opp_targets:
+            create_return_to_hand_choice(game_state, player, opp_targets, source_card=card,
+                                         prompt="Snake Dance Trigger: Return up to 1 opponent Character cost 5 or less",
+                                         optional=True)
+
+    return create_return_to_hand_choice(game_state, player, list(player.cards_in_play), source_card=card,
+                                        prompt="Snake Dance Trigger: You may return 1 of your Characters to hand",
+                                        optional=True, callback=_return_opp_after_own)
+
+
+@register_effect("OP07-057", "on_play", "[Main] Seven Warlords Leader/Character +2000 and cannot be blocked this turn")
+def op07_057_perfume_femur(game_state, player, card):
+    targets = []
+    if player.leader and 'The Seven Warlords of the Sea' in (getattr(player.leader, 'card_origin', '') or ''):
+        targets.append(player.leader)
+    targets.extend(c for c in player.cards_in_play if 'The Seven Warlords of the Sea' in (getattr(c, 'card_origin', '') or ''))
+    if not targets:
+        return True
+
+    def _perfume_cb(selected):
+        for sel in selected:
+            idx = int(sel)
+            if 0 <= idx < len(targets):
+                target = targets[idx]
+                add_power_modifier(target, 2000)
+                target.opponent_cannot_activate_blocker = True
+                game_state._log(f"{target.name} gets +2000 power and cannot be blocked this turn")
+
+    return create_target_choice(game_state, player, targets,
+                                "Perfume Femur: Choose up to 1 Seven Warlords Leader/Character",
+                                source_card=card, min_selections=0, max_selections=1, callback=_perfume_cb)
+
+
+@register_effect("OP07-057", "trigger", "[Trigger] Draw 1 card")
+def op07_057_perfume_femur_trigger(game_state, player, card):
+    draw_cards(player, 1)
+    return True
+
+
+@register_effect("OP07-058", "activate", "[Activate: Main] Trash 1 and rest Stage: return own Amazon Lily/Kuja")
+def op07_058_island_of_women(game_state, player, card):
+    from ...game_engine import PendingChoice
+    import uuid as _uuid
+    if card.is_resting or not player.hand:
+        return False
+    if not (player.leader and 'Kuja Pirates' in (getattr(player.leader, 'card_origin', '') or '')):
+        return False
+    snapshot = list(player.hand)
+
+    def _trash_then_return(selected):
+        if not selected:
+            return
+        idx = int(selected[0])
+        if 0 <= idx < len(snapshot) and snapshot[idx] in player.hand:
+            trashed = snapshot[idx]
+            player.hand.remove(trashed)
+            player.trash.append(trashed)
+            card.is_resting = True
+            game_state._log(f"Island of Women: trashed {trashed.name} and rested this Stage")
+            targets = [c for c in player.cards_in_play if 'Amazon Lily' in (getattr(c, 'card_origin', '') or '') or 'Kuja Pirates' in (getattr(c, 'card_origin', '') or '')]
+            if targets:
+                create_return_to_hand_choice(game_state, player, targets, source_card=card,
+                                             prompt="Island of Women: Return up to 1 Amazon Lily/Kuja Pirates Character",
+                                             optional=True)
+
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"op07_058_{_uuid.uuid4().hex[:8]}",
+        choice_type="select_cards",
+        prompt="Island of Women: You may trash 1 card from hand and rest this Stage",
+        options=[{"id": str(i), "label": f"{c.name} (Cost: {getattr(c, 'cost', 0) or 0})",
+                  "card_id": c.id, "card_name": c.name} for i, c in enumerate(snapshot)],
+        min_selections=0,
+        max_selections=1,
+        source_card_id=card.id,
+        source_card_name=card.name,
+        callback=_trash_then_return,
+    )
+    return True
+
+
+@register_effect("OP07-075", "counter", "[Counter] DON -1: opponent Leader and Character -2000 each")
+def op07_075_slow_slow_beam(game_state, player, card):
+    def _slow_cb():
+        opponent = get_opponent(game_state, player)
+        targets = []
+        if opponent.leader:
+            targets.append(opponent.leader)
+        targets += list(opponent.cards_in_play)
+        if targets:
+            create_power_effect_choice(game_state, player, targets, -2000, source_card=card,
+                                       prompt="Slow-Slow Beam: Give up to 1 each opponent Leader/Character -2000 power",
+                                       min_selections=0, max_selections=2)
+    result = optional_don_return(game_state, player, 1, source_card=card, post_callback=_slow_cb)
+    return True if not result else True
+
+
+@register_effect("OP07-076", "counter", "[Counter] DON -1: +2000 power, then rest opponent Character")
+def op07_076_slow_slow_beam_sword(game_state, player, card):
+    def _beam_sword_cb():
+        own_targets = ([player.leader] if player.leader else []) + list(player.cards_in_play)
+
+        def _rest_after_power(_selected):
+            opponent = get_opponent(game_state, player)
+            if opponent.cards_in_play:
+                create_rest_choice(game_state, player, list(opponent.cards_in_play), source_card=card,
+                                   prompt="Slow-Slow Beam Sword: Rest up to 1 opponent Character",
+                                   min_selections=0)
+
+        if own_targets:
+            create_power_effect_choice(game_state, player, own_targets, 2000, source_card=card,
+                                       prompt="Slow-Slow Beam Sword: Choose up to 1 Leader/Character to give +2000 power",
+                                       min_selections=0, callback=_rest_after_power)
+        else:
+            _rest_after_power([])
+    result = optional_don_return(game_state, player, 1, source_card=card, post_callback=_beam_sword_cb)
+    return True if not result else True
+
+
+@register_effect("OP07-076", "trigger", "[Trigger] Add up to 1 DON from DON deck as active")
+def op07_076_slow_slow_beam_sword_trigger(game_state, player, card):
+    add_don_from_deck(player, 1, set_active=True)
+    return True
+
+
+@register_effect("OP07-078", "on_play", "[Main] If DON <= opponent DON, set up to 1 Foxy active")
+def op07_078_megaton_rush(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    if len(player.don_pool) > len(opponent.don_pool):
+        return True
+    targets = [c for c in player.cards_in_play if getattr(c, 'is_resting', False) and getattr(c, 'name', '') == 'Foxy']
+    if not targets:
+        return True
+    return create_set_active_choice(game_state, player, targets, source_card=card,
+                                    prompt="Megaton Nine-Tails Rush: Set up to 1 Foxy as active")
+
+
+@register_effect("OP07-078", "trigger", "[Trigger] Add up to 1 DON from DON deck as active")
+def op07_078_megaton_rush_trigger(game_state, player, card):
+    add_don_from_deck(player, 1, set_active=True)
+    return True
+
+
+@register_effect("OP07-037", "trigger", "[Trigger] Draw 1 card")
+def op07_037_more_pizza_trigger(game_state, player, card):
+    draw_cards(player, 1)
+    return True
+
+
+@register_effect("OP07-056", "trigger", "[Trigger] Draw 2, bottom 2 cards from hand")
+def op07_056_slave_arrow_trigger(game_state, player, card):
+    draw_cards(player, 2)
+    return _bottom_cards_from_hand(game_state, player, 2, card,
+                                   "Slave Arrow Trigger: Place 2 cards from hand at bottom of deck")
+
+
+@register_effect("OP07-077", "trigger", "[Trigger] Activate this card's Main effect")
+def op07_077_one_piece_trigger(game_state, player, card):
+    return op07_077_one_piece(game_state, player, card)
+
+
+@register_effect("OP07-094", "trigger", "[Trigger] Return up to 1 of your Characters to hand")
+def op07_094_shave_trigger(game_state, player, card):
+    if not player.cards_in_play:
+        return True
+    return create_return_to_hand_choice(game_state, player, list(player.cards_in_play), source_card=card,
+                                        prompt="[Trigger] Shave: Return up to 1 of your Characters to hand",
+                                        optional=True)
+
+
+@register_effect("OP07-095", "trigger", "[Trigger] Leader/Character +1000 power this turn")
+def op07_095_iron_body_trigger(game_state, player, card):
+    targets = ([player.leader] if player.leader else []) + list(player.cards_in_play)
+    if not targets:
+        return True
+    return create_power_effect_choice(game_state, player, targets, 1000, source_card=card,
+                                      prompt="[Trigger] Iron Body: Choose up to 1 Leader/Character to give +1000 power",
+                                      min_selections=0)
+
+
+@register_effect("OP07-096", "trigger", "[Trigger] K.O. up to 1 opponent Character cost 3 or less")
+def op07_096_tempest_kick_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 3]
+    if not targets:
+        return True
+    return create_ko_choice(game_state, player, targets, source_card=card,
+                            prompt="[Trigger] Tempest Kick: K.O. up to 1 opponent Character cost 3 or less",
+                            min_selections=0)
+
+
+@register_effect("OP07-114", "trigger", "[Trigger] Draw 1 card")
+def op07_114_brilliant_mind_trigger(game_state, player, card):
+    draw_cards(player, 1)
+    return True
+
+
+@register_effect("OP07-115", "trigger", "[Trigger] Play up to 1 Egghead Character cost 5 or less from trash")
+def op07_115_requasar_trigger(game_state, player, card):
+    targets = [
+        c for c in player.trash
+        if getattr(c, 'card_type', '') == 'CHARACTER'
+        and 'Egghead' in (getattr(c, 'card_origin', '') or '')
+        and (getattr(c, 'cost', 0) or 0) <= 5
+    ]
+    if not targets:
+        return True
+    return create_play_from_trash_choice(game_state, player, targets, source_card=card, rest_on_play=False,
+                                         prompt="[Trigger] I Re-Quasar Helllp!!: Play up to 1 Egghead Character cost 5 or less from trash")
+
+
+@register_effect("OP07-116", "trigger", "[Trigger] Rest up to 1 opponent Character cost 4 or less")
+def op07_116_blaze_slice_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play if not c.is_resting and (getattr(c, 'cost', 0) or 0) <= 4]
+    if not targets:
+        return True
+    return create_rest_choice(game_state, player, targets, source_card=card,
+                              prompt="[Trigger] Blaze Slice: Rest up to 1 opponent Character cost 4 or less",
+                              min_selections=0)
+
+
+@register_effect("OP07-117", "trigger", "[Trigger] Play this card")
+def op07_117_egghead_stage_trigger(game_state, player, card):
+    return _play_this_card_from_trigger(game_state, player, card)

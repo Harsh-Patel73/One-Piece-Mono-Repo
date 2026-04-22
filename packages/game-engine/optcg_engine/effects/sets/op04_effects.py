@@ -3916,6 +3916,23 @@ def op04_037_flapping_thread(game_state, player, card):
     return True
 
 
+@register_effect("OP04-037", "trigger", "[Trigger] K.O. up to 1 opponent rested Character cost 4 or less")
+def op04_037_flapping_thread_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [
+        c for c in opponent.cards_in_play
+        if getattr(c, 'is_resting', False) and (getattr(c, 'cost', 0) or 0) <= 4
+    ]
+    if not targets:
+        return True
+    return create_ko_choice(
+        game_state, player, targets,
+        source_card=card,
+        prompt="[Trigger] Flapping Thread: K.O. up to 1 opponent rested Character cost 4 or less",
+        min_selections=0,
+    )
+
+
 # --- OP04-038: The Weak Do Not Have the Right to Choose How They Die!!! ---
 def _op04_038_resolve(game_state, player, card):
     targets = [c for c in _opponent_leader_and_characters(game_state, player) if not getattr(c, 'is_resting', False)]

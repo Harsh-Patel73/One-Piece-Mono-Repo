@@ -787,6 +787,53 @@
 | OP06-110 | Nekomamushi | CHARACTER | ✅ Verified | [DON!! x2] This Character can also attack your opponent's active Chara… |  |
 | OP06-105 | Genbo | CHARACTER | ✅ Verified |  |  |
 | OP06-104 | Kikunojo | CHARACTER | ✅ Verified | [On K.O.] If your opponent has 3 or less Life cards, add up to 1 card … |  |
+| OP06-003 | Emporio.Ivankov | CHARACTER | ⚠ Needs Fix | [On Play] Look at 3 cards from the top of your deck and play up to 1 {… | When I play a card out with this cards effect, if that card has an on play it should activate, currently it does not.  |
+| OP06-006 | Saga | CHARACTER | ✅ Verified | [DON!! x1] [When Attacking] This Character gains +1000 power until the… | At the end of the turn I should be prompted to trash a film type character if I use this effect. If I have a film character in hand this is NOT optional, if I do not have a film type character then this part can be skipped. |
+| OP06-011 | Tot Musica | CHARACTER | ⚠ Needs Fix | [Activate: Main] [Once Per Turn] You may rest 1 of your [Uta] cards: T… | Make the leader Uta, so I can test.  |
+| OP06-014 | Ratchet | CHARACTER | ⚠ Needs Fix | [On Your Opponent's Attack] You may trash any number of {FILM} type ca… | When the opponent attacks if this card is in play I should be prompted to trash FILM type cards from my hand, then I can give the leader/character being attacked +1000 power for every card that is trashed for that battle.  |
+| OP06-018 | Gum-Gum King Kong Gatling | EVENT | ✅ Verified | [Main] Up to 1 of your Leader or Character cards gains +3000 power dur… |  |
+| OP06-020 | Hody Jones | LEADER | ✅ Verified | [Activate: Main] You may rest this Leader: Rest up to 1 of your oppone… |  |
+| OP06-022 | Yamato | LEADER | ✅ Verified | [Double Attack] (This card deals 2 damage.) [Activate: Main] [Once Per… |  |
+| OP06-023 | Arlong | CHARACTER | ✅ Verified | [On Play] You may trash 1 card from your hand: Up to 1 of your opponen… | I should also be promtped to trash 0 cards from hand and not use the effect. |
+| OP06-024 | Ikaros Much | CHARACTER | ✅ Verified | [On Play] If your Leader has the {New Fish-Man Pirates} type, play up … |  |
+| OP06-025 | Camie | CHARACTER | ✅ Verified | [On Play] Look at 4 cards from the top of your deck; reveal up to 1 {F… |  |
+| OP06-026 | Koushirou | CHARACTER | ⚠ Needs Fix | [On Play] Set up to 1 of your <Slash> attribute Characters with a cost… | After I use this cards effect, I should no longer be able to target the opponent's leader until the turn ends.  |
+| OP06-027 | Gyro | CHARACTER | ✅ Verified | [On K.O.] Rest up to 1 of your opponent's Characters with a cost of 3 … |  |
+| OP06-028 | Zeo | CHARACTER | ⚠ Needs Fix | [DON!! x1] [When Attacking] If your Leader has the {New Fish-Man Pirat… | There should be a prompt to select which DON!! to set as active. Effect works as intended other than that though  |
+| OP06-029 | Daruma | CHARACTER | ⚠ Needs Fix | [DON!! x1] [When Attacking] [Once Per Turn] If your Leader has the {Ne… | When this card gets set as active it should be able to attack again, but the effect will not take place on the second attack as it is once per turn.  |
+| OP06-030 | Dosun | CHARACTER | ⚠ Needs Fix | [When Attacking] If your Leader has the {New Fish-Man Pirates} type, t… | It should gain +2000 power until the start of my next turn, currently it goes away after the battle.  |
+| OP06-031 | Hatchan | CHARACTER | ⚠ Needs Fix | [Trigger] Play up to 1 {Fish-Man} or {Merfolk} type Character card wit… | Put this card in the tester's life so I can test the effect.  |
+| OP06-032 | Hammond | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
+| OP06-033 | Vander Decken IX | CHARACTER | ✅ Verified | [On Play] You may trash 1 {Fish-Man} type card from your hand or 1 [Th… |  |
+| OP06-034 | Hyouzou | CHARACTER | ⚠ Needs Fix | [Activate: Main] [Once Per Turn] Rest up to 1 of your opponent's Chara… | This card is gaining +1000 but it is going away when I attack, it should remain until the end of the turn.  |
+| OP06-035 | Hody Jones | CHARACTER | ✅ Verified | [Rush] (This card can attack on the turn in which it is played.) [On P… |  |
+| OP06-036 | Ryuma | CHARACTER | ✅ Verified | [On Play]/[On K.O.] K.O. up to 1 of your opponent's rested Characters … |  |
+| OP06-037 | Wadatsumi | CHARACTER | ✅ Verified |  |  |
+| OP06-038 | The Billion-fold World Trichiliocosm | EVENT | ⚠ Needs Fix | [Counter] Up to 1 of your Leader or Character cards gains +2000 power … | This card should only give the power during the battle, it is currently giving it for the turn. The rest of the logic seems correct.  |
+| OP06-039 | You Ain't Even Worth Killing Time!! | EVENT | ✅ Verified | [Main] Choose one: • Rest up to 1 of your opponent's Characters with a… |  |
+| OP06-040 | Shark Arrows | EVENT | ✅ Verified | [Main] K.O. up to 2 of your opponent's rested Characters with a cost o… |  |
+| OP06-041 | The Ark Noah | STAGE | ⚠ Needs Fix | [On Play] Rest all of your opponent's Characters. | When the card comes to play as a trigger it should still activate the on play effect, currently it does not.  |
+| OP06-043 | Aramaki | CHARACTER | ⚠ Needs Fix | [Blocker] (After your opponent declares an attack, you may rest this c… | The power that it gains should be for the turn, it goes away after it attacks.  |
+| OP06-044 | Gion | CHARACTER | ⚠ Needs Fix | [Your Turn] [Once Per Turn] When your opponent activates an Event, you… | When the opponent uses an effect it should prompt them to place 1 card from their hand to the bottom of their deck when Gion is in play. Currently it does not do that.  |
+| OP06-045 | Kuzan | CHARACTER | ✅ Verified | [On Play] Draw 2 cards and place 2 cards from your hand at the bottom … |  |
+| OP06-046 | Sakazuki | CHARACTER | ✅ Verified | [On Play] Place up to 1 Character with a cost of 2 or less at the bott… |  |
+| OP06-047 | Charlotte Pudding | CHARACTER | ✅ Verified | [On Play] Your opponent returns all cards in their hand to their deck … |  |
+| OP06-048 | Zeff | CHARACTER | ⚠ Needs Fix | [Your Turn] When your opponent activates [Blocker] or an Event, if you… | When this card is in play if the opponent uses an event if the leader has the East Blue type, we should be prompted if we want to trash 4 cards from the top of the deck.  |
+| OP06-049 | Sengoku | CHARACTER | ✅ Verified |  |  |
+| OP06-050 | Tashigi | CHARACTER | ✅ Verified | [On Play] Look at 5 cards from the top of your deck; reveal up to 1 {N… |  |
+| OP06-051 | Tsuru | CHARACTER | ✅ Verified | [On Play] You may trash 2 cards from your hand: Your opponent returns … |  |
+| OP06-052 | Tokikake | CHARACTER | ✅ Verified | [DON!! x1] If you have 4 or less cards in your hand, this Character ca… |  |
+| OP06-053 | Jaguar.D.Saul | CHARACTER | ✅ Verified | [On K.O.] Place up to 1 Character with a cost of 2 or less at the bott… |  |
+| OP06-054 | Borsalino | CHARACTER | ⚠ Needs Fix | If you have 5 or less cards in your hand, this Character gains [Blocke… | This card should only have blocker if I have 5 or less cards in hand, it is still a blocker when I have more.  |
+| OP06-055 | Monkey.D.Garp | CHARACTER | ✅ Verified | [DON!! x2] [When Attacking] If you have 4 or less cards in your hand, … |  |
+| OP06-056 | Ama no Murakumo Sword | EVENT | ⚠ Needs Fix | [Main] Place up to 1 of your opponent's Characters with a cost of 2 or… | It should prompt me to place up to 1 of my opponents 2 costs or less AND opponent's 1 costs or less but it only prompts me once.  |
+| OP06-057 | But I Will Never Doubt a Woman's Tears!!!! | EVENT | ⚠ Needs Fix | [Main] Up to 1 of your Leader or Character cards gains +1000 power dur… | The top card of the deck should be revealed and then I should be promtped to play a character with a cost of 2 |
+| OP06-058 | Gravity Blade Raging Tiger | EVENT | ✅ Verified | [Main] Place up to 2 Characters with a cost of 6 or less at the bottom… |  |
+| OP06-059 | White Snake | EVENT | ✅ Verified | [Counter] Up to 1 of your Leader or Character cards gains +1000 power … |  |
+| OP06-042 | Vinsmoke Reiju | LEADER | ✅ Verified | [Your Turn] [Once Per Turn] When a DON!! card on your field is returne… |  |
+| OP06-060 | Vinsmoke Ichiji | CHARACTER | ✅ Verified | [Activate: Main] DON!! −1 (You may return the specified number of DON!… |  |
+| OP06-061 | Vinsmoke Ichiji | CHARACTER | ⚠ Needs Fix | [On Play] If the number of DON!! cards on your field is equal to or le… | Even though this card is gaining rush per the effect it will not let me attack on the turn it is played.  |
+| OP06-115 | You're the One Who Should Disappear. | EVENT | ⚠ Needs Fix | [Counter] You may trash 1 card from your hand: Up to 1 of your Leader … | This card should only give +3000 power for the battle, it is giving it for the turn.  |
 
 | ID | Status | Type | Notes |
 |----|--------|------|-------|

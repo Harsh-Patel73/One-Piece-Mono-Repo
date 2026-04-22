@@ -13,6 +13,21 @@ from ..effect_registry import (
 )
 
 
+def _play_this_card_from_trigger(game_state, player, card):
+    """Move the trigger card to the field if it is not already there."""
+    for zone in (player.hand, player.life_cards, player.trash):
+        if card in zone:
+            zone.remove(card)
+            break
+    if card not in player.cards_in_play:
+        card.is_resting = False
+        setattr(card, "played_turn", game_state.turn_count)
+        player.cards_in_play.append(card)
+        game_state._apply_keywords(card)
+        game_state._log(f"{player.name} played {card.name} from Trigger")
+    return True
+
+
 # --- OP01-029: Radical Beam!! ---
 @register_effect("OP01-029", "counter", "[Counter] +2000 power. If 2 or fewer Life, +4000 total")
 def op01_029_radical_beam(game_state, player, card):
@@ -25,27 +40,61 @@ def op01_029_radical_beam(game_state, player, card):
     return create_power_effect_choice(
         game_state, player, targets, amount,
         source_card=card,
-        prompt=f"Choose Leader or Character to give +{amount} power"
+        prompt=f"Choose up to 1 Leader or Character to give +{amount} power",
+        min_selections=0,
     )
 
 
-# --- OP01-119: Thunder Bagua ---
-@register_effect("OP01-119", "counter", "[Counter] +4000 power. If 2 or fewer Life, add 1 active DON instead")
-def op01_119_thunder_bagua(game_state, player, card):
-    # Card text: [Counter] Up to 1 of your Leader or Character cards gains +4000 power during
-    # this battle. If you have 2 or fewer Life cards, instead add 1 DON!! card from your DON!!
-    # deck and set it as active.
-    if len(player.life_cards) <= 2:
-        player.don_pool.append("active")
-        return True
+@register_effect("OP01-029", "trigger", "[Trigger] Leader/Character +1000 power this turn")
+def op01_029_radical_beam_trigger(game_state, player, card):
     targets = ([player.leader] if player.leader else []) + player.cards_in_play
     if not targets:
         return True
     return create_power_effect_choice(
-        game_state, player, targets, 4000,
+        game_state, player, targets, 1000,
         source_card=card,
-        prompt="Choose Leader or Character to give +4000 power"
+        prompt="[Trigger] Choose up to 1 Leader or Character to give +1000 power",
+        min_selections=0,
     )
+
+
+# --- OP01-119: Thunder Bagua ---
+@register_effect("OP01-119", "counter", "[Counter] +4000 power. If 2 or fewer Life, add 1 rested DON")
+def op01_119_thunder_bagua(game_state, player, card):
+    # Card text: [Counter] Up to 1 of your Leader or Character cards gains +4000 power during
+    # this battle. Then, if you have 2 or fewer Life cards, add up to 1 DON!! card from your
+    # DON!! deck and rest it.
+    targets = ([player.leader] if player.leader else []) + player.cards_in_play
+    if not targets:
+        if len(player.life_cards) <= 2:
+            add_don_from_deck(player, 1, set_active=False)
+        return True
+    target_snapshot = list(targets)
+
+    def after_power(selected):
+        for sel in selected:
+            idx = int(sel)
+            if 0 <= idx < len(target_snapshot):
+                target = target_snapshot[idx]
+                target.power_modifier = getattr(target, "power_modifier", 0) + 4000
+                target._battle_power_modifier = getattr(target, "_battle_power_modifier", 0) + 4000
+                game_state._log(f"{target.name} gets +4000 power during this battle")
+        if len(player.life_cards) <= 2:
+            add_don_from_deck(player, 1, set_active=False)
+
+    return create_power_effect_choice(
+        game_state, player, target_snapshot, 4000,
+        source_card=card,
+        prompt="Choose up to 1 Leader or Character to give +4000 power",
+        min_selections=0,
+        callback=after_power,
+    )
+
+
+@register_effect("OP01-119", "trigger", "[Trigger] Add up to 1 active DON")
+def op01_119_thunder_bagua_trigger(game_state, player, card):
+    add_don_from_deck(player, 1, set_active=True)
+    return True
 
 
 # =============================================================================
@@ -392,12 +441,17 @@ def op01_007_caribou(game_state, player, card):
 @register_effect("OP01-008", "on_play", "[On Play] Add Life to hand: Gain Rush")
 def op01_008_cavendish(game_state, player, card):
     """Add 1 card from Life to hand: This Character gains Rush this turn."""
-    if player.life_cards:
-        life = player.life_cards.pop()
-        player.hand.append(life)
-        card.has_rush = True
+    if not player.life_cards:
         return True
-    return False
+    return create_target_choice(
+        game_state, player, [card],
+        prompt="You may add 1 Life card to hand to give Cavendish [Rush]",
+        source_card=card,
+        min_selections=0,
+        callback=lambda selected: (
+            player.hand.append(player.life_cards.pop()) or setattr(card, "has_rush", True)
+        ) if selected and player.life_cards else None,
+    )
 
 
 # --- OP01-009: Carrot ---
@@ -507,6 +561,7 @@ def op01_015_chopper(game_state, player, card):
     hand_snapshot = list(player.hand)
 
     def chopper_trash_cb(selected):
+        trashed_cost = False
         if selected:
             target_idx = int(selected[0]) if selected[0].isdigit() else -1
             if 0 <= target_idx < len(hand_snapshot):
@@ -514,7 +569,10 @@ def op01_015_chopper(game_state, player, card):
                 if target in player.hand:
                     player.hand.remove(target)
                     player.trash.append(target)
+                    trashed_cost = True
                     game_state._log(f"{player.name} trashed {target.name}")
+        if not trashed_cost:
+            return
         shc = [c for c in player.trash
                if c.card_type == 'CHARACTER'
                and 'straw hat crew' in (c.card_origin or '').lower()
@@ -1193,12 +1251,16 @@ def op01_064_alvida(game_state, player, card):
 
     def alvida_trash_cb(selected):
         target_idx = int(selected[0]) if selected else -1
+        trashed_cost = False
         if 0 <= target_idx < len(hand_snapshot):
             trashed = hand_snapshot[target_idx]
             if trashed in player.hand:
                 player.hand.remove(trashed)
                 player.trash.append(trashed)
+                trashed_cost = True
                 game_state._log(f"Alvida: {player.name} trashed {trashed.name}")
+        if not trashed_cost:
+            return
         if return_snapshot:
             rt_opts = [{"id": str(i), "label": f"{c.name} (Cost: {c.cost or 0})",
                         "card_id": c.id, "card_name": c.name} for i, c in enumerate(return_snapshot)]
@@ -1231,7 +1293,7 @@ def op01_064_alvida(game_state, player, card):
         choice_type="select_target",
         prompt="Choose a card from hand to trash (cost to activate Alvida's effect)",
         options=options,
-        min_selections=1,
+        min_selections=0,
         max_selections=1,
         source_card_id=card.id,
         source_card_name=card.name,
@@ -1325,6 +1387,11 @@ def op01_071_jinbe(game_state, player, card):
         return create_bottom_deck_choice(game_state, player, targets, source_card=card,
                                         prompt="Choose opponent's cost 3 or less to place at deck bottom")
     return False
+
+
+@register_effect("OP01-071", "trigger", "[Trigger] Play this card")
+def op01_071_jinbe_trigger(game_state, player, card):
+    return _play_this_card_from_trigger(game_state, player, card)
 
 
 # --- OP01-072: Smiley ---
@@ -1668,14 +1735,13 @@ def op01_099_semimaru(game_state, player, card):
     return True
 
 
-# --- OP01-100: Nefeltari Vivi ---
-@register_effect("OP01-100", "on_attack", "[DON!! x2] Cannot be blocked by cost 5 or less Characters")
-def op01_100_vivi(game_state, player, card):
-    """DON x2: This attack cannot be blocked by Characters with cost 5 or less."""
-    if getattr(card, 'attached_don', 0) >= 2:
-        game_state.blocker_cost_limit = 5
-        return True
-    return False
+# --- OP01-100: Kurozumi Higurashi ---
+@register_effect("OP01-100", "blocker", "[Blocker]")
+def op01_100_higurashi(game_state, player, card):
+    """Blocker: Can redirect attacks."""
+    card.is_blocker = True
+    card.has_blocker = True
+    return True
 
 
 # --- OP01-102: Jack ---
@@ -1777,6 +1843,11 @@ def op01_106_basil_hawkins(game_state, player, card):
     # Card text: [On Play] Add up to 1 DON!! card from your DON!! deck and rest it.
     add_don_from_deck(player, 1, set_active=False)
     return True
+
+
+@register_effect("OP01-106", "trigger", "[Trigger] Play this card")
+def op01_106_basil_hawkins_trigger(game_state, player, card):
+    return _play_this_card_from_trigger(game_state, player, card)
 
 
 # OP01-107: Babanuki — No effect (handled by parser keywords)
@@ -1952,6 +2023,11 @@ def op01_115_elephants_marchoo(game_state, player, card):
         return create_ko_choice(game_state, player, targets, source_card=card,
                                prompt="Choose opponent's cost 2 or less Character to K.O.")
     return True
+
+
+@register_effect("OP01-115", "trigger", "[Trigger] Activate this card's Main effect")
+def op01_115_elephants_marchoo_trigger(game_state, player, card):
+    return op01_115_elephants_marchoo(game_state, player, card)
 
 
 # --- OP01-117: Sheep's Horn (EVENT) ---
@@ -2161,6 +2237,11 @@ def op01_030_two_years(game_state, player, card):
                             prompt="In Two Years!!: Choose up to 1 Straw Hat Crew Character from top 5 to add to hand")
 
 
+@register_effect("OP01-030", "trigger", "[Trigger] Activate this card's Main effect")
+def op01_030_two_years_trigger(game_state, player, card):
+    return op01_030_two_years(game_state, player, card)
+
+
 # --- OP01-055: You Can Be My Samurai!! ---
 @register_effect("OP01-055", "on_play", "[Main] Rest 2 Characters: Draw 2 cards")
 def op01_055_samurai(game_state, player, card):
@@ -2262,12 +2343,16 @@ def op01_059_bebeng(game_state, player, card):
 
     def bebeng_trash_cb(selected):
         target_idx = int(selected[0]) if selected else -1
+        trashed_cost = False
         if 0 <= target_idx < len(wano_hand_snapshot):
             trashed = wano_hand_snapshot[target_idx]
             if trashed in player.hand:
                 player.hand.remove(trashed)
                 player.trash.append(trashed)
+                trashed_cost = True
                 game_state._log(f"BE-BENG!!: {player.name} trashed {trashed.name}")
+        if not trashed_cost:
+            return
         current_wano_field = [c for c in player.cards_in_play
                               if 'land of wano' in (c.card_origin or '').lower()
                               and (getattr(c, 'cost', 0) or 0) <= 3
@@ -2344,6 +2429,11 @@ def op01_116_smile_event(game_state, player, card):
                             prompt="SMILE: Choose a SMILE Character (cost 3 or less) to play from top 5")
 
 
+@register_effect("OP01-116", "trigger", "[Trigger] Activate this card's Main effect")
+def op01_116_smile_event_trigger(game_state, player, card):
+    return op01_116_smile_event(game_state, player, card)
+
+
 # =============================================================================
 # EVENT CARDS — COUNTER EFFECTS
 # =============================================================================
@@ -2401,6 +2491,20 @@ def op01_026_red_hawk(game_state, player, card):
     return True
 
 
+@register_effect("OP01-026", "trigger", "[Trigger] Opponent Leader/Character -10000 power")
+def op01_026_red_hawk_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = ([opponent.leader] if opponent.leader else []) + opponent.cards_in_play
+    if not targets:
+        return True
+    return create_power_effect_choice(
+        game_state, player, targets, -10000,
+        source_card=card,
+        prompt="[Trigger] Choose up to 1 opponent Leader or Character to give -10000 power",
+        min_selections=0,
+    )
+
+
 # --- OP01-028: Green Star Rafflesia ---
 @register_effect("OP01-028", "counter", "[Counter] Give opponent's Leader or Character −2000 power")
 def op01_028_rafflesia(game_state, player, card):
@@ -2415,6 +2519,11 @@ def op01_028_rafflesia(game_state, player, card):
             prompt="Choose opponent's Leader or Character to give −2000 power"
         )
     return True
+
+
+@register_effect("OP01-028", "trigger", "[Trigger] Activate this card's Counter effect")
+def op01_028_rafflesia_trigger(game_state, player, card):
+    return op01_028_rafflesia(game_state, player, card)
 
 
 # --- OP01-057: Paradise Waterfall ---
@@ -2455,6 +2564,20 @@ def op01_057_paradise_waterfall(game_state, player, card):
         source_card_name=card.name,
         callback=paradise_cb,
     )
+    return True
+
+
+@register_effect("OP01-057", "trigger", "[Trigger] K.O. rested opponent cost 4 or less Character")
+def op01_057_paradise_waterfall_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play
+               if getattr(c, "is_resting", False) and (getattr(c, "cost", 0) or 0) <= 4]
+    if targets:
+        return create_ko_choice(
+            game_state, player, targets, source_card=card,
+            prompt="[Trigger] K.O. up to 1 opponent rested Character cost 4 or less",
+            min_selections=0,
+        )
     return True
 
 
@@ -2506,6 +2629,19 @@ def op01_058_punk_gibson(game_state, player, card):
     return True
 
 
+@register_effect("OP01-058", "trigger", "[Trigger] Rest up to 1 opponent Character")
+def op01_058_punk_gibson_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play if not getattr(c, "is_resting", False)]
+    if targets:
+        return create_rest_choice(
+            game_state, player, targets, source_card=card,
+            prompt="[Trigger] Rest up to 1 opponent Character",
+            min_selections=0,
+        )
+    return True
+
+
 # --- OP01-086: Overheat ---
 @register_effect("OP01-086", "counter", "[Counter] +4000 power. Then return active cost 3 or less Character to hand")
 def op01_086_overheat(game_state, player, card):
@@ -2551,6 +2687,20 @@ def op01_086_overheat(game_state, player, card):
     return True
 
 
+@register_effect("OP01-086", "trigger", "[Trigger] Return Character cost 4 or less to owner's hand")
+def op01_086_overheat_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in player.cards_in_play + opponent.cards_in_play
+               if (getattr(c, "cost", 0) or 0) <= 4]
+    if targets:
+        return create_return_to_hand_choice(
+            game_state, player, targets, source_card=card,
+            prompt="[Trigger] Return up to 1 Character cost 4 or less to hand",
+            optional=True,
+        )
+    return True
+
+
 # --- OP01-087: Officer Agents ---
 @register_effect("OP01-087", "counter", "[Counter] Play Baroque Works Character cost 3 or less from hand")
 def op01_087_officer_agents(game_state, player, card):
@@ -2567,6 +2717,11 @@ def op01_087_officer_agents(game_state, player, card):
             prompt="Choose Baroque Works cost 3 or less Character to play"
         )
     return True
+
+
+@register_effect("OP01-087", "trigger", "[Trigger] Activate this card's Counter effect")
+def op01_087_officer_agents_trigger(game_state, player, card):
+    return op01_087_officer_agents(game_state, player, card)
 
 
 # --- OP01-088: Desert Spada ---
@@ -2608,6 +2763,14 @@ def op01_088_desert_spada(game_state, player, card):
             source_card_name=card.name,
             callback=desert_spada_cb,
         )
+    return True
+
+
+@register_effect("OP01-088", "trigger", "[Trigger] Draw 2, then trash 1 from hand")
+def op01_088_desert_spada_trigger(game_state, player, card):
+    draw_cards(player, 2)
+    if player.hand:
+        trash_from_hand(player, 1, game_state, card)
     return True
 
 
@@ -2656,6 +2819,12 @@ def op01_118_ulti_mortar(game_state, player, card):
     return True
 
 
+@register_effect("OP01-118", "trigger", "[Trigger] Add up to 1 active DON")
+def op01_118_ulti_mortar_trigger(game_state, player, card):
+    add_don_from_deck(player, 1, set_active=True)
+    return True
+
+
 # --- OP01-121: Yamato ---
 @register_effect("OP01-121", "continuous", "[Name alias] Also treated as Kouzuki Oden; [Double Attack] [Banish]")
 def op01_121_yamato(game_state, player, card):
@@ -2666,4 +2835,3 @@ def op01_121_yamato(game_state, player, card):
     card.has_double_attack = True
     card.has_banish = True
     return True
-

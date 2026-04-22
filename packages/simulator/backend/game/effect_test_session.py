@@ -727,6 +727,27 @@ def build_game_state(card_data: dict, timing: str) -> Tuple[GameState, Player, C
     if card_id == "OP05-098" and tc.card_type == "LEADER":
         p1.life_cards = p1.life_cards[:1]
 
+    # OP06-011: Tot Musica needs an Uta leader so the activate condition can be met
+    if card_id == "OP06-011":
+        uta_leader = _card("OP06-001", "Uta", "LEADER", None, 5000, ["Red"], "FILM")
+        uta_leader.life = 4
+        uta_leader.counter = None
+        p1.leader = uta_leader
+        # Also seed an Uta character on field for the rest target
+        uta_char = _card("OP06-011-UTA", "Uta", "CHARACTER", 3, 4000, ["Red"], "FILM")
+        uta_char.is_resting = False
+        p1.cards_in_play.append(uta_char)
+
+    # OP06-031: Hatchan needs to be in life cards to test trigger
+    if card_id == "OP06-031":
+        # Remove tc from its current location and put it in p1's life
+        if tc in p1.cards_in_play:
+            p1.cards_in_play.remove(tc)
+        p1.life_cards.insert(0, tc)
+        # Seed Fish-Man / Merfolk cost 3 or less in hand for the trigger effect
+        fishman = _card("FISHMAN-SEED-001", "Arlong", "CHARACTER", 3, 4000, ["Blue"], "Fish-Man")
+        p1.hand.insert(0, fishman)
+
     return gs, p1, tc
 
 

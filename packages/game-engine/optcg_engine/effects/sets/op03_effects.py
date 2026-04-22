@@ -15,6 +15,59 @@ from ..effect_registry import (
 )
 
 
+def _play_this_card_from_trigger(game_state, player, card):
+    """Move the trigger card to the field if it is not already there."""
+    for zone in (player.hand, player.life_cards, player.trash):
+        if card in zone:
+            zone.remove(card)
+            break
+    if card not in player.cards_in_play:
+        card.is_resting = False
+        setattr(card, "played_turn", game_state.turn_count)
+        player.cards_in_play.append(card)
+        game_state._apply_keywords(card)
+        game_state._log(f"{player.name} played {card.name} from Trigger")
+    return True
+
+
+def _play_this_card_from_trigger_after_trash(game_state, player, card, prompt):
+    from ...game_engine import PendingChoice
+    import uuid as _uuid
+    if not player.hand:
+        return True
+    snapshot = list(player.hand)
+
+    def _trash_then_play(selected):
+        if not selected:
+            return
+        idx = int(selected[0])
+        if 0 <= idx < len(snapshot):
+            target = snapshot[idx]
+            if target in player.hand:
+                player.hand.remove(target)
+                player.trash.append(target)
+                game_state._log(f"{player.name} trashed {target.name}")
+                _play_this_card_from_trigger(game_state, player, card)
+
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"op03_trigger_trash_{_uuid.uuid4().hex[:8]}",
+        choice_type="select_cards",
+        prompt=prompt,
+        options=[{
+            "id": str(i),
+            "label": f"{c.name} (Cost: {getattr(c, 'cost', 0) or 0})",
+            "card_id": c.id,
+            "card_name": c.name,
+        } for i, c in enumerate(snapshot)],
+        min_selections=0,
+        max_selections=1,
+        source_card_id=card.id,
+        source_card_name=card.name,
+        callback=_trash_then_play,
+    )
+    return True
+
+
 # --- OP03-036: Out-of-the-Bag ---
 @register_effect("OP03-036", "on_play", "[Main] Rest East Blue char: Choose Kuro card to set active")
 def out_of_bag_effect(game_state, player, card):
@@ -92,15 +145,59 @@ def top_knot_effect(game_state, player, card):
 @register_effect("OP03-094", "on_play", "[Main] If Leader is CP, look at 5, play CP cost 5 or less")
 def op03_094_air_door(game_state, player, card):
     """If Leader is CP, look at top 5, play a CP cost 5 or less Character."""
+    from ...game_engine import PendingChoice
+    import uuid as _uuid
     if not check_leader_type(player, "CP"):
         return True
-    def filter_fn(c):
-        return ('CP' in (getattr(c, 'card_origin', '') or '')
-                and getattr(c, 'card_type', '') == 'CHARACTER'
-                and (getattr(c, 'cost', 0) or 0) <= 5)
-    return search_top_cards(game_state, player, look_count=5, add_count=1,
-                            filter_fn=filter_fn, source_card=card,
-                            prompt="Air Door: Choose a CP cost 5 or less Character to play")
+    revealed = []
+    for _ in range(min(5, len(player.deck))):
+        revealed.append(player.deck.pop(0))
+    if not revealed:
+        return True
+    targets = [
+        c for c in revealed
+        if 'CP' in (getattr(c, 'card_origin', '') or '')
+        and getattr(c, 'card_type', '') == 'CHARACTER'
+        and (getattr(c, 'cost', 0) or 0) <= 5
+    ]
+
+    def _air_door_cb(selected):
+        played = None
+        if selected:
+            idx = int(selected[0])
+            if 0 <= idx < len(targets):
+                played = targets[idx]
+                played.is_resting = False
+                setattr(played, "played_turn", game_state.turn_count)
+                player.cards_in_play.append(played)
+                game_state._apply_keywords(played)
+                game_state._log(f"Air Door: played {played.name}")
+        for revealed_card in revealed:
+            if revealed_card is not played:
+                player.trash.append(revealed_card)
+        game_state._log("Air Door: trashed the rest of the revealed cards")
+
+    if not targets:
+        _air_door_cb([])
+        return True
+
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"op03_094_{_uuid.uuid4().hex[:8]}",
+        choice_type="select_cards",
+        prompt="Air Door: Play up to 1 CP Character cost 5 or less from the top 5",
+        options=[{
+            "id": str(i),
+            "label": f"{c.name} (Cost: {getattr(c, 'cost', 0) or 0})",
+            "card_id": c.id,
+            "card_name": c.name,
+        } for i, c in enumerate(targets)],
+        min_selections=0,
+        max_selections=1,
+        source_card_id=card.id,
+        source_card_name=card.name,
+        callback=_air_door_cb,
+    )
+    return True
 
 
 # --- OP03-077: Charlotte Linlin (Leader) ---
@@ -3444,3 +3541,286 @@ def op03_121_thunder_bolt(game_state, player, card):
                                prompt="Thunder Bolt: Choose opponent's cost 5 or less Character to K.O.")
     return True
 
+
+# =============================================================================
+# OP03 PRINTED TRIGGERS
+# =============================================================================
+
+@register_effect("OP03-016", "trigger", "[Trigger] K.O. up to 1 opponent Character with 6000 power or less")
+def op03_016_flame_emperor_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [
+        c for c in opponent.cards_in_play
+        if (getattr(c, 'power', 0) or 0) + getattr(c, 'power_modifier', 0) <= 6000
+    ]
+    if not targets:
+        return True
+    return create_ko_choice(game_state, player, targets, source_card=card,
+                            prompt="[Trigger] Flame Emperor: K.O. up to 1 opponent Character with 6000 power or less",
+                            min_selections=0)
+
+
+@register_effect("OP03-017", "trigger", "[Trigger] Activate this card's Main effect")
+def op03_017_cross_fire_trigger(game_state, player, card):
+    return op03_017_cross_fire_main(game_state, player, card)
+
+
+@register_effect("OP03-018", "trigger", "[Trigger] K.O. up to 1 opponent Character with 5000 power or less")
+def op03_018_fire_fist_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [
+        c for c in opponent.cards_in_play
+        if (getattr(c, 'power', 0) or 0) + getattr(c, 'power_modifier', 0) <= 5000
+    ]
+    if not targets:
+        return True
+    return create_ko_choice(game_state, player, targets, source_card=card,
+                            prompt="[Trigger] Fire Fist: K.O. up to 1 opponent Character with 5000 power or less",
+                            min_selections=0)
+
+
+@register_effect("OP03-019", "trigger", "[Trigger] Give up to 1 opponent Leader/Character -10000 power this turn")
+def op03_019_fiery_doll_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = ([opponent.leader] if opponent.leader else []) + opponent.cards_in_play
+    if not targets:
+        return True
+    return create_power_effect_choice(game_state, player, targets, -10000, source_card=card,
+                                      prompt="[Trigger] Fiery Doll: Give up to 1 opponent Leader/Character -10000 power",
+                                      min_selections=0)
+
+
+@register_effect("OP03-036", "trigger", "[Trigger] K.O. up to 1 opponent rested Character cost 3 or less")
+def op03_036_out_of_the_bag_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play if c.is_resting and (getattr(c, 'cost', 0) or 0) <= 3]
+    if not targets:
+        return True
+    return create_ko_choice(game_state, player, targets, source_card=card,
+                            prompt="[Trigger] Out-of-the-Bag: K.O. up to 1 opponent rested Character cost 3 or less",
+                            min_selections=0)
+
+
+@register_effect("OP03-037", "trigger", "[Trigger] Play up to 1 cost 4 or less Character with Trigger from hand")
+def op03_037_tooth_attack_trigger(game_state, player, card):
+    targets = [
+        c for c in player.hand
+        if getattr(c, 'card_type', '') == 'CHARACTER'
+        and (getattr(c, 'cost', 0) or 0) <= 4
+        and bool(getattr(c, 'trigger', '') or '')
+    ]
+    if not targets:
+        return True
+    return create_play_from_hand_choice(game_state, player, targets, source_card=card,
+                                        prompt="[Trigger] Tooth Attack: Play up to 1 cost 4 or less Character with a Trigger from hand")
+
+
+@register_effect("OP03-038", "trigger", "[Trigger] Rest up to 1 opponent Character cost 5 or less")
+def op03_038_mh5_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play if not c.is_resting and (getattr(c, 'cost', 0) or 0) <= 5]
+    if not targets:
+        return True
+    return create_rest_choice(game_state, player, targets, source_card=card,
+                              prompt="[Trigger] MH5: Rest up to 1 opponent Character cost 5 or less",
+                              min_selections=0)
+
+
+@register_effect("OP03-039", "trigger", "[Trigger] Rest up to 1 opponent Character cost 4 or less")
+def op03_039_one_two_jango_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play if not c.is_resting and (getattr(c, 'cost', 0) or 0) <= 4]
+    if not targets:
+        return True
+    return create_rest_choice(game_state, player, targets, source_card=card,
+                              prompt="[Trigger] One, Two, Jango: Rest up to 1 opponent Character cost 4 or less",
+                              min_selections=0)
+
+
+@register_effect("OP03-054", "trigger", "[Trigger] Draw 1 card and you may trash 1 card from top of deck")
+def op03_054_rubber_band_trigger(game_state, player, card):
+    from ...game_engine import PendingChoice
+    import uuid as _uuid
+    draw_cards(player, 1)
+    if not player.deck:
+        return True
+
+    def _maybe_trash(selected):
+        if "yes" in selected and player.deck:
+            trashed = player.deck.pop(0)
+            player.trash.append(trashed)
+            game_state._log(f"Usopp's Rubber Band of Doom Trigger: trashed {trashed.name} from top of deck")
+
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"op03_054_{_uuid.uuid4().hex[:8]}",
+        choice_type="yes_no",
+        prompt="Usopp's Rubber Band of Doom Trigger: Trash 1 card from the top of your deck?",
+        options=[
+            {"id": "yes", "label": "Yes, trash 1 from deck", "card_id": card.id, "card_name": card.name},
+            {"id": "no", "label": "No", "card_id": card.id, "card_name": card.name},
+        ],
+        min_selections=1,
+        max_selections=1,
+        source_card_id=card.id,
+        source_card_name=card.name,
+        callback=_maybe_trash,
+    )
+    return True
+
+
+@register_effect("OP03-055", "trigger", "[Trigger] Return up to 1 Character cost 4 or less to owner's hand")
+def op03_055_giant_gavel_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in (player.cards_in_play + opponent.cards_in_play) if (getattr(c, 'cost', 0) or 0) <= 4]
+    if not targets:
+        return True
+    return create_return_to_hand_choice(game_state, player, targets, source_card=card,
+                                        prompt="[Trigger] Gum-Gum Giant Gavel: Return up to 1 cost 4 or less Character to owner's hand",
+                                        optional=True)
+
+
+@register_effect("OP03-056", "trigger", "[Trigger] Activate this card's Main effect")
+def op03_056_sanjis_pilaf_trigger(game_state, player, card):
+    return op03_056_sanjis_pilaf(game_state, player, card)
+
+
+@register_effect("OP03-057", "trigger", "[Trigger] Place up to 1 Character cost 3 or less at bottom of owner's deck")
+def op03_057_three_thousand_worlds_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in (player.cards_in_play + opponent.cards_in_play) if (getattr(c, 'cost', 0) or 0) <= 3]
+    if not targets:
+        return True
+    return create_bottom_deck_choice(game_state, player, targets, source_card=card,
+                                     prompt="[Trigger] Three Thousand Worlds: Place up to 1 cost 3 or less Character at bottom of owner's deck",
+                                     min_selections=0)
+
+
+@register_effect("OP03-072", "trigger", "[Trigger] Add up to 1 DON from DON deck as active")
+def op03_072_jet_gatling_trigger(game_state, player, card):
+    add_don_from_deck(player, 1, set_active=True)
+    game_state._log("Gum-Gum Jet Gatling Trigger: added 1 active DON")
+    return True
+
+
+@register_effect("OP03-073", "trigger", "[Trigger] Activate this card's Main effect")
+def op03_073_hull_dismantler_trigger(game_state, player, card):
+    return op03_073_hull_dismantler(game_state, player, card)
+
+
+@register_effect("OP03-074", "trigger", "[Trigger] Activate this card's Main effect")
+def op03_074_top_knot_trigger(game_state, player, card):
+    return top_knot_effect(game_state, player, card)
+
+
+@register_effect("OP03-094", "trigger", "[Trigger] Play up to 1 black Character cost 3 or less from trash")
+def op03_094_air_door_trigger(game_state, player, card):
+    targets = [
+        c for c in player.trash
+        if getattr(c, 'card_type', '') == 'CHARACTER'
+        and 'Black' in (getattr(c, 'colors', []) or [])
+        and (getattr(c, 'cost', 0) or 0) <= 3
+    ]
+    if not targets:
+        return True
+    return create_play_from_trash_choice(game_state, player, targets, source_card=card, rest_on_play=False,
+                                         prompt="[Trigger] Air Door: Play up to 1 black cost 3 or less Character from trash")
+
+
+@register_effect("OP03-095", "trigger", "[Trigger] Opponent trashes 1 card from hand")
+def op03_095_soap_sheep_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    trash_from_hand(opponent, 1, game_state, card)
+    return True
+
+
+@register_effect("OP03-096", "trigger", "[Trigger] Draw 2 cards")
+def op03_096_tempest_kick_trigger(game_state, player, card):
+    draw_cards(player, 2)
+    game_state._log("Tempest Kick Sky Slicer Trigger: drew 2 cards")
+    return True
+
+
+@register_effect("OP03-097", "trigger", "[Trigger] Draw 1 card, then K.O. up to 1 opponent Character cost 1 or less")
+def op03_097_six_king_pistol_trigger(game_state, player, card):
+    draw_cards(player, 1)
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 1]
+    if not targets:
+        return True
+    return create_ko_choice(game_state, player, targets, source_card=card,
+                            prompt="[Trigger] Six King Pistol: K.O. up to 1 opponent Character cost 1 or less",
+                            min_selections=0)
+
+
+@register_effect("OP03-098", "trigger", "[Trigger] Play this card")
+def op03_098_enies_lobby_trigger(game_state, player, card):
+    return _play_this_card_from_trigger(game_state, player, card)
+
+
+@register_effect("OP03-113", "trigger", "[Trigger] You may trash 1 card from hand: Play this card")
+def op03_113_perospero_trigger(game_state, player, card):
+    return _play_this_card_from_trigger_after_trash(
+        game_state, player, card,
+        "[Trigger] Charlotte Perospero: You may trash 1 card from hand to play this card",
+    )
+
+
+@register_effect("OP03-118", "trigger", "[Trigger] You may trash 2 cards from hand: Add top deck card to top Life")
+def op03_118_ikoku_trigger(game_state, player, card):
+    from ...game_engine import PendingChoice
+    import uuid as _uuid
+    if len(player.hand) < 2:
+        return True
+    snapshot = list(player.hand)
+
+    def _trash_two_add_life(selected):
+        if len(selected) < 2:
+            return
+        for idx in sorted([int(s) for s in selected], reverse=True):
+            if 0 <= idx < len(player.hand):
+                trashed = player.hand.pop(idx)
+                player.trash.append(trashed)
+                game_state._log(f"{player.name} trashed {trashed.name}")
+        if player.deck:
+            life = player.deck.pop(0)
+            player.life_cards.append(life)
+            game_state._log(f"Ikoku Sovereignty Trigger: added top deck card to Life")
+
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"op03_118_{_uuid.uuid4().hex[:8]}",
+        choice_type="select_cards",
+        prompt="[Trigger] Ikoku Sovereignty: You may trash 2 cards from hand to add top deck card to Life",
+        options=[{
+            "id": str(i),
+            "label": f"{c.name} (Cost: {getattr(c, 'cost', 0) or 0})",
+            "card_id": c.id,
+            "card_name": c.name,
+        } for i, c in enumerate(snapshot)],
+        min_selections=0,
+        max_selections=2,
+        source_card_id=card.id,
+        source_card_name=card.name,
+        callback=_trash_two_add_life,
+    )
+    return True
+
+
+@register_effect("OP03-119", "trigger", "[Trigger] Play up to 1 cost 4 or less Character with Trigger from hand")
+def op03_119_buzz_cut_mochi_trigger(game_state, player, card):
+    return op03_037_tooth_attack_trigger(game_state, player, card)
+
+
+@register_effect("OP03-120", "trigger", "[Trigger] Activate this card's Main effect")
+def op03_120_tropical_torment_trigger(game_state, player, card):
+    return op03_120_tropical_torment(game_state, player, card)
+
+
+@register_effect("OP03-121", "trigger", "[Trigger] K.O. up to 1 opponent Character cost 5 or less")
+def op03_121_thunder_bolt_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 5]
+    if not targets:
+        return True
+    return create_ko_choice(game_state, player, targets, source_card=card,
+                            prompt="[Trigger] Thunder Bolt: K.O. up to 1 opponent Character cost 5 or less",
+                            min_selections=0)

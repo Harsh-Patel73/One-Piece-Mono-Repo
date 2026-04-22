@@ -734,3 +734,328 @@ def op10_106_killer(game_state, player, card):
                              or 'kid pirates' in (c.card_origin or '').lower()),
         source_card=card,
         prompt="Killer: Look at top 3, choose 1 Supernovas or Kid Pirates card to add to hand")
+
+
+# =============================================================================
+# OP10 GENERIC FALLBACK REGISTRATIONS
+# =============================================================================
+
+def _op10_play_this_card_from_trigger(game_state, player, card):
+    for zone in (player.hand, player.life_cards, player.trash):
+        if card in zone:
+            zone.remove(card)
+            break
+    if card not in player.cards_in_play:
+        card.is_resting = False
+        setattr(card, "played_turn", game_state.turn_count)
+        player.cards_in_play.append(card)
+        game_state._apply_keywords(card)
+        game_state._log(f"{player.name} played {card.name} from Trigger")
+    return True
+
+
+def _op10_generic_targets(game_state, player, text, *, include_leader=False, own=False):
+    opponent = get_opponent(game_state, player)
+    owner = player if own else opponent
+    targets = list(owner.cards_in_play)
+    if include_leader and owner.leader:
+        targets.insert(0, owner.leader)
+    return targets
+
+
+def _op10_generic_cost_limit(text, default=None):
+    import re
+    patterns = [
+        r"cost(?: of)?(?: equal to or)?(?: less than| or less)?(?:[^0-9]{0,40})(\d+)",
+        r"cost (\d+) or less",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+    return default
+
+
+def _op10_generic_power_limit(text, default=None):
+    import re
+    match = re.search(r"(\d{4,5}) power or less", text, re.IGNORECASE)
+    return int(match.group(1)) if match else default
+
+
+def _op10_generic_draw_trash(game_state, player, text, card):
+    import re
+    acted = False
+    draw_match = re.search(r"draw (\d+) cards?", text, re.IGNORECASE)
+    if draw_match:
+        draw_cards(player, int(draw_match.group(1)))
+        acted = True
+    trash_match = re.search(r"trash (\d+) cards? from your hand", text, re.IGNORECASE)
+    if trash_match:
+        trash_from_hand(player, int(trash_match.group(1)), game_state, card)
+        acted = True
+    return acted
+
+
+def _op10_generic_power_choice(game_state, player, text, card):
+    import re
+    match = re.search(r"([+-]\d{3,5}) power", text.replace("\u2212", "-"), re.IGNORECASE)
+    if not match:
+        return False
+    amount = int(match.group(1))
+    own = amount > 0
+    include_leader = "Leader" in text
+    targets = _op10_generic_targets(game_state, player, text, include_leader=include_leader, own=own)
+    if not targets:
+        return True
+    return create_target_choice(
+        game_state, player, targets,
+        f"{card.name}: choose target to get {amount:+d} power",
+        source_card=card, min_selections=0, max_selections=1,
+        callback=lambda selected: [
+            add_power_modifier(targets[int(sel)], amount)
+            for sel in selected
+            if 0 <= int(sel) < len(targets)
+        ],
+    )
+
+
+def _op10_generic_ko_choice(game_state, player, text, card):
+    if "K.O." not in text:
+        return False
+    opponent = get_opponent(game_state, player)
+    targets = list(opponent.cards_in_play)
+    cost_limit = _op10_generic_cost_limit(text)
+    power_limit = _op10_generic_power_limit(text)
+    if cost_limit is not None:
+        targets = [c for c in targets if (getattr(c, "cost", 0) or 0) <= cost_limit]
+    if power_limit is not None:
+        targets = [c for c in targets if (getattr(c, "power", 0) or 0) + getattr(c, "power_modifier", 0) <= power_limit]
+    if "rested" in text.lower():
+        targets = [c for c in targets if getattr(c, "is_resting", False)]
+    if not targets:
+        return True
+    return create_ko_choice(game_state, player, targets, source_card=card,
+                            prompt=f"{card.name}: K.O. up to 1 matching opponent card",
+                            min_selections=0)
+
+
+def _op10_generic_rest_choice(game_state, player, text, card):
+    if "Rest up to" not in text and "rest up to" not in text:
+        return False
+    opponent = get_opponent(game_state, player)
+    include_leader = "Leader" in text
+    targets = ([opponent.leader] if include_leader and opponent.leader else []) + list(opponent.cards_in_play)
+    cost_limit = _op10_generic_cost_limit(text)
+    if cost_limit is not None:
+        targets = [c for c in targets if c is opponent.leader or (getattr(c, "cost", 0) or 0) <= cost_limit]
+    targets = [c for c in targets if not getattr(c, "is_resting", False)]
+    if not targets:
+        return True
+    return create_rest_choice(game_state, player, targets, source_card=card,
+                              prompt=f"{card.name}: Rest up to 1 matching opponent card",
+                              min_selections=0)
+
+
+def _op10_generic_return_choice(game_state, player, text, card):
+    if "return" not in text.lower() or "hand" not in text.lower():
+        return False
+    opponent = get_opponent(game_state, player)
+    own = "your Characters" in text or "your {Dressrosa}" in text
+    targets = list(player.cards_in_play if own else opponent.cards_in_play)
+    cost_limit = _op10_generic_cost_limit(text)
+    if cost_limit is not None:
+        targets = [c for c in targets if (getattr(c, "cost", 0) or 0) <= cost_limit]
+    if not targets:
+        return True
+    return create_return_to_hand_choice(game_state, player, targets, source_card=card,
+                                        prompt=f"{card.name}: Return up to 1 matching Character to hand",
+                                        optional=True)
+
+
+def _op10_generic_play_choice(game_state, player, text, card):
+    if "Play up to 1" not in text and "play up to 1" not in text:
+        return False
+    source = player.trash if "from your trash" in text.lower() else player.hand
+    cost_limit = _op10_generic_cost_limit(text)
+    targets = [c for c in source if getattr(c, "card_type", "") == "CHARACTER"]
+    if cost_limit is not None:
+        targets = [c for c in targets if (getattr(c, "cost", 0) or 0) <= cost_limit]
+    lowered = text.lower()
+    for type_name in ("dressrosa", "donquixote pirates", "supernovas", "blackbeard pirates", "germa", "odyssey"):
+        if type_name in lowered:
+            targets = [c for c in targets if type_name in (getattr(c, "card_origin", "") or "").lower()]
+            break
+    if not targets:
+        return True
+    if source is player.trash:
+        from ..effect_registry import create_play_from_trash_choice
+        return create_play_from_trash_choice(game_state, player, targets, source_card=card, rest_on_play="rested" in lowered,
+                                             prompt=f"{card.name}: Play up to 1 matching Character from trash")
+    return create_play_from_hand_choice(game_state, player, targets, source_card=card,
+                                        prompt=f"{card.name}: Play up to 1 matching Character from hand")
+
+
+def _op10_generic_add_don(game_state, player, text, card):
+    if "DON!! deck" not in text:
+        return False
+    add_don_from_deck(player, 1, set_active="active" in text.lower())
+    game_state._log(f"{card.name}: added 1 DON!! from DON!! deck")
+    return True
+
+
+def _op10_generic_search(game_state, player, text, card):
+    if "look at" not in text.lower() or "top" not in text.lower():
+        return False
+    lowered = text.lower()
+    look_count = 5 if "5 cards" in lowered else 3
+    add_count = 2 if "add up to 2" in lowered else 1
+    type_filter = None
+    for type_name in ("supernovas", "kid pirates", "dressrosa", "donquixote pirates", "germa", "odyssey"):
+        if type_name in lowered:
+            type_filter = type_name
+            break
+    return search_top_cards(
+        game_state, player, look_count=look_count, add_count=add_count,
+        filter_fn=(lambda c: type_filter in (getattr(c, "card_origin", "") or "").lower()) if type_filter else (lambda c: True),
+        source_card=card,
+        prompt=f"{card.name}: choose matching card(s) to add to hand",
+    )
+
+
+def _op10_generic_effect(game_state, player, card, timing):
+    text = getattr(card, "trigger", "") if timing == "trigger" else getattr(card, "effect", "")
+    text = (text or "").replace("\u2212", "-")
+    if timing == "blocker" or "[Blocker]" in text:
+        card.is_blocker = True
+        card.has_blocker = True
+        if timing == "blocker":
+            return True
+    if timing == "trigger" and "Activate this card" in text:
+        if "[Counter]" in text:
+            return _op10_generic_effect(game_state, player, card, "counter")
+        return _op10_generic_effect(game_state, player, card, "on_play")
+    if timing == "trigger" and "play this card" in text.lower():
+        if "2 or less Life" in text and len(player.life_cards) > 2:
+            return True
+        return _op10_play_this_card_from_trigger(game_state, player, card)
+    acted = False
+    acted = _op10_generic_draw_trash(game_state, player, text, card) or acted
+    for resolver in (
+        _op10_generic_search,
+        _op10_generic_power_choice,
+        _op10_generic_ko_choice,
+        _op10_generic_rest_choice,
+        _op10_generic_return_choice,
+        _op10_generic_play_choice,
+        _op10_generic_add_don,
+    ):
+        result = resolver(game_state, player, text, card)
+        if result:
+            return True
+    if "trash up to 1 card from the top of your opponent's Life" in text:
+        opponent = get_opponent(game_state, player)
+        if opponent.life_cards:
+            opponent.trash.append(opponent.life_cards.pop())
+        return True
+    if "trash this Character" in text and card in player.cards_in_play:
+        player.cards_in_play.remove(card)
+        player.trash.append(card)
+        return True
+    return acted or True
+
+
+_OP10_GENERIC_TIMINGS = {
+    "OP10-009": ['on_play'],
+    "OP10-010": ['on_attack'],
+    "OP10-011": ['blocker'],
+    "OP10-012": ['blocker'],
+    "OP10-015": ['on_play'],
+    "OP10-016": ['activate'],
+    "OP10-017": ['on_play'],
+    "OP10-018": ['counter', 'trigger'],
+    "OP10-019": ['counter', 'on_play'],
+    "OP10-020": ['trigger'],
+    "OP10-021": ['activate'],
+    "OP10-023": ['on_play'],
+    "OP10-025": ['on_play'],
+    "OP10-026": ['activate'],
+    "OP10-027": ['activate'],
+    "OP10-030": ['activate'],
+    "OP10-032": ['continuous'],
+    "OP10-033": ['on_play'],
+    "OP10-034": ['continuous'],
+    "OP10-035": ['on_ko'],
+    "OP10-036": ['continuous'],
+    "OP10-037": ['end_of_turn'],
+    "OP10-038": ['continuous'],
+    "OP10-039": ['trigger'],
+    "OP10-041": ['trigger'],
+    "OP10-044": ['on_play'],
+    "OP10-045": ['on_attack'],
+    "OP10-046": ['on_play'],
+    "OP10-048": ['on_play'],
+    "OP10-049": ['continuous'],
+    "OP10-052": ['on_play', 'blocker'],
+    "OP10-053": ['blocker'],
+    "OP10-055": ['on_ko', 'blocker'],
+    "OP10-056": ['on_play'],
+    "OP10-058": ['on_play'],
+    "OP10-060": ['trigger'],
+    "OP10-061": ['trigger'],
+    "OP10-062": ['on_ko', 'blocker'],
+    "OP10-063": ['on_play'],
+    "OP10-064": ['blocker'],
+    "OP10-066": ['on_opponent_attack'],
+    "OP10-067": ['on_play'],
+    "OP10-069": ['on_attack'],
+    "OP10-070": ['on_play', 'blocker'],
+    "OP10-071": ['on_play', 'on_opponent_attack'],
+    "OP10-072": ['on_play', 'end_of_turn'],
+    "OP10-075": ['activate'],
+    "OP10-077": ['on_block', 'blocker'],
+    "OP10-079": ['on_play', 'trigger'],
+    "OP10-080": ['counter', 'trigger'],
+    "OP10-081": ['on_play'],
+    "OP10-082": ['activate'],
+    "OP10-083": ['activate'],
+    "OP10-086": ['activate'],
+    "OP10-087": ['activate'],
+    "OP10-088": ['activate'],
+    "OP10-090": ['on_ko', 'blocker'],
+    "OP10-091": ['activate'],
+    "OP10-092": ['activate'],
+    "OP10-093": ['activate'],
+    "OP10-094": ['continuous'],
+    "OP10-095": ['on_play'],
+    "OP10-096": ['trigger'],
+    "OP10-097": ['trigger'],
+    "OP10-098": ['on_play', 'trigger'],
+    "OP10-100": ['on_attack', 'trigger'],
+    "OP10-102": ['activate'],
+    "OP10-104": ['continuous'],
+    "OP10-108": ['blocker'],
+    "OP10-109": ['on_ko', 'trigger'],
+    "OP10-110": ['on_play', 'trigger'],
+    "OP10-113": ['continuous', 'trigger'],
+    "OP10-114": ['activate'],
+    "OP10-115": ['counter', 'trigger'],
+    "OP10-116": ['on_play', 'trigger'],
+    "OP10-117": ['trigger'],
+    "OP10-118": ['on_attack'],
+    "OP10-119": ['on_play'],
+}
+
+
+def _make_op10_generic_handler(timing):
+    def _handler(game_state, player, card):
+        return _op10_generic_effect(game_state, player, card, timing)
+    return _handler
+
+
+for _op10_card_id, _op10_timings in _OP10_GENERIC_TIMINGS.items():
+    for _op10_timing in _op10_timings:
+        register_effect(
+            _op10_card_id,
+            _op10_timing,
+            f"Generic OP10 printed-text fallback for {_op10_timing}",
+        )(_make_op10_generic_handler(_op10_timing))

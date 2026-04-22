@@ -12,6 +12,7 @@ venv/
 # Node
 node_modules/
 dist/
+.vite/
 .npm/
 
 # Checkpoints & Models (TOO LARGE FOR GIT)

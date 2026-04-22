@@ -32,16 +32,51 @@ def _has_base_effect_text(card) -> bool:
     return bool(simplified.strip())
 
 
-# --- OP02-023: You May Be a Fool...but I Still Love You ---
-@register_effect("OP02-023", "on_play", "[Main] If Whitebeard Pirates Leader and 3 or less Life, add 1 Life to hand; opponent can't add Life this turn")
-def you_may_be_a_fool_effect(game_state, player, card):
-    """Main Event: If Leader is Whitebeard Pirates and you have 3 or fewer Life cards,
-    add 1 Life to hand. Then, opponent cannot add Life cards to their hand this turn."""
-    if player.leader and 'Whitebeard Pirates' in (player.leader.card_origin or ''):
-        player.cannot_add_life_to_hand_this_turn = True
-        game_state._log(f"{player.name} cannot take Life cards to hand by effects this turn")
-        return True
+def _play_this_card_from_trigger(game_state, player, card):
+    """Move the trigger card to the field if it is not already there."""
+    for zone in (player.hand, player.life_cards, player.trash):
+        if card in zone:
+            zone.remove(card)
+            break
+    if card not in player.cards_in_play:
+        card.is_resting = False
+        setattr(card, "played_turn", game_state.turn_count)
+        player.cards_in_play.append(card)
+        game_state._apply_keywords(card)
+        game_state._log(f"{player.name} played {card.name} from Trigger")
     return True
+
+
+def _opponent_returns_one_don_if_six_or_more(game_state, player, card):
+    """Resolve OP02 purple Event triggers that force the opponent to return a field DON."""
+    opponent = get_opponent(game_state, player)
+    if len(opponent.don_pool) >= 6 and opponent.don_pool:
+        opponent.don_pool.pop()
+        game_state._log(f"{card.name}: {opponent.name} returned 1 DON!! to the DON!! deck")
+    return True
+
+
+# --- OP02-023: You May Be a Fool...but I Still Love You ---
+@register_effect("OP02-023", "on_play", "[Main] If 3 or less Life, cannot add Life to hand by own effects this turn")
+def you_may_be_a_fool_effect(game_state, player, card):
+    """[Main] If you have 3 or less Life, you cannot add Life to hand by your own effects this turn."""
+    if len(player.life_cards) <= 3:
+        player.cannot_add_life_to_hand_this_turn = True
+        game_state._log(f"{player.name} cannot add Life cards to hand using their own effects this turn")
+    return True
+
+
+@register_effect("OP02-023", "trigger", "[Trigger] Up to 1 Leader gains +1000 power this turn")
+def you_may_be_a_fool_trigger(game_state, player, card):
+    targets = [player.leader] if player.leader else []
+    if not targets:
+        return True
+    return create_power_effect_choice(
+        game_state, player, targets, 1000,
+        source_card=card,
+        prompt="[Trigger] Choose up to 1 Leader to give +1000 power",
+        min_selections=0,
+    )
 
 
 # Stale uppercase handlers removed (duplicates of lowercase handlers below)
@@ -89,6 +124,11 @@ def op02_024_moby_dick(game_state, player, card):
         if 'Whitebeard Pirates' in (getattr(char, 'card_origin', '') or ''):
             char.power_modifier = getattr(char, 'power_modifier', 0) + 2000
     return True
+
+
+@register_effect("OP02-024", "trigger", "[Trigger] Play this card")
+def op02_024_moby_dick_trigger(game_state, player, card):
+    return _play_this_card_from_trigger(game_state, player, card)
 
 
 # --- OP02-025: Kin'emon (Leader) ---
@@ -1323,6 +1363,13 @@ def op02_066_impel_down_all_stars(game_state, player, card):
     return False
 
 
+@register_effect("OP02-066", "trigger", "[Trigger] Draw 2 cards")
+def op02_066_impel_down_all_stars_trigger(game_state, player, card):
+    draw_cards(player, 2)
+    game_state._log("Impel Down All Stars Trigger: drew 2 cards")
+    return True
+
+
 # --- OP02-073: Little Sadi ---
 @register_effect("OP02-073", "on_play", "[On Play] Play Jailer Beast from hand")
 def op02_073_sadi(game_state, player, card):
@@ -2101,6 +2148,20 @@ def op02_021_seaquake(game_state, player, card):
                              prompt="Seaquake: K.O. opponent's Character with 3000 power or less")
 
 
+@register_effect("OP02-021", "trigger", "[Trigger] Give up to 1 opponent Leader/Character -3000 power this turn")
+def op02_021_seaquake_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = ([opponent.leader] if opponent.leader else []) + opponent.cards_in_play
+    if not targets:
+        return True
+    return create_power_effect_choice(
+        game_state, player, targets, -3000,
+        source_card=card,
+        prompt="[Trigger] Seaquake: Choose up to 1 opponent Leader/Character to give -3000 power",
+        min_selections=0,
+    )
+
+
 # --- OP02-045: Three Sword Style Oni Giri (Green Counter Event) ---
 @register_effect("OP02-045", "counter", "[Counter] Leader/Char gains +6000; play vanilla cost 3 or less from hand")
 def op02_045_oni_giri(game_state, player, card):
@@ -2127,6 +2188,22 @@ def op02_045_oni_giri(game_state, player, card):
     return True
 
 
+@register_effect("OP02-045", "trigger", "[Trigger] Rest up to 1 opponent Leader/Character cost 5 or less")
+def op02_045_oni_giri_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = []
+    if opponent.leader and not opponent.leader.is_resting:
+        targets.append(opponent.leader)
+    targets.extend(c for c in opponent.cards_in_play if not c.is_resting and (c.cost or 0) <= 5)
+    if not targets:
+        return True
+    return create_rest_choice(
+        game_state, player, targets,
+        source_card=card,
+        prompt="[Trigger] Oni Giri: Rest up to 1 opponent Leader/Character with cost 5 or less",
+    )
+
+
 # --- OP02-046: Diable Jambe Venaison Shoot (Green Main Event) ---
 @register_effect("OP02-046", "on_play", "[Main] K.O. opponent's rested Character with cost 4 or less")
 def op02_046_diable_jambe(game_state, player, card):
@@ -2142,6 +2219,23 @@ def op02_046_diable_jambe(game_state, player, card):
                              prompt="Diable Jambe: K.O. opponent's rested Character with cost 4 or less")
 
 
+@register_effect("OP02-046", "trigger", "[Trigger] Play up to 1 no-base-effect Character cost 4 or less from hand")
+def op02_046_diable_jambe_trigger(game_state, player, card):
+    targets = [
+        c for c in player.hand
+        if getattr(c, 'card_type', '') == 'CHARACTER'
+        and (getattr(c, 'cost', 0) or 0) <= 4
+        and not _has_base_effect_text(c)
+    ]
+    if not targets:
+        return True
+    return create_play_from_hand_choice(
+        game_state, player, targets,
+        source_card=card,
+        prompt="[Trigger] Diable Jambe: Play up to 1 cost 4 or less Character with no base effect from hand",
+    )
+
+
 # --- OP02-047: Paradise Totsuka (Green Main Event) ---
 @register_effect("OP02-047", "on_play", "[Main] Rest opponent's Character with cost 4 or less")
 def op02_047_paradise_totsuka(game_state, player, card):
@@ -2152,6 +2246,20 @@ def op02_047_paradise_totsuka(game_state, player, card):
         return True
     return create_rest_choice(game_state, player, targets, source_card=card,
                                prompt="Paradise Totsuka: Rest opponent's Character with cost 4 or less")
+
+
+@register_effect("OP02-047", "trigger", "[Trigger] K.O. up to 1 opponent rested Character cost 3 or less")
+def op02_047_paradise_totsuka_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play if c.is_resting and (c.cost or 0) <= 3]
+    if not targets:
+        return True
+    return create_ko_choice(
+        game_state, player, targets,
+        source_card=card,
+        prompt="[Trigger] Paradise Totsuka: K.O. up to 1 opponent rested Character cost 3 or less",
+        min_selections=0,
+    )
 
 
 # --- OP02-048: Land of Wano (Green Stage) ---
@@ -2228,6 +2336,11 @@ def op02_067_arabesque(game_state, player, card):
                                         prompt="Arabesque Brick Fist: Return opponent's cost 4 or less Character to hand")
 
 
+@register_effect("OP02-067", "trigger", "[Trigger] Activate this card's Main effect")
+def op02_067_arabesque_trigger(game_state, player, card):
+    return op02_067_arabesque(game_state, player, card)
+
+
 # --- OP02-068: Gum-Gum Rain (Blue Counter Event) ---
 @register_effect("OP02-068", "counter", "[Counter] May trash 1 from hand: Leader/Char gains +3000 power")
 def op02_068_gum_gum_rain(game_state, player, card):
@@ -2275,6 +2388,23 @@ def op02_068_gum_gum_rain(game_state, player, card):
     return True
 
 
+@register_effect("OP02-068", "trigger", "[Trigger] Return up to 1 Character cost 2 or less to owner's hand")
+def op02_068_gum_gum_rain_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [
+        c for c in (player.cards_in_play + opponent.cards_in_play)
+        if (getattr(c, 'cost', 0) or 0) <= 2
+    ]
+    if not targets:
+        return True
+    return create_return_to_hand_choice(
+        game_state, player, targets,
+        source_card=card,
+        prompt="[Trigger] Gum-Gum Rain: Return up to 1 cost 2 or less Character to owner's hand",
+        optional=True,
+    )
+
+
 # --- OP02-069: DEATH WINK (Blue Counter Event) ---
 @register_effect("OP02-069", "counter", "[Counter] Leader/Char gains +6000; draw to 2 cards in hand")
 def op02_069_death_wink(game_state, player, card):
@@ -2289,6 +2419,34 @@ def op02_069_death_wink(game_state, player, card):
     if current < 2:
         draw_cards(player, 2 - current)
         game_state._log(f"DEATH WINK: drew {2 - current} card(s) to reach 2 in hand")
+    return True
+
+
+@register_effect("OP02-069", "trigger", "[Trigger] Return up to 1 Character cost 7 or less to owner's hand")
+def op02_069_death_wink_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [
+        c for c in (player.cards_in_play + opponent.cards_in_play)
+        if (getattr(c, 'cost', 0) or 0) <= 7
+    ]
+    if not targets:
+        return True
+    return create_return_to_hand_choice(
+        game_state, player, targets,
+        source_card=card,
+        prompt="[Trigger] DEATH WINK: Return up to 1 cost 7 or less Character to owner's hand",
+        optional=True,
+    )
+
+
+@register_effect("OP02-075", "trigger", "[Trigger] DON!! -1: Play this card")
+def op02_075_shiki_trigger(game_state, player, card):
+    def _play_shiki():
+        _play_this_card_from_trigger(game_state, player, card)
+
+    result = optional_don_return(game_state, player, 1, source_card=card, post_callback=_play_shiki)
+    if not result:
+        return True
     return True
 
 
@@ -2401,6 +2559,11 @@ def op02_089_judgment_of_hell(game_state, player, card):
     return True  # Can't pay, fizzled
 
 
+@register_effect("OP02-089", "trigger", "[Trigger] If opponent has 6+ DON, opponent returns 1 DON")
+def op02_089_judgment_of_hell_trigger(game_state, player, card):
+    return _opponent_returns_one_don_if_six_or_more(game_state, player, card)
+
+
 # --- OP02-090: Hydra (Purple Main Event) ---
 @register_effect("OP02-090", "on_play", "[Main] DON!! -1: Give up to 1 opponent char -3000 power")
 def op02_090_hydra(game_state, player, card):
@@ -2421,6 +2584,11 @@ def op02_090_hydra(game_state, player, card):
     return True  # Can't pay, fizzled
 
 
+@register_effect("OP02-090", "trigger", "[Trigger] If opponent has 6+ DON, opponent returns 1 DON")
+def op02_090_hydra_trigger(game_state, player, card):
+    return _opponent_returns_one_don_if_six_or_more(game_state, player, card)
+
+
 # --- OP02-091: Venom Road (Purple Main Event) ---
 @register_effect("OP02-091", "on_play", "[Main] Add 1 DON!! from deck and set as active")
 def op02_091_venom_road(game_state, player, card):
@@ -2428,6 +2596,11 @@ def op02_091_venom_road(game_state, player, card):
     add_don_from_deck(player, 1, set_active=True)
     game_state._log("Venom Road: added 1 DON from deck (active)")
     return True
+
+
+@register_effect("OP02-091", "trigger", "[Trigger] If opponent has 6+ DON, opponent returns 1 DON")
+def op02_091_venom_road_trigger(game_state, player, card):
+    return _opponent_returns_one_don_if_six_or_more(game_state, player, card)
 
 
 # --- OP02-117: Ice Age (Black Main Event) ---
@@ -2442,6 +2615,20 @@ def op02_117_ice_age(game_state, player, card):
         game_state, player, targets, -5,
         source_card=card,
         prompt="Ice Age: Choose opponent's Character to give -5 cost this turn"
+    )
+
+
+@register_effect("OP02-117", "trigger", "[Trigger] K.O. up to 1 opponent Character cost 3 or less")
+def op02_117_ice_age_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [c for c in opponent.cards_in_play if (c.cost or 0) <= 3]
+    if not targets:
+        return True
+    return create_ko_choice(
+        game_state, player, targets,
+        source_card=card,
+        prompt="[Trigger] Ice Age: K.O. up to 1 opponent Character cost 3 or less",
+        min_selections=0,
     )
 
 
@@ -2475,6 +2662,37 @@ def op02_118_yasakani(game_state, player, card):
     )
 
 
+@register_effect("OP02-118", "trigger", "[Trigger] K.O. up to 1 opponent Stage cost 3 or less")
+def op02_118_yasakani_trigger(game_state, player, card):
+    opponent = get_opponent(game_state, player)
+    targets = [
+        c for c in opponent.cards_in_play
+        if getattr(c, 'card_type', '') == 'STAGE' and (getattr(c, 'cost', 0) or 0) <= 3
+    ]
+    if not targets:
+        return True
+    snapshot = list(targets)
+
+    def ko_stage_cb(selected):
+        if not selected:
+            return
+        idx = int(selected[0])
+        if 0 <= idx < len(snapshot):
+            target = snapshot[idx]
+            if target in opponent.cards_in_play:
+                opponent.cards_in_play.remove(target)
+                opponent.trash.append(target)
+                game_state._log(f"Yasakani Sacred Jewel Trigger: K.O.'d {target.name}")
+
+    return create_ko_choice(
+        game_state, player, snapshot,
+        source_card=card,
+        prompt="[Trigger] Yasakani Sacred Jewel: K.O. up to 1 opponent Stage cost 3 or less",
+        callback=ko_stage_cb,
+        min_selections=0,
+    )
+
+
 # --- OP02-119: Meteor Volcano (Black Main Event) ---
 @register_effect("OP02-119", "on_play", "[Main] K.O. opponent's Character with cost 1 or less")
 def op02_119_meteor_volcano(game_state, player, card):
@@ -2485,3 +2703,11 @@ def op02_119_meteor_volcano(game_state, player, card):
         return True
     return create_ko_choice(game_state, player, targets, source_card=card,
                              prompt="Meteor Volcano: K.O. opponent's Character with cost 1 or less")
+
+
+@register_effect("OP02-119", "trigger", "[Trigger] Draw 2 cards and trash 1 card from hand")
+def op02_119_meteor_volcano_trigger(game_state, player, card):
+    draw_cards(player, 2)
+    trash_from_hand(player, 1, game_state, card)
+    game_state._log("Meteor Volcano Trigger: drew 2 cards, then trashed 1 card from hand")
+    return True

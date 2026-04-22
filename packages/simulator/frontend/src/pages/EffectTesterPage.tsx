@@ -56,7 +56,7 @@ export function EffectTesterPage() {
     logs, gameOver, winner,
     awaitingResponse, pendingAttack, pendingChoice, error,
     startTestGame, playCard, attachDon, declareAttack,
-    blockerResponse, counterResponse, triggerResponse, activateEffect,
+    leaderEffectResponse, blockerResponse, counterResponse, triggerResponse, activateEffect,
     endTurn, submitEffectChoice, simulateKo, debugSetScenario, resetGame,
   } = usePlaytestSocket()
 
@@ -366,6 +366,28 @@ export function EffectTesterPage() {
                       {pendingAttack.attackerPower} vs {pendingAttack.targetName} ({pendingAttack.targetPower})
                     </span>
                   </div>
+
+                  {/* Leader effect step */}
+                  {awaitingResponse === 'leader_effect' && (
+                    <div className="flex items-center justify-center gap-2 flex-wrap">
+                      <span className="text-purple-300 text-xs font-semibold">Leader Effect:</span>
+                      {pendingAttack.leaderHasEffect ? (
+                        <span className="text-stone-300 text-xs">Defender may use a combat ability.</span>
+                      ) : (
+                        <span className="text-stone-400 text-xs">No leader effect available.</span>
+                      )}
+                      {pendingAttack.leaderHasEffect && (
+                        <button onClick={() => leaderEffectResponse(true)}
+                          className="px-3 py-0.5 bg-purple-700 hover:bg-purple-600 text-white rounded text-xs">
+                          Use Effect
+                        </button>
+                      )}
+                      <button onClick={() => leaderEffectResponse(false)}
+                        className="px-3 py-0.5 bg-stone-600 hover:bg-stone-500 text-white rounded text-xs">
+                        Continue
+                      </button>
+                    </div>
+                  )}
 
                   {/* Blocker step */}
                   {awaitingResponse === 'blocker' && (

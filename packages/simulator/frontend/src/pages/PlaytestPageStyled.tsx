@@ -29,6 +29,7 @@ export function PlaytestPageStyled() {
     playCard,
     attachDon,
     declareAttack,
+    leaderEffectResponse,
     blockerResponse,
     counterResponse,
     activateEffect,
@@ -459,6 +460,50 @@ export function PlaytestPageStyled() {
             >
               Confirm Selection ({selectedChoiceOptions.length}/{pendingChoice.minSelections})
             </motion.button>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Leader Effect Modal */}
+      {awaitingResponse === 'leader_effect' && pendingAttack && (
+        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-stone-900 rounded-xl p-6 max-w-lg w-full mx-4 border-2 border-purple-600 shadow-2xl"
+          >
+            <div className="text-center mb-4">
+              <div className="text-purple-400 text-sm font-medium mb-1">
+                Leader Effect Step
+              </div>
+              <h2 className="text-purple-200 text-xl font-bold">
+                {pendingAttack.attackerName} (Power: {pendingAttack.attackerPower}) attacks {pendingAttack.targetName}!
+              </h2>
+              <div className="text-stone-400 text-sm mt-1">
+                Resolve defender combat ability before blockers.
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              {pendingAttack.leaderHasEffect && (
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => leaderEffectResponse(true)}
+                  className="flex-1 py-3 rounded-lg font-bold text-lg bg-purple-600 hover:bg-purple-500 text-white transition-all"
+                >
+                  Use Effect
+                </motion.button>
+              )}
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => leaderEffectResponse(false)}
+                className="flex-1 py-3 rounded-lg font-bold text-lg bg-stone-700 hover:bg-stone-600 text-stone-200 transition-all"
+              >
+                Continue
+              </motion.button>
+            </div>
           </motion.div>
         </div>
       )}

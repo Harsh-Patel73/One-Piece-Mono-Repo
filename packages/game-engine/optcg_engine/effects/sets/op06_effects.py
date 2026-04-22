@@ -11,7 +11,6 @@ from ..effect_registry import (
     create_add_to_life_choice,
     create_bottom_deck_choice,
     create_cost_reduction_choice,
-    create_don_assignment_choice,
     create_hand_discard_choice,
     create_ko_choice,
     create_mode_choice,
@@ -73,6 +72,66 @@ def _set_rested_don_active(player, count=1):
     return changed
 
 
+def _assign_rested_don_choice(game_state, player, targets, max_don, source_card=None, prompt=None):
+    """Prompt for a Character and an amount, then attach rested DON from the free DON pool."""
+    rested_free = sum(1 for i in range(_free_don_count(player)) if player.don_pool[i] == "rested")
+    max_count = min(max_don, rested_free)
+    if max_count <= 0 or not targets:
+        return False
+
+    import uuid
+    from ...game_engine import PendingChoice
+
+    snapshot = list(targets)
+    options = []
+    for card_idx, target in enumerate(snapshot):
+        for count in range(1, max_count + 1):
+            options.append({
+                "id": f"{card_idx}:{count}",
+                "label": f"{target.name}: give {count} rested DON!!",
+                "card_id": target.id,
+                "card_name": target.name,
+            })
+
+    def do_assign(selected):
+        if not selected:
+            return
+        try:
+            card_idx_str, count_str = selected[0].split(":", 1)
+            card_idx = int(card_idx_str)
+            count = int(count_str)
+        except (ValueError, IndexError):
+            return
+        if not (0 <= card_idx < len(snapshot)):
+            return
+        target = snapshot[card_idx]
+        assigned = 0
+        while assigned < count:
+            free_count = _free_don_count(player)
+            rested_idx = next((i for i in range(free_count) if player.don_pool[i] == "rested"), None)
+            if rested_idx is None:
+                break
+            player.don_pool.pop(rested_idx)
+            player.don_pool.append("rested")
+            target.attached_don = getattr(target, "attached_don", 0) + 1
+            assigned += 1
+        if assigned:
+            game_state._log(f"{target.name} was given {assigned} rested DON!!")
+
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"op06_assign_don_{uuid.uuid4().hex[:8]}",
+        choice_type="select_target",
+        prompt=prompt or f"Choose a Character to give up to {max_count} rested DON!!",
+        options=options,
+        min_selections=0,
+        max_selections=1,
+        source_card_id=source_card.id if source_card else "",
+        source_card_name=source_card.name if source_card else "",
+        callback=do_assign,
+    )
+    return True
+
+
 def _opponent_rest_active_don(opponent, count=1):
     """Rest `count` active DON from opponent's pool."""
     rested = 0
@@ -100,6 +159,103 @@ def _add_battle_power(game_state, target, amount):
     game_state._log(f"{target.name} gets {sign}{amount} power during this battle")
 
 
+def _owner_of_card(game_state, card):
+    for player in (game_state.current_player, game_state.opponent_player):
+        if card in player.cards_in_play:
+            return player
+    return None
+
+
+def _queue_bottom_deck_choice(game_state, player, targets, source_card=None,
+                              prompt=None, min_selections=0, max_selections=1):
+    """Place up to N selected Characters at the bottom of their owners' decks."""
+    if not targets:
+        return False
+
+    import uuid
+    from ...game_engine import PendingChoice
+
+    snapshot = list(targets)
+    options = []
+    for i, target in enumerate(snapshot):
+        owner = _owner_of_card(game_state, target)
+        owner_label = "Your" if owner is player else "Opponent's"
+        options.append({
+            "id": str(i),
+            "label": f"{owner_label} {target.name} (Cost: {getattr(target, 'cost', 0) or 0})",
+            "card_id": target.id,
+            "card_name": target.name,
+        })
+
+    def do_bottom(selected):
+        for idx_str in selected:
+            idx = int(idx_str)
+            if 0 <= idx < len(snapshot):
+                target = snapshot[idx]
+                owner = _owner_of_card(game_state, target)
+                if owner and target in owner.cards_in_play:
+                    owner.cards_in_play.remove(target)
+                    owner.deck.append(target)
+                    game_state._log(f"{target.name} was placed at the bottom of {owner.name}'s deck")
+
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"op06_bottom_multi_{uuid.uuid4().hex[:8]}",
+        choice_type="select_cards",
+        prompt=prompt or "Choose Character(s) to place at the bottom of the owner's deck",
+        options=options,
+        min_selections=min_selections,
+        max_selections=min(max_selections, len(snapshot)),
+        source_card_id=source_card.id if source_card else "",
+        source_card_name=source_card.name if source_card else "",
+        callback=do_bottom,
+    )
+    return True
+
+
+def _trash_from_hand_choice(game_state, player, count, source_card=None, prompt=None, optional=False,
+                            on_complete=None):
+    if count <= 0:
+        if on_complete:
+            on_complete([])
+        return True
+    if len(player.hand) < count:
+        return False
+
+    import uuid
+    from ...game_engine import PendingChoice
+
+    snapshot = list(player.hand)
+    options = [{"id": str(i), "label": f"{c.name} (Cost: {getattr(c, 'cost', 0) or 0})",
+                "card_id": c.id, "card_name": c.name} for i, c in enumerate(snapshot)]
+
+    def do_trash(selected):
+        trashed = []
+        for idx_str in selected:
+            idx = int(idx_str)
+            if 0 <= idx < len(snapshot):
+                chosen = snapshot[idx]
+                if chosen in player.hand:
+                    player.hand.remove(chosen)
+                    player.trash.append(chosen)
+                    trashed.append(chosen)
+                    game_state._log(f"{player.name} trashed {chosen.name}")
+        if on_complete:
+            on_complete(trashed)
+
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"op06_trash_hand_{uuid.uuid4().hex[:8]}",
+        choice_type="select_cards",
+        prompt=prompt or f"Choose {count} card(s) from hand to trash",
+        options=options,
+        min_selections=0 if optional else count,
+        max_selections=count,
+        source_card_id=source_card.id if source_card else "",
+        source_card_name=source_card.name if source_card else "",
+        callback=do_trash,
+    )
+    return True
+
+
 # =============================================================================
 # LEADER EFFECTS
 # =============================================================================
@@ -119,12 +275,16 @@ def op06_001_uta_leader(game_state, player, card):
 
     def after_film_trash(selected):
         idx = int(selected[0]) if selected else -1
+        trashed = False
         if 0 <= idx < len(snap):
             chosen = snap[idx]
             if chosen in player.hand:
                 player.hand.remove(chosen)
                 player.trash.append(chosen)
+                trashed = True
                 game_state._log(f"{player.name} trashed {chosen.name} (FILM)")
+        if not trashed:
+            return
         # Add 1 DON from deck rested
         add_don_from_deck(player, 1, set_active=False)
         # Now prompt -2000 target choice
@@ -139,8 +299,9 @@ def op06_001_uta_leader(game_state, player, card):
 
     return create_own_character_choice(
         game_state, player, snap, source_card=card,
-        prompt="Choose a FILM card from hand to trash",
+        prompt="You may choose a FILM card from hand to trash",
         callback=after_film_trash,
+        optional=True,
     )
 
 
@@ -162,6 +323,7 @@ def op06_020_hody_leader(game_state, player, card):
         modes.append({"id": "don", "label": "Rest opponent's DON!!", "description": "Rest 1 active DON from opponent's pool"})
     if char_targets:
         modes.append({"id": "char", "label": "Rest cost 3 or less Character", "description": f"{len(char_targets)} valid targets"})
+    modes.append({"id": "none", "label": "Do not rest a DON!! or Character", "description": "Choose zero targets"})
 
     if not modes:
         return True
@@ -176,7 +338,8 @@ def op06_020_hody_leader(game_state, player, card):
             targets = [c for c in opp.cards_in_play if (getattr(c, "cost", 0) or 0) <= 3]
             if targets:
                 create_rest_choice(game_state, player, targets, source_card=card,
-                                   prompt="Choose opponent's cost 3 or less Character to rest")
+                                   prompt="Choose up to 1 opponent's cost 3 or less Character to rest",
+                                   min_selections=0)
 
     return create_mode_choice(game_state, player, modes, source_card=card, callback=callback,
                               prompt="Choose Hody Jones Leader effect")
@@ -211,12 +374,14 @@ def op06_021_perona_leader(game_state, player, card):
             targets = [c for c in opp.cards_in_play if not c.is_resting and (getattr(c, "cost", 0) or 0) <= 4]
             if targets:
                 create_rest_choice(game_state, player, targets, source_card=card,
-                                   prompt="Choose opponent's cost 4 or less Character to rest")
+                                   prompt="Choose up to 1 opponent's cost 4 or less Character to rest",
+                                   min_selections=0)
         elif mode == "cost":
             targets = list(opp.cards_in_play)
             if targets:
                 create_cost_reduction_choice(game_state, player, targets, -1, source_card=card,
-                                             prompt="Choose opponent's Character to give −1 cost")
+                                             prompt="Choose up to 1 opponent's Character to give -1 cost",
+                                             min_selections=0)
 
     return create_mode_choice(game_state, player, modes, source_card=card, callback=callback,
                               prompt="Choose Perona Leader effect")
@@ -225,6 +390,7 @@ def op06_021_perona_leader(game_state, player, card):
 # --- OP06-022: Yamato (Leader) ---
 @register_effect("OP06-022", "continuous", "[Double Attack]")
 def op06_022_yamato_continuous(game_state, player, card):
+    card.has_doubleattack = True
     card.has_double_attack = True
     return True
 
@@ -241,8 +407,8 @@ def op06_022_yamato_activate(game_state, player, card):
     if rested_free <= 0 or not player.cards_in_play:
         return False
     card.op06_022_used = True
-    return create_don_assignment_choice(
-        game_state, player, player.cards_in_play,
+    return _assign_rested_don_choice(
+        game_state, player, player.cards_in_play, 2,
         source_card=card,
         prompt="Choose your Character to give up to 2 rested DON!!"
     )
@@ -272,23 +438,28 @@ def op06_080_moria_leader(game_state, player, card):
         return False
 
     _rest_active_don(player, 2)
-    trash_from_hand(player, 1, game_state, card)
 
-    # Trash 2 from top of deck
-    for _ in range(min(2, len(player.deck))):
-        player.trash.append(player.deck.pop(0))
+    def after_discard(trashed):
+        if not trashed:
+            return
+        for _ in range(min(2, len(player.deck))):
+            player.trash.append(player.deck.pop(0))
 
-    # Play up to 1 Thriller Bark Pirates cost 4 or less from trash
-    tb_targets = [c for c in player.trash
-                  if "Thriller Bark Pirates" in (getattr(c, "card_origin", "") or "")
-                  and getattr(c, "card_type", "") == "CHARACTER"
-                  and (getattr(c, "cost", 0) or 0) <= 4]
-    if tb_targets:
-        return create_play_from_trash_choice(
-            game_state, player, tb_targets, source_card=card, rest_on_play=False,
-            prompt="Choose a Thriller Bark Pirates Character with cost 4 or less from trash to play"
-        )
-    return True
+        tb_targets = [c for c in player.trash
+                      if "Thriller Bark Pirates" in (getattr(c, "card_origin", "") or "")
+                      and getattr(c, "card_type", "") == "CHARACTER"
+                      and (getattr(c, "cost", 0) or 0) <= 4]
+        if tb_targets:
+            create_play_from_trash_choice(
+                game_state, player, tb_targets, source_card=card, rest_on_play=False,
+                prompt="Choose a Thriller Bark Pirates Character with cost 4 or less from trash to play"
+            )
+
+    return _trash_from_hand_choice(
+        game_state, player, 1, source_card=card,
+        prompt="Trash 1 card from hand for Gecko Moria Leader",
+        on_complete=after_discard,
+    )
 
 
 # =============================================================================
@@ -337,9 +508,48 @@ def op06_006_saga(game_state, player, card):
     if getattr(card, "attached_don", 0) < 1:
         return False
     card.power_modifier = getattr(card, "power_modifier", 0) + 1000
+    card._sticky_power_modifier = getattr(card, "_sticky_power_modifier", 0) + 1000
     card.power_modifier_expires_on_turn = game_state.turn_count + 1
+    card._sticky_power_modifier_expires_on_turn = game_state.turn_count + 1
     # Mark to trash a FILM Character at end of turn
     player.trash_film_character_eot = True
+    return True
+
+
+@register_effect("OP06-006", "end_of_turn", "Trash 1 FILM Character from hand at end of turn")
+def op06_006_saga_eot(game_state, player, card):
+    """End of Turn: If effect was used, trash 1 FILM Character from hand (mandatory if available)."""
+    if not getattr(player, "trash_film_character_eot", False):
+        return False
+    player.trash_film_character_eot = False
+    film_chars = [c for c in player.hand
+                  if "FILM" in (getattr(c, "card_origin", "") or "")
+                  and getattr(c, "card_type", "") == "CHARACTER"]
+    if not film_chars:
+        return True  # No FILM Characters in hand — skip
+    import uuid
+    from ...game_engine import PendingChoice
+    snap = list(film_chars)
+    opts = [{"id": str(i), "label": c.name, "card_id": c.id, "card_name": c.name}
+            for i, c in enumerate(snap)]
+
+    def do_trash(selected):
+        if not selected:
+            return
+        idx = int(selected[0])
+        if 0 <= idx < len(snap) and snap[idx] in player.hand:
+            player.hand.remove(snap[idx])
+            player.trash.append(snap[idx])
+            game_state._log(f"{player.name} trashed {snap[idx].name} (Saga end of turn)")
+
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"op06_006_eot_{uuid.uuid4().hex[:8]}",
+        choice_type="select_target",
+        prompt="[Saga] You must trash 1 FILM type Character from your hand",
+        options=opts, min_selections=1, max_selections=1,
+        source_card_id=card.id, source_card_name=card.name,
+        callback=do_trash,
+    )
     return True
 
 
@@ -449,7 +659,12 @@ def op06_014_ratchet(game_state, player, card):
     film_cards = [c for c in player.hand if "FILM" in (getattr(c, "card_origin", "") or "")]
     if not film_cards:
         return False
+    import uuid
+    from ...game_engine import PendingChoice
+
     snap = list(film_cards)
+    options = [{"id": str(i), "label": f"{c.name} (Cost: {getattr(c, 'cost', 0) or 0})",
+                "card_id": c.id, "card_name": c.name} for i, c in enumerate(snap)]
 
     def after_trash(selected):
         count = 0
@@ -460,20 +675,23 @@ def op06_014_ratchet(game_state, player, card):
                 player.trash.append(snap[idx])
                 count += 1
         if count > 0:
-            targets = _own_leader_and_chars(player)
-            if targets:
-                create_power_effect_choice(
-                    game_state, player, targets, count * 1000,
-                    source_card=card,
-                    prompt=f"Choose your Leader or Character to gain +{count * 1000} power during this battle",
-                )
+            attack = getattr(game_state, "pending_attack", None) or {}
+            attacked = attack.get("current_target")
+            if attacked in _own_leader_and_chars(player):
+                _add_battle_power(game_state, attacked, count * 1000)
 
-    return create_own_character_choice(
-        game_state, player, snap, source_card=card,
-        prompt="Choose FILM cards from hand to trash (each gives +1000 power during this battle)",
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"op06_014_{uuid.uuid4().hex[:8]}",
+        choice_type="select_cards",
+        prompt="Choose any number of FILM cards from hand to trash",
+        options=options,
+        min_selections=0,
+        max_selections=len(options),
+        source_card_id=card.id,
+        source_card_name=card.name,
         callback=after_trash,
-        optional=True,
     )
+    return True
 
 
 # --- OP06-015: Lily Carnation ---
@@ -533,12 +751,22 @@ def op06_016_raise_max(game_state, player, card):
 def op06_023_arlong_play(game_state, player, card):
     if not player.hand:
         return True
-    trash_from_hand(player, 1, game_state, card)
-    opponent = get_opponent(game_state, player)
-    if opponent.leader and opponent.leader.is_resting:
-        opponent.leader.cannot_attack = True
-        game_state._log(f"{opponent.leader.name} cannot attack until end of next turn")
-    return True
+
+    def after_discard(trashed):
+        if not trashed:
+            return
+        opponent = get_opponent(game_state, player)
+        if opponent.leader and opponent.leader.is_resting:
+            opponent.leader.cannot_attack = True
+            opponent.leader.cannot_attack_until_turn = game_state.turn_count + 1
+            game_state._log(f"{opponent.leader.name} cannot attack until end of next turn")
+
+    return _trash_from_hand_choice(
+        game_state, player, 1, source_card=card,
+        prompt="You may trash 1 card from hand for Arlong",
+        optional=True,
+        on_complete=after_discard,
+    )
 
 
 @register_effect("OP06-023", "trigger", "[Trigger] Rest opponent's cost 4 or less Character")
@@ -559,14 +787,36 @@ def op06_024_ikaros_much(game_state, player, card):
     targets = [c for c in player.hand
                if "Fish-Man" in (getattr(c, "card_origin", "") or "")
                and (getattr(c, "cost", 0) or 0) <= 4]
-    if player.life_cards:
-        life_card = player.life_cards.pop()
-        player.hand.append(life_card)
+
+    def add_life_to_hand():
+        if player.life_cards:
+            life_card = player.life_cards.pop()
+            player.hand.append(life_card)
+            game_state._log(f"{player.name} added 1 Life card to hand")
+
+    def play_then_add_life(selected):
+        if selected:
+            idx = int(selected[0])
+            if 0 <= idx < len(targets):
+                target = targets[idx]
+                if target in player.hand:
+                    player.hand.remove(target)
+                    target.is_resting = False
+                    setattr(target, "played_turn", game_state.turn_count)
+                    player.cards_in_play.append(target)
+                    game_state._apply_keywords(target)
+                    game_state._log(f"{player.name} played {target.name} from hand")
+                    if target.effect and "[On Play]" in target.effect:
+                        game_state._trigger_on_play_effects(target)
+        add_life_to_hand()
+
     if targets:
         return create_play_from_hand_choice(
             game_state, player, targets, source_card=card,
-            prompt="Choose a Fish-Man type Character with cost 4 or less from hand to play"
+            prompt="Choose a Fish-Man type Character with cost 4 or less from hand to play",
+            callback=play_then_add_life,
         )
+    add_life_to_hand()
     return True
 
 
@@ -588,7 +838,8 @@ def op06_025_camie(game_state, player, card):
 def op06_026_koushirou(game_state, player, card):
     slash_targets = [c for c in player.cards_in_play
                      if getattr(c, "attribute", "") == "Slash" and (getattr(c, "cost", 0) or 0) <= 4]
-    player.cannot_attack_leader_on_play_turn = True
+    player.cannot_attack_opponent_leader = True
+    player.cannot_attack_opponent_leader_until_turn = game_state.turn_count
     if slash_targets:
         return create_set_active_choice(
             game_state, player, slash_targets, source_card=card,
@@ -615,10 +866,44 @@ def op06_028_zeo(game_state, player, card):
         return False
     if not (player.leader and "New Fish-Man Pirates" in (getattr(player.leader, "card_origin", "") or "")):
         return False
-    _set_rested_don_active(player, 1)
-    card.power_modifier = getattr(card, "power_modifier", 0) + 1000
-    if player.life_cards:
-        player.hand.append(player.life_cards.pop())
+    import uuid
+    from ...game_engine import PendingChoice
+
+    free_count = _free_don_count(player)
+    rested_indices = [idx for idx in range(free_count) if player.don_pool[idx] == "rested"]
+    if not rested_indices:
+        return True  # No rested DON to set active
+
+    def after_don_choice(selected):
+        if not selected:
+            return
+        try:
+            don_idx = int(selected[0])
+        except (TypeError, ValueError):
+            return
+        if 0 <= don_idx < len(player.don_pool) and player.don_pool[don_idx] == "rested":
+            player.don_pool[don_idx] = "active"
+        else:
+            return
+        card.power_modifier = getattr(card, "power_modifier", 0) + 1000
+        card._sticky_power_modifier = getattr(card, "_sticky_power_modifier", 0) + 1000
+        card.power_modifier_expires_on_turn = game_state.turn_count
+        card._sticky_power_modifier_expires_on_turn = game_state.turn_count
+        if player.life_cards:
+            player.hand.append(player.life_cards.pop())
+        game_state._log(f"{card.name}: Set DON!! #{don_idx + 1} active, +1000 power, added 1 Life to hand")
+
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"op06_028_{uuid.uuid4().hex[:8]}",
+        choice_type="select_target",
+        prompt="Choose a rested DON!! to set active",
+        options=[{"id": str(idx), "label": f"DON!! #{idx + 1} (rested)"} for idx in rested_indices],
+        min_selections=1,
+        max_selections=1,
+        source_card_id=card.id,
+        source_card_name=card.name,
+        callback=after_don_choice,
+    )
     return True
 
 
@@ -631,9 +916,11 @@ def op06_029_daruma(game_state, player, card):
         return False
     if not (player.leader and "New Fish-Man Pirates" in (getattr(player.leader, "card_origin", "") or "")):
         return False
-    card.is_resting = False
-    card.has_attacked = False
+    card._set_active_after_battle_resolution = True
     card.power_modifier = getattr(card, "power_modifier", 0) + 1000
+    card._sticky_power_modifier = getattr(card, "_sticky_power_modifier", 0) + 1000
+    card.power_modifier_expires_on_turn = game_state.turn_count
+    card._sticky_power_modifier_expires_on_turn = game_state.turn_count
     if player.life_cards:
         player.hand.append(player.life_cards.pop())
     card.op06_029_used = True
@@ -647,7 +934,9 @@ def op06_030_dosun(game_state, player, card):
         return False
     card.cannot_be_ko_in_battle = True
     card.power_modifier = getattr(card, "power_modifier", 0) + 2000
+    card._sticky_power_modifier = getattr(card, "_sticky_power_modifier", 0) + 2000
     card.power_modifier_expires_on_turn = game_state.turn_count + 1
+    card._sticky_power_modifier_expires_on_turn = game_state.turn_count + 1
     if player.life_cards:
         player.hand.append(player.life_cards.pop())
     return True
@@ -678,26 +967,58 @@ def op06_032_hammond(game_state, player, card):
 # --- OP06-033: Vander Decken IX ---
 @register_effect("OP06-033", "on_play", "[On Play] Trash Fish-Man from hand or Ark Noah from hand/field: K.O. opponent's rested Character")
 def op06_033_vander_decken(game_state, player, card):
-    trashed = False
-    for c in list(player.hand):
+    cost_cards = []
+    for c in player.hand:
         if "Fish-Man" in (getattr(c, "card_origin", "") or "") or getattr(c, "name", "") == "The Ark Noah":
-            player.hand.remove(c)
-            player.trash.append(c)
-            trashed = True
-            break
-    if not trashed:
-        for c in list(player.cards_in_play):
-            if getattr(c, "name", "") == "The Ark Noah":
-                player.cards_in_play.remove(c)
-                player.trash.append(c)
-                trashed = True
-                break
-    if trashed:
+            cost_cards.append(("hand", c))
+    for c in player.cards_in_play:
+        if getattr(c, "name", "") == "The Ark Noah":
+            cost_cards.append(("field", c))
+    if not cost_cards:
+        return True
+
+    snap = list(cost_cards)
+    opts = [
+        {"id": str(i), "label": f"{zone}: {c.name}", "card_id": c.id, "card_name": c.name}
+        for i, (zone, c) in enumerate(snap)
+    ]
+
+    def after_cost(selected):
+        if not selected:
+            return
+        idx = int(selected[0])
+        if not (0 <= idx < len(snap)):
+            return
+        zone, cost_card = snap[idx]
+        if zone == "hand" and cost_card in player.hand:
+            player.hand.remove(cost_card)
+            player.trash.append(cost_card)
+        elif zone == "field" and cost_card in player.cards_in_play:
+            player.cards_in_play.remove(cost_card)
+            player.trash.append(cost_card)
+        else:
+            return
+        game_state._log(f"{player.name} trashed {cost_card.name} for Vander Decken IX")
         opponent = get_opponent(game_state, player)
         rested = [c for c in opponent.cards_in_play if c.is_resting]
         if rested:
-            return create_ko_choice(game_state, player, rested, source_card=card,
-                                    prompt="Choose opponent's rested Character to K.O.")
+            create_ko_choice(game_state, player, rested, source_card=card,
+                             prompt="Choose up to 1 opponent's rested Character to K.O.",
+                             min_selections=0)
+
+    from ...game_engine import PendingChoice
+    import uuid
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"op06_033_{uuid.uuid4().hex[:6]}",
+        choice_type="select_cards",
+        prompt="You may trash 1 Fish-Man from hand or The Ark Noah from hand/field",
+        options=opts,
+        min_selections=0,
+        max_selections=1,
+        source_card_id=card.id,
+        source_card_name=card.name,
+        callback=after_cost,
+    )
     return True
 
 
@@ -708,6 +1029,9 @@ def op06_034_hyouzou(game_state, player, card):
         return False
     card.op06_034_used = True
     card.power_modifier = getattr(card, "power_modifier", 0) + 1000
+    card._sticky_power_modifier = getattr(card, "_sticky_power_modifier", 0) + 1000
+    card.power_modifier_expires_on_turn = game_state.turn_count
+    card._sticky_power_modifier_expires_on_turn = game_state.turn_count
     if player.life_cards:
         player.hand.append(player.life_cards.pop())
     opponent = get_opponent(game_state, player)
@@ -808,23 +1132,56 @@ def op06_043_aramaki_activate(game_state, player, card):
         return False
     if not player.hand:
         return False
-    trash_from_hand(player, 1, game_state, card)
-    card.power_modifier = getattr(card, "power_modifier", 0) + 3000
+
+    def after_discard(trashed):
+        if not trashed:
+            return
+        opponent = get_opponent(game_state, player)
+        targets = [c for c in player.cards_in_play + opponent.cards_in_play
+                   if c is not card and (getattr(c, "cost", 0) or 0) <= 2]
+
+        def after_bottom(selected):
+            if not selected:
+                return
+            idx = int(selected[0])
+            if not (0 <= idx < len(targets)):
+                return
+            target = targets[idx]
+            owner = _owner_of_card(game_state, target)
+            if owner and target in owner.cards_in_play:
+                owner.cards_in_play.remove(target)
+                owner.deck.append(target)
+                game_state._log(f"{target.name} was placed at the bottom of {owner.name}'s deck")
+            else:
+                return
+            card.power_modifier = getattr(card, "power_modifier", 0) + 3000
+            card._sticky_power_modifier = getattr(card, "_sticky_power_modifier", 0) + 3000
+            card.power_modifier_expires_on_turn = game_state.turn_count
+            card._sticky_power_modifier_expires_on_turn = game_state.turn_count
+            game_state._log(f"{card.name} gets +3000 power this turn")
+
+        if targets:
+            create_bottom_deck_choice(game_state, player, targets, source_card=card,
+                                      prompt="Choose Character with cost 2 or less to place at bottom of deck",
+                                      callback=after_bottom)
+
     card.op06_043_used = True
-    opponent = get_opponent(game_state, player)
-    targets = [c for c in opponent.cards_in_play if (getattr(c, "cost", 0) or 0) <= 2]
-    if targets:
-        return create_bottom_deck_choice(game_state, player, targets, source_card=card,
-                                         prompt="Choose opponent's cost 2 or less Character to place at bottom of deck")
-    return True
+    return _trash_from_hand_choice(
+        game_state, player, 1, source_card=card,
+        prompt="You may trash 1 card from hand for Aramaki",
+        optional=True,
+        on_complete=after_discard,
+    )
 
 
 # --- OP06-044: Gion ---
-@register_effect("OP06-044", "continuous", "[Your Turn] [Once Per Turn] When opponent activates Event, they place 1 card from hand at bottom of deck")
+@register_effect("OP06-044", "on_opponent_event", "[Your Turn] When opponent activates Event, they place 1 card from hand at bottom of deck")
 def op06_044_gion(game_state, player, card):
-    """Continuous: When opponent activates an Event, they must place 1 card from hand at bottom of deck."""
-    card.gion_effect_active = True
-    return True
+    """On Opponent Event: They must place 1 card from hand at bottom of deck."""
+    event_player = get_opponent(game_state, player)  # The one who played the event
+    if not event_player.hand:
+        return True
+    return _queue_bottom_from_hand(game_state, event_player, list(event_player.hand), 1, source_card=card)
 
 
 # --- OP06-045: Kuzan ---
@@ -877,10 +1234,12 @@ def _queue_bottom_from_hand(game_state, player, cards, count, source_card=None):
 @register_effect("OP06-046", "on_play", "[On Play] Place opponent's cost 2 or less Character at bottom of deck")
 def op06_046_sakazuki(game_state, player, card):
     opponent = get_opponent(game_state, player)
-    targets = [c for c in opponent.cards_in_play if (getattr(c, "cost", 0) or 0) <= 2]
+    targets = [c for c in player.cards_in_play + opponent.cards_in_play
+               if c is not card and (getattr(c, "cost", 0) or 0) <= 2]
     if targets:
         return create_bottom_deck_choice(game_state, player, targets, source_card=card,
-                                         prompt="Choose opponent's cost 2 or less Character to place at bottom of deck")
+                                         prompt="Choose Character with cost 2 or less to place at bottom of deck",
+                                         min_selections=0)
     return True
 
 
@@ -896,12 +1255,35 @@ def op06_047_charlotte_pudding(game_state, player, card):
 
 
 # --- OP06-048: Zeff ---
-@register_effect("OP06-048", "continuous", "[Your Turn] When opponent activates Blocker or Event, if East Blue Leader, trash 4 from deck")
+@register_effect("OP06-048", "on_opponent_event", "[Your Turn] When opponent activates Event, if East Blue Leader, may trash 4 from deck")
 def op06_048_zeff(game_state, player, card):
-    """Continuous: Mark card as active for Zeff triggered effect."""
-    if player.leader and "East Blue" in (getattr(player.leader, "card_origin", "") or ""):
-        card.zeff_effect_active = True
-    return True
+    """On Opponent Event: If East Blue leader, may trash 4 cards from top of deck."""
+    if not (player.leader and "East Blue" in (getattr(player.leader, "card_origin", "") or "")):
+        return False
+    if len(player.deck) < 4:
+        return True
+
+    modes = [
+        {"id": "yes", "label": "Trash 4 cards from top of your deck"},
+        {"id": "no", "label": "Do not use this effect"},
+    ]
+
+    def after_choice(selected):
+        if not selected or selected[0] != "yes":
+            return
+        trashed = []
+        for _ in range(4):
+            if player.deck:
+                trashed.append(player.deck.pop(0))
+        for c in trashed:
+            player.trash.append(c)
+        game_state._log(f"{player.name} trashed {len(trashed)} cards from top of deck (Zeff)")
+
+    return create_mode_choice(
+        game_state, player, modes, source_card=card,
+        callback=after_choice,
+        prompt="[Zeff] Opponent used an Event — trash 4 cards from top of deck?",
+    )
 
 
 # --- OP06-049: Sengoku ---
@@ -925,14 +1307,24 @@ def op06_050_tashigi(game_state, player, card):
 def op06_051_tsuru(game_state, player, card):
     if len(player.hand) < 2:
         return True
-    trash_from_hand(player, 2, game_state, card)
-    opponent = get_opponent(game_state, player)
-    if opponent.cards_in_play:
-        return create_return_to_hand_choice(
-            game_state, player, list(opponent.cards_in_play), source_card=card,
-            prompt="Choose opponent's Character to return to their hand"
-        )
-    return True
+
+    def after_discard(trashed):
+        if len(trashed) < 2:
+            return
+        opponent = get_opponent(game_state, player)
+        if opponent.cards_in_play:
+            create_return_to_hand_choice(
+                game_state, player, list(opponent.cards_in_play), source_card=card,
+                prompt="Choose up to 1 opponent's Character to return to their hand",
+                optional=True,
+            )
+
+    return _trash_from_hand_choice(
+        game_state, player, 2, source_card=card,
+        prompt="You may trash 2 cards from hand for Tsuru",
+        optional=True,
+        on_complete=after_discard,
+    )
 
 
 # --- OP06-052: Tokikake ---
@@ -947,18 +1339,22 @@ def op06_052_tokikake(game_state, player, card):
 @register_effect("OP06-053", "on_ko", "[On K.O.] Place opponent's cost 2 or less at bottom of deck")
 def op06_053_jaguar_saul(game_state, player, card):
     opponent = get_opponent(game_state, player)
-    targets = [c for c in opponent.cards_in_play if (getattr(c, "cost", 0) or 0) <= 2]
+    targets = [c for c in player.cards_in_play + opponent.cards_in_play
+               if (getattr(c, "cost", 0) or 0) <= 2]
     if targets:
         return create_bottom_deck_choice(game_state, player, targets, source_card=card,
-                                         prompt="Choose opponent's cost 2 or less Character to place at bottom of deck")
+                                         prompt="Choose Character with cost 2 or less to place at bottom of deck",
+                                         min_selections=0)
     return True
 
 
 # --- OP06-054: Borsalino ---
 @register_effect("OP06-054", "continuous", "If 5 or less in hand, gains [Blocker]")
 def op06_054_borsalino(game_state, player, card):
-    if len(player.hand) <= 5:
-        card.has_blocker = True
+    card._continuous_blocker = True  # Reset on each recalc cycle
+    has_blocker = len(player.hand) <= 5
+    card.has_blocker = has_blocker
+    card.is_blocker = has_blocker
     return True
 
 
@@ -981,18 +1377,38 @@ def op06_055_garp(game_state, player, card):
 @register_effect("OP06-017", "on_play", "[Main]/[Counter] Add 1 Life to hand: Leader/Character +3000 power")
 def op06_017_meteor_love(game_state, player, card):
     targets = _own_leader_and_chars(player)
-    if not targets:
+    if not targets or not player.life_cards:
         return True
-    if player.life_cards:
-        taken = player.life_cards.pop(0)
-        player.hand.append(taken)
-        game_state._log(f"{player.name} added a Life card to hand")
-    return create_power_effect_choice(
-        game_state, player, targets, 3000,
-        source_card=card,
-        prompt="Choose your Leader or Character to give +3000 power",
-        min_selections=0,
+
+    modes = [
+        {"id": "pay", "label": "Add 1 Life card to hand"},
+        {"id": "skip", "label": "Do not use this effect"},
+    ]
+
+    def after_choice(selected):
+        if not selected or selected[0] != "pay":
+            return
+        if player.life_cards:
+            taken = player.life_cards.pop(0)
+            player.hand.append(taken)
+            game_state._log(f"{player.name} added a Life card to hand")
+        create_power_effect_choice(
+            game_state, player, targets, 3000,
+            source_card=card,
+            prompt="Choose up to 1 of your Leader or Character to give +3000 power",
+            min_selections=0,
+        )
+
+    return create_mode_choice(
+        game_state, player, modes, source_card=card,
+        callback=after_choice,
+        prompt="You may add 1 Life card to hand for Meteor-Strike of Love",
     )
+
+
+@register_effect("OP06-017", "counter", "[Counter] Add 1 Life to hand: Leader/Character +3000 power")
+def op06_017_meteor_love_counter(game_state, player, card):
+    return op06_017_meteor_love(game_state, player, card)
 
 
 # --- OP06-018: Gum-Gum King Kong Gatling ---
@@ -1057,11 +1473,20 @@ def op06_038_trichiliocosm(game_state, player, card):
     targets = _own_leader_and_chars(player)
     if not targets:
         return True
+    snap = list(targets)
+
+    def apply_battle_power(selected):
+        for sel in selected:
+            idx = int(sel)
+            if 0 <= idx < len(snap):
+                _add_battle_power(game_state, snap[idx], amount)
+
     return create_power_effect_choice(
         game_state, player, targets, amount,
         source_card=card,
         prompt=f"Choose your Leader or Character to give +{amount} power during this battle",
         min_selections=0,
+        callback=apply_battle_power,
     )
 
 
@@ -1145,8 +1570,10 @@ def op06_041_ark_noah_play(game_state, player, card):
 def op06_041_ark_noah_trigger(game_state, player, card):
     card.is_resting = False
     player.cards_in_play.append(card)
+    game_state._apply_keywords(card)
     game_state._log(f"{player.name} played {card.name} from Trigger")
-    return True
+    # Fire on-play effect: rest all opponent characters
+    return op06_041_ark_noah_play(game_state, player, card)
 
 
 # =============================================================================
@@ -1166,30 +1593,34 @@ def op06_056_murakumo(game_state, player, card):
     picked = []
 
     def second_pick():
+        from ...game_engine import PendingChoice
+        import uuid
         remaining = [c for c in get_opponent(game_state, player).cards_in_play
                      if (getattr(c, "cost", 0) or 0) <= 1 and c not in picked]
-        if remaining:
-            def do_second(selected2):
-                if selected2:
-                    idx2 = int(selected2[0])
-                    if 0 <= idx2 < len(remaining):
-                        t = remaining[idx2]
-                        if t in get_opponent(game_state, player).cards_in_play:
-                            get_opponent(game_state, player).cards_in_play.remove(t)
-                            get_opponent(game_state, player).deck.append(t)
-                            game_state._log(f"{t.name} placed at bottom of deck")
-            from ..game_engine import PendingChoice
-            import uuid
-            opts = [{"id": str(i), "label": f"{c.name} (Cost:{c.cost or 0})",
-                     "card_id": c.id, "card_name": c.name} for i, c in enumerate(remaining)]
-            game_state.pending_choice = PendingChoice(
-                choice_id=f"op06_056b_{uuid.uuid4().hex[:6]}",
-                choice_type="select_cards",
-                prompt="Choose opponent cost 1 or less Character to place at bottom of deck",
-                options=opts, min_selections=0, max_selections=1,
-                source_card_id=card.id, source_card_name=card.name,
-                callback=do_second,
-            )
+        if not remaining:
+            return
+
+        def do_second(selected2):
+            if selected2:
+                idx2 = int(selected2[0])
+                if 0 <= idx2 < len(remaining):
+                    t = remaining[idx2]
+                    opp = get_opponent(game_state, player)
+                    if t in opp.cards_in_play:
+                        opp.cards_in_play.remove(t)
+                        opp.deck.append(t)
+                        game_state._log(f"{t.name} placed at bottom of deck")
+
+        opts = [{"id": str(i), "label": f"{c.name} (Cost:{c.cost or 0})",
+                 "card_id": c.id, "card_name": c.name} for i, c in enumerate(remaining)]
+        game_state.pending_choice = PendingChoice(
+            choice_id=f"op06_056b_{uuid.uuid4().hex[:6]}",
+            choice_type="select_cards",
+            prompt="Choose up to 1 opponent cost 1 or less Character to place at bottom of deck (skip if none)",
+            options=opts, min_selections=0, max_selections=1,
+            source_card_id=card.id, source_card_name=card.name,
+            callback=do_second,
+        )
 
     if targets_2:
         snap2 = list(targets_2)
@@ -1209,6 +1640,7 @@ def op06_056_murakumo(game_state, player, card):
 
         return create_bottom_deck_choice(game_state, player, snap2, source_card=card,
                                          prompt="Choose opponent cost 2 or less Character to place at bottom of deck",
+                                         min_selections=0,
                                          callback=first_pick)
     else:
         second_pick()
@@ -1225,15 +1657,24 @@ def op06_056_trigger(game_state, player, card):
 def op06_057_tears(game_state, player, card):
     targets = _own_leader_and_chars(player)
 
+    snap_targets = list(_own_leader_and_chars(player))
+
     def after_power(selected):
+        # Apply +1000 to the chosen target
+        for sel in selected:
+            idx = int(sel)
+            if 0 <= idx < len(snap_targets):
+                snap_targets[idx].power_modifier = getattr(snap_targets[idx], "power_modifier", 0) + 1000
+                snap_targets[idx]._sticky_power_modifier = getattr(snap_targets[idx], "_sticky_power_modifier", 0) + 1000
+                game_state._log(f"{snap_targets[idx].name} gets +1000 power")
         if not player.deck:
             return
-        return search_top_cards(
+        search_top_cards(
             game_state, player, 1, add_count=1,
             filter_fn=lambda c: c.card_type == "CHARACTER" and (getattr(c, "cost", 0) or 0) == 2,
             source_card=card,
             play_to_field=True,
-            prompt="Reveal top 1 card: play cost 2 Character or place at top/bottom",
+            prompt="Reveal top 1 card: if cost 2 Character, play it; otherwise place at top/bottom",
         )
 
     if targets:
@@ -1273,9 +1714,11 @@ def op06_058_gravity_blade(game_state, player, card):
     opp = [c for c in opponent.cards_in_play if (getattr(c, "cost", 0) or 0) <= 6]
     targets = own + opp
     if targets:
-        return create_bottom_deck_choice(game_state, player, targets, source_card=card,
-                                         prompt="Choose up to 2 Characters with cost 6 or less to place at bottom of deck",
-                                         max_selections=2, min_selections=0)
+        return _queue_bottom_deck_choice(
+            game_state, player, targets, source_card=card,
+            prompt="Choose up to 2 Characters with cost 6 or less to place at bottom of deck",
+            max_selections=2, min_selections=0,
+        )
     return True
 
 
@@ -1286,9 +1729,11 @@ def op06_058_trigger(game_state, player, card):
     opp = [c for c in opponent.cards_in_play if (getattr(c, "cost", 0) or 0) <= 5]
     targets = own + opp
     if targets:
-        return create_bottom_deck_choice(game_state, player, targets, source_card=card,
-                                         prompt="[Trigger] Place up to 1 Character cost 5 or less at bottom of deck",
-                                         max_selections=1, min_selections=0)
+        return _queue_bottom_deck_choice(
+            game_state, player, targets, source_card=card,
+            prompt="[Trigger] Place up to 1 Character cost 5 or less at bottom of deck",
+            max_selections=1, min_selections=0,
+        )
     return True
 
 
@@ -1350,7 +1795,7 @@ def op06_060_ichiji_4(game_state, player, card):
                 player.cards_in_play.append(t)
                 game_state._log(f"{player.name} played {t.name} from hand/trash")
 
-        from ..game_engine import PendingChoice
+        from ...game_engine import PendingChoice
         import uuid
         game_state.pending_choice = PendingChoice(
             choice_id=f"op06_060_{uuid.uuid4().hex[:6]}",
@@ -1377,6 +1822,8 @@ def op06_061_ichiji_7(game_state, player, card):
     if own_don > opp_don:
         return True
     card.has_rush = True
+    card.is_rush = True
+    card._temporary_rush_until_turn = game_state.turn_count  # Persists through _recalc this turn
     game_state._log(f"{card.name} gains [Rush]")
     opponent = get_opponent(game_state, player)
     targets = list(opponent.cards_in_play)
@@ -1438,7 +1885,7 @@ def op06_062_judge_play(game_state, player, card):
                                 player.cards_in_play.append(t)
                                 game_state._log(f"{player.name} played {t.name} from trash (Judge)")
 
-                from ..game_engine import PendingChoice
+                from ...game_engine import PendingChoice
                 import uuid
                 game_state.pending_choice = PendingChoice(
                     choice_id=f"op06_062p_{uuid.uuid4().hex[:6]}",
@@ -1449,7 +1896,7 @@ def op06_062_judge_play(game_state, player, card):
                     callback=do_play,
                 )
 
-        from ..game_engine import PendingChoice
+        from ...game_engine import PendingChoice
         import uuid
         game_state.pending_choice = PendingChoice(
             choice_id=f"op06_062d_{uuid.uuid4().hex[:6]}",
@@ -1529,7 +1976,7 @@ def op06_063_sora(game_state, player, card):
     hand_snap = list(player.hand)
     opts = [{"id": str(i), "label": c.name, "card_id": c.id, "card_name": c.name}
             for i, c in enumerate(hand_snap)]
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     game_state.pending_choice = PendingChoice(
         choice_id=f"op06_063_{uuid.uuid4().hex[:6]}",
@@ -1577,7 +2024,7 @@ def op06_064_niji_3(game_state, player, card):
                 player.cards_in_play.append(t)
                 game_state._log(f"{player.name} played {t.name} from hand/trash")
 
-        from ..game_engine import PendingChoice
+        from ...game_engine import PendingChoice
         import uuid
         game_state.pending_choice = PendingChoice(
             choice_id=f"op06_064_{uuid.uuid4().hex[:6]}",
@@ -1669,7 +2116,7 @@ def op06_066_yonji_2(game_state, player, card):
                 player.cards_in_play.append(t)
                 game_state._log(f"{player.name} played {t.name} from hand/trash")
 
-        from ..game_engine import PendingChoice
+        from ...game_engine import PendingChoice
         import uuid
         game_state.pending_choice = PendingChoice(
             choice_id=f"op06_066_{uuid.uuid4().hex[:6]}",
@@ -1734,7 +2181,7 @@ def op06_068_reiju_2(game_state, player, card):
                 player.cards_in_play.append(t)
                 game_state._log(f"{player.name} played {t.name} from hand/trash")
 
-        from ..game_engine import PendingChoice
+        from ...game_engine import PendingChoice
         import uuid
         game_state.pending_choice = PendingChoice(
             choice_id=f"op06_068_{uuid.uuid4().hex[:6]}",
@@ -1794,7 +2241,7 @@ def op06_071_tesoro(game_state, player, card):
                             player.hand.append(t)
                             game_state._log(f"{t.name} added to hand from trash")
 
-            from ..game_engine import PendingChoice
+            from ...game_engine import PendingChoice
             import uuid
             game_state.pending_choice = PendingChoice(
                 choice_id=f"op06_071_{uuid.uuid4().hex[:6]}",
@@ -1838,8 +2285,10 @@ def op06_073_shiki_play(game_state, player, card):
     if len(player.don_pool) >= 8:
         draw_cards(player, 1)
         if player.hand:
-            trash_from_hand(game_state, player, 1, source_card=card,
-                            prompt="Trash 1 card from hand (Shiki)")
+            return _trash_from_hand_choice(
+                game_state, player, 1, source_card=card,
+                prompt="Trash 1 card from hand (Shiki)",
+            )
     return True
 
 
@@ -1869,6 +2318,7 @@ def op06_074_zephyr(game_state, player, card):
             if 0 <= idx < len(snap):
                 t = snap[idx]
                 t.effects_negated = True
+                t.effects_negated_this_turn = True
                 game_state._log(f"{t.name} effect negated")
                 power = (getattr(t, "power", 0) or 0) + (getattr(t, "power_modifier", 0) or 0)
                 if power <= 5000:
@@ -1878,7 +2328,7 @@ def op06_074_zephyr(game_state, player, card):
                         opp2.trash.append(t)
                         game_state._log(f"{t.name} K.O.'d (5000 power or less)")
 
-        from ..game_engine import PendingChoice
+        from ...game_engine import PendingChoice
         import uuid
         game_state.pending_choice = PendingChoice(
             choice_id=f"op06_074_{uuid.uuid4().hex[:6]}",
@@ -1947,7 +2397,7 @@ def op06_077_black_bug(game_state, player, card):
     if targets:
         return create_bottom_deck_choice(game_state, player, targets, source_card=card,
                                          prompt="Place opponent's Character cost 5 or less at bottom of deck",
-                                         max_selections=1, min_selections=0)
+                                         min_selections=0)
     return True
 
 
@@ -1958,7 +2408,7 @@ def op06_077_trigger(game_state, player, card):
     if targets:
         return create_bottom_deck_choice(game_state, player, targets, source_card=card,
                                          prompt="[Trigger] Place opponent's Character cost 4 or less at bottom of deck",
-                                         max_selections=1, min_selections=0)
+                                         min_selections=0)
     return True
 
 
@@ -2008,7 +2458,7 @@ def op06_079_germa_kingdom(game_state, player, card):
             prompt="Look at top 3: reveal up to 1 GERMA type card to add to hand",
         )
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     game_state.pending_choice = PendingChoice(
         choice_id=f"op06_079_{uuid.uuid4().hex[:6]}",
@@ -2053,7 +2503,7 @@ def op06_081_absalom(game_state, player, card):
             create_ko_choice(game_state, player, targets, source_card=card,
                              prompt="K.O. Character with cost 2 or less (Absalom)")
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     game_state.pending_choice = PendingChoice(
         choice_id=f"op06_081_{uuid.uuid4().hex[:6]}",
@@ -2074,7 +2524,10 @@ def op06_082_inuppe_play(game_state, player, card):
         return True
     draw_cards(player, 2)
     if len(player.hand) >= 2:
-        return _queue_bottom_from_hand(game_state, player, list(player.hand), 2, source_card=card)
+        return _trash_from_hand_choice(
+            game_state, player, 2, source_card=card,
+            prompt="Trash 2 cards from hand (Inuppe)",
+        )
     return True
 
 
@@ -2085,7 +2538,10 @@ def op06_082_inuppe_ko(game_state, player, card):
         return True
     draw_cards(player, 2)
     if len(player.hand) >= 2:
-        return _queue_bottom_from_hand(game_state, player, list(player.hand), 2, source_card=card)
+        return _trash_from_hand_choice(
+            game_state, player, 2, source_card=card,
+            prompt="Trash 2 cards from hand (Inuppe)",
+        )
     return True
 
 
@@ -2117,9 +2573,11 @@ def op06_083_oars_activate(game_state, player, card):
                 player.trash.append(t)
                 game_state._log(f"{t.name} K.O.'d for Oars effect")
         card.effects_negated = True
+        card.effects_negated_this_turn = True
+        card.cannot_attack = False
         game_state._log(f"{card.name} effect negated this turn")
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     game_state.pending_choice = PendingChoice(
         choice_id=f"op06_083_{uuid.uuid4().hex[:6]}",
@@ -2211,7 +2669,7 @@ def op06_086_moria_char(game_state, player, card):
                 player.cards_in_play.append(card_b)
                 game_state._log(f"{player.name} played {card_b.name} from trash")
 
-        from ..game_engine import PendingChoice
+        from ...game_engine import PendingChoice
         import uuid
         game_state.pending_choice = PendingChoice(
             choice_id=f"op06_086b_{uuid.uuid4().hex[:6]}",
@@ -2222,7 +2680,7 @@ def op06_086_moria_char(game_state, player, card):
             callback=after_second,
         )
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     game_state.pending_choice = PendingChoice(
         choice_id=f"op06_086a_{uuid.uuid4().hex[:6]}",
@@ -2300,7 +2758,7 @@ def op06_090_hogback(game_state, player, card):
             create_add_from_trash_choice(game_state, player, targets, source_card=card,
                                          prompt="Add Thriller Bark Pirates card (not Hogback) from trash to hand")
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     game_state.pending_choice = PendingChoice(
         choice_id=f"op06_090_{uuid.uuid4().hex[:6]}",
@@ -2330,11 +2788,11 @@ def op06_091_cindry(game_state, player, card):
 @register_effect("OP06-092", "on_play", "[On Play] Choose: K.O. opp char cost 4 or less OR opp places 3 from trash to bottom")
 def op06_092_brook(game_state, player, card):
     opponent = get_opponent(game_state, player)
-    ko_targets = [c for c in opponent.cards_in_play if (getattr(c, "cost", 0) or 0) <= 4]
+    trash_targets = [c for c in opponent.cards_in_play if (getattr(c, "cost", 0) or 0) <= 4]
     modes = []
-    if ko_targets:
-        modes.append({"id": "ko", "label": "K.O. opponent cost 4 or less Character",
-                      "description": f"{len(ko_targets)} targets"})
+    if trash_targets:
+        modes.append({"id": "trash_char", "label": "Trash opponent cost 4 or less Character",
+                      "description": f"{len(trash_targets)} targets"})
     if opponent.trash:
         modes.append({"id": "trash_bottom", "label": "Opponent places 3 from trash at bottom of deck",
                       "description": f"Opponent has {len(opponent.trash)} in trash"})
@@ -2344,11 +2802,27 @@ def op06_092_brook(game_state, player, card):
     def callback(selected):
         mode = selected[0] if selected else None
         opp = get_opponent(game_state, player)
-        if mode == "ko":
+        if mode == "trash_char":
             t = [c for c in opp.cards_in_play if (getattr(c, "cost", 0) or 0) <= 4]
             if t:
-                create_ko_choice(game_state, player, t, source_card=card,
-                                 prompt="K.O. opponent cost 4 or less Character (Brook)")
+                def do_trash_char(sel):
+                    if not sel:
+                        return
+                    idx = int(sel[0])
+                    if 0 <= idx < len(t):
+                        target = t[idx]
+                        if target in opp.cards_in_play:
+                            opp.cards_in_play.remove(target)
+                            opp.trash.append(target)
+                            game_state._log(f"{target.name} was trashed by Brook")
+
+                create_target_choice(
+                    game_state, player, t,
+                    prompt="Trash up to 1 opponent cost 4 or less Character (Brook)",
+                    source_card=card,
+                    min_selections=0,
+                    callback=do_trash_char,
+                )
         elif mode == "trash_bottom":
             if opp.trash:
                 snap = list(opp.trash)
@@ -2366,7 +2840,7 @@ def op06_092_brook(game_state, player, card):
                                 opp.deck.append(c)
                     game_state._log(f"{opp.name} placed cards from trash to bottom of deck")
 
-                from ..game_engine import PendingChoice
+                from ...game_engine import PendingChoice
                 import uuid
                 game_state.pending_choice = PendingChoice(
                     choice_id=f"op06_092_{uuid.uuid4().hex[:6]}",
@@ -2416,7 +2890,7 @@ def op06_093_perona_char(game_state, player, card):
                                 opp.trash.append(c)
                                 game_state._log(f"{opp.name} trashed {c.name} from hand")
 
-                from ..game_engine import PendingChoice
+                from ...game_engine import PendingChoice
                 import uuid
                 game_state.pending_choice = PendingChoice(
                     choice_id=f"op06_093d_{uuid.uuid4().hex[:6]}",
@@ -2447,15 +2921,42 @@ def op06_095_shadows_asgard(game_state, player, card):
     tb_chars = [c for c in player.cards_in_play
                 if "Thriller Bark Pirates" in (getattr(c, "card_origin", "") or "")
                 and (getattr(c, "cost", 0) or 0) <= 2]
-    ko_count = 0
-    for c in tb_chars:
-        player.cards_in_play.remove(c)
-        player.trash.append(c)
-        ko_count += 1
-        game_state._log(f"{c.name} K.O.'d (Shadows Asgard)")
-    if ko_count > 0 and player.leader:
-        player.leader.power_modifier = getattr(player.leader, "power_modifier", 0) + (ko_count * 1000)
-        game_state._log(f"{player.leader.name} gains +{ko_count * 1000} more power ({ko_count} K.O.'d)")
+    if not tb_chars:
+        return True
+
+    import uuid
+    from ...game_engine import PendingChoice
+
+    snapshot = list(tb_chars)
+    options = [{"id": str(i), "label": f"{c.name} (Cost: {getattr(c, 'cost', 0) or 0})",
+                "card_id": c.id, "card_name": c.name} for i, c in enumerate(snapshot)]
+
+    def do_ko(selected):
+        ko_count = 0
+        for idx_str in selected:
+            idx = int(idx_str)
+            if 0 <= idx < len(snapshot):
+                target = snapshot[idx]
+                if target in player.cards_in_play:
+                    player.cards_in_play.remove(target)
+                    player.trash.append(target)
+                    ko_count += 1
+                    game_state._log(f"{target.name} K.O.'d (Shadows Asgard)")
+        if ko_count > 0 and player.leader:
+            player.leader.power_modifier = getattr(player.leader, "power_modifier", 0) + (ko_count * 1000)
+            game_state._log(f"{player.leader.name} gains +{ko_count * 1000} more power ({ko_count} K.O.'d)")
+
+    game_state.pending_choice = PendingChoice(
+        choice_id=f"op06_095_{uuid.uuid4().hex[:8]}",
+        choice_type="select_cards",
+        prompt="Choose any number of your Thriller Bark Pirates Characters cost 2 or less to K.O.",
+        options=options,
+        min_selections=0,
+        max_selections=len(snapshot),
+        source_card_id=card.id,
+        source_card_name=card.name,
+        callback=do_ko,
+    )
     return True
 
 
@@ -2468,23 +2969,41 @@ def op06_095_shadows_asgard_counter(game_state, player, card):
 def op06_095_trigger(game_state, player, card):
     draw_cards(player, 2)
     if player.hand:
-        trash_from_hand(game_state, player, 1, source_card=card,
-                        prompt="[Trigger] Trash 1 card from hand (Shadows Asgard)")
+        return _trash_from_hand_choice(
+            game_state, player, 1, source_card=card,
+            prompt="[Trigger] Trash 1 card from hand (Shadows Asgard)",
+        )
     return True
 
 
 # --- OP06-096: ...Nothing...at All!!! (Event) ---
 @register_effect("OP06-096", "counter", "[Counter] Add 1 life to hand: own chars cost 7 or less cannot be K.O.'d in battle this turn")
 def op06_096_nothing_at_all(game_state, player, card):
-    if player.life_cards:
-        taken = player.life_cards.pop(0)
-        player.hand.append(taken)
-        game_state._log(f"{player.name} added Life card to hand")
-    for c in player.cards_in_play:
-        if (getattr(c, "cost", 0) or 0) <= 7:
-            c.cannot_be_ko_in_battle = True
-    game_state._log("Own Characters cost 7 or less cannot be K.O.'d in battle this turn")
-    return True
+    if not player.life_cards:
+        return True
+
+    modes = [
+        {"id": "pay", "label": "Add 1 Life card to hand"},
+        {"id": "skip", "label": "Do not use this effect"},
+    ]
+
+    def after_choice(selected):
+        if not selected or selected[0] != "pay":
+            return
+        if player.life_cards:
+            taken = player.life_cards.pop(0)
+            player.hand.append(taken)
+            game_state._log(f"{player.name} added Life card to hand")
+        for c in player.cards_in_play:
+            if (getattr(c, "cost", 0) or 0) <= 7:
+                c.cannot_be_ko_in_battle = True
+        game_state._log("Own Characters cost 7 or less cannot be K.O.'d in battle this turn")
+
+    return create_mode_choice(
+        game_state, player, modes, source_card=card,
+        callback=after_choice,
+        prompt="You may add 1 Life card to hand for Nothing at All!!!",
+    )
 
 
 @register_effect("OP06-096", "trigger", "[Trigger] Activate this card Counter effect")
@@ -2512,7 +3031,7 @@ def op06_097_negative_hollow(game_state, player, card):
                     opponent.trash.append(c)
                     game_state._log(f"{opponent.name} trashed {c.name} from hand (Negative Hollow)")
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     game_state.pending_choice = PendingChoice(
         choice_id=f"op06_097_{uuid.uuid4().hex[:6]}",
@@ -2613,38 +3132,23 @@ def op06_100_inuarashi(game_state, player, card):
     ko_targets = [c for c in opponent.cards_in_play if (getattr(c, "cost", 0) or 0) <= opp_life_count]
     if not ko_targets:
         return True
-    hand_snap = list(player.hand)
-    opts = [{"id": str(i), "label": c.name, "card_id": c.id, "card_name": c.name}
-            for i, c in enumerate(hand_snap)]
-
-    def after_discard(selected):
-        if not selected:
+    def after_discard(trashed):
+        if not trashed:
             return
-        idx = int(selected[0])
-        if 0 <= idx < len(hand_snap):
-            c = hand_snap[idx]
-            if c in player.hand:
-                player.hand.remove(c)
-                player.trash.append(c)
-                game_state._log(f"{player.name} trashed {c.name}")
         opp = get_opponent(game_state, player)
         opp_life = len(opp.life_cards)
         t = [c for c in opp.cards_in_play if (getattr(c, "cost", 0) or 0) <= opp_life]
         if t:
             create_ko_choice(game_state, player, t, source_card=card,
-                             prompt=f"K.O. opponent Character with cost {opp_life} or less (Inuarashi)")
+                             prompt=f"K.O. up to 1 opponent Character with cost {opp_life} or less (Inuarashi)",
+                             min_selections=0)
 
-    from ..game_engine import PendingChoice
-    import uuid
-    game_state.pending_choice = PendingChoice(
-        choice_id=f"op06_100_{uuid.uuid4().hex[:6]}",
-        choice_type="select_cards",
-        prompt="Trash 1 card from hand for Inuarashi effect",
-        options=opts, min_selections=1, max_selections=1,
-        source_card_id=card.id, source_card_name=card.name,
-        callback=after_discard,
+    return _trash_from_hand_choice(
+        game_state, player, 1, source_card=card,
+        prompt="You may trash 1 card from hand for Inuarashi",
+        optional=True,
+        on_complete=after_discard,
     )
-    return True
 
 
 @register_effect("OP06-100", "trigger", "[Trigger] If opponent has 3 or less Life cards, play this card")
@@ -2676,7 +3180,7 @@ def op06_101_onami(game_state, player, card):
             t.has_banish = True
             game_state._log(f"{t.name} gains [Banish] this turn")
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     game_state.pending_choice = PendingChoice(
         choice_id=f"op06_101_{uuid.uuid4().hex[:6]}",
@@ -2729,7 +3233,7 @@ def op06_102_kamakiri(game_state, player, card):
             create_ko_choice(game_state, player, t, source_card=card,
                              prompt="K.O. opponent Character cost 2 or less (Kamakiri)")
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     game_state.pending_choice = PendingChoice(
         choice_id=f"op06_102_{uuid.uuid4().hex[:6]}",
@@ -2760,21 +3264,9 @@ def op06_103_kawamatsu(game_state, player, card):
                   if c is not card and (getattr(c, "power", 0) or 0) == 0]
     if not zero_chars:
         return True
-    hand_snap = list(player.hand)
-    opts = [{"id": str(i), "label": c.name, "card_id": c.id, "card_name": c.name}
-            for i, c in enumerate(hand_snap)]
-
-    def after_discard(selected):
-        if len(selected) < 2:
+    def after_discard(trashed):
+        if len(trashed) < 2:
             return
-        for idx_str in selected:
-            idx = int(idx_str)
-            if 0 <= idx < len(hand_snap):
-                c = hand_snap[idx]
-                if c in player.hand:
-                    player.hand.remove(c)
-                    player.trash.append(c)
-        game_state._log(f"{player.name} trashed 2 cards from hand")
         fresh_zero = [c for c in player.cards_in_play if (getattr(c, "power", 0) or 0) == 0]
         if not fresh_zero:
             return
@@ -2808,7 +3300,7 @@ def op06_103_kawamatsu(game_state, player, card):
                                    callback=place,
                                    prompt=f"Add {t.name} to top or bottom of Life cards?")
 
-        from ..game_engine import PendingChoice
+        from ...game_engine import PendingChoice
         import uuid
         game_state.pending_choice = PendingChoice(
             choice_id=f"op06_103b_{uuid.uuid4().hex[:6]}",
@@ -2819,17 +3311,12 @@ def op06_103_kawamatsu(game_state, player, card):
             callback=pick_char,
         )
 
-    from ..game_engine import PendingChoice
-    import uuid
-    game_state.pending_choice = PendingChoice(
-        choice_id=f"op06_103a_{uuid.uuid4().hex[:6]}",
-        choice_type="select_cards",
-        prompt="Trash 2 cards from hand for Kawamatsu effect",
-        options=opts, min_selections=2, max_selections=2,
-        source_card_id=card.id, source_card_name=card.name,
-        callback=after_discard,
+    return _trash_from_hand_choice(
+        game_state, player, 2, source_card=card,
+        prompt="You may trash 2 cards from hand for Kawamatsu",
+        optional=True,
+        on_complete=after_discard,
     )
-    return True
 
 
 @register_effect("OP06-103", "trigger", "[Trigger] If opponent has 3 or less Life cards, play this card")
@@ -2901,7 +3388,7 @@ def op06_106_hiyori(game_state, player, card):
                         player.life_cards.insert(0, c)
                         game_state._log(f"{c.name} added to top of Life cards (Hiyori)")
 
-            from ..game_engine import PendingChoice
+            from ...game_engine import PendingChoice
             import uuid
             game_state.pending_choice = PendingChoice(
                 choice_id=f"op06_106b_{uuid.uuid4().hex[:6]}",
@@ -2960,7 +3447,7 @@ def op06_107_momo_play(game_state, player, card):
                                callback=place,
                                prompt=f"Add {t.name} to top or bottom of Life cards?")
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     game_state.pending_choice = PendingChoice(
         choice_id=f"op06_107_{uuid.uuid4().hex[:6]}",
@@ -2993,7 +3480,7 @@ def op06_108_hitetsu_trigger(game_state, player, card):
             t.power_modifier = getattr(t, "power_modifier", 0) + 2000
             game_state._log(f"{t.name} gains +2000 power (Hitetsu Trigger)")
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     game_state.pending_choice = PendingChoice(
         choice_id=f"op06_108_{uuid.uuid4().hex[:6]}",
@@ -3012,7 +3499,7 @@ def op06_109_denjiro(game_state, player, card):
     if getattr(card, "attached_don", 0) >= 2:
         opponent = get_opponent(game_state, player)
         if len(opponent.life_cards) <= 3:
-            card.cannot_be_ko_by_effect = True
+            card.cannot_be_ko_by_effects = True
     return True
 
 
@@ -3073,7 +3560,7 @@ def op06_111_braham(game_state, player, card):
             create_rest_choice(game_state, player, t, source_card=card,
                                prompt="Rest opponent's Character cost 4 or less (Braham)")
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     game_state.pending_choice = PendingChoice(
         choice_id=f"op06_111_{uuid.uuid4().hex[:6]}",
@@ -3103,35 +3590,19 @@ def op06_112_raizo(game_state, player, card):
     opponent = get_opponent(game_state, player)
     if not any(d == "active" for d in opponent.don_pool):
         return True
-    hand_snap = list(player.hand)
-    opts = [{"id": str(i), "label": c.name, "card_id": c.id, "card_name": c.name}
-            for i, c in enumerate(hand_snap)]
-
-    def after_discard(selected):
-        if not selected:
+    def after_discard(trashed):
+        if not trashed:
             return
-        idx = int(selected[0])
-        if 0 <= idx < len(hand_snap):
-            c = hand_snap[idx]
-            if c in player.hand:
-                player.hand.remove(c)
-                player.trash.append(c)
-                game_state._log(f"{player.name} trashed {c.name}")
         opp = get_opponent(game_state, player)
         _opponent_rest_active_don(opp, 1)
         game_state._log(f"{opp.name} DON!! rested (Raizo)")
 
-    from ..game_engine import PendingChoice
-    import uuid
-    game_state.pending_choice = PendingChoice(
-        choice_id=f"op06_112_{uuid.uuid4().hex[:6]}",
-        choice_type="select_cards",
-        prompt="Trash 1 card from hand: rest 1 opponent DON!! (Raizo)",
-        options=opts, min_selections=1, max_selections=1,
-        source_card_id=card.id, source_card_name=card.name,
-        callback=after_discard,
+    return _trash_from_hand_choice(
+        game_state, player, 1, source_card=card,
+        prompt="You may trash 1 card from hand for Raizo",
+        optional=True,
+        on_complete=after_discard,
     )
-    return True
 
 
 @register_effect("OP06-112", "trigger", "[Trigger] If opponent has 3 or less Life, play this card")
@@ -3184,7 +3655,7 @@ def op06_114_wyper(game_state, player, card):
             prompt="Look at top 5: reveal Upper Yard or Shandian Warrior card to hand",
         )
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     game_state.pending_choice = PendingChoice(
         choice_id=f"op06_114_{uuid.uuid4().hex[:6]}",
@@ -3202,51 +3673,64 @@ def op06_114_wyper(game_state, player, card):
 def op06_115_disappear(game_state, player, card):
     if not player.hand:
         return True
-    hand_snap = list(player.hand)
-    opts = [{"id": str(i), "label": c.name, "card_id": c.id, "card_name": c.name}
-            for i, c in enumerate(hand_snap)]
 
-    def after_discard(selected):
-        if not selected:
+    def after_discard(trashed):
+        if not trashed:
             return
-        idx = int(selected[0])
-        if 0 <= idx < len(hand_snap):
-            c = hand_snap[idx]
-            if c in player.hand:
-                player.hand.remove(c)
-                player.trash.append(c)
-                game_state._log(f"{player.name} trashed {c.name}")
         targets = _own_leader_and_chars(player)
         if targets:
+            snap = list(targets)
+
+            def apply_battle_power(selected):
+                for sel in selected:
+                    idx = int(sel)
+                    if 0 <= idx < len(snap):
+                        _add_battle_power(game_state, snap[idx], 3000)
+
             create_power_effect_choice(
                 game_state, player, targets, 3000,
                 source_card=card,
                 prompt="Choose your Leader or Character to give +3000 power during this battle",
                 min_selections=0,
+                callback=apply_battle_power,
             )
 
-    from ..game_engine import PendingChoice
-    import uuid
-    game_state.pending_choice = PendingChoice(
-        choice_id=f"op06_115_{uuid.uuid4().hex[:6]}",
-        choice_type="select_cards",
-        prompt="Trash 1 card from hand for +3000 power (You're the One...)",
-        options=opts, min_selections=1, max_selections=1,
-        source_card_id=card.id, source_card_name=card.name,
-        callback=after_discard,
+    return _trash_from_hand_choice(
+        game_state, player, 1, source_card=card,
+        prompt="You may trash 1 card from hand for +3000 power",
+        optional=True,
+        on_complete=after_discard,
     )
-    return True
 
 
 @register_effect("OP06-115", "trigger", "[Trigger] If 0 Life cards, add top of deck to Life, then trash 1 from hand")
 def op06_115_trigger(game_state, player, card):
+    def trash_after_life():
+        if player.hand:
+            _trash_from_hand_choice(
+                game_state, player, 1, source_card=card,
+                prompt="[Trigger] Trash 1 card from hand",
+            )
+
     if len(player.life_cards) == 0 and player.deck:
-        top = player.deck.pop(0)
-        player.life_cards.insert(0, top)
-        game_state._log(f"{player.name} added {top.name} to top of Life cards (Trigger)")
-    if player.hand:
-        trash_from_hand(game_state, player, 1, source_card=card,
-                        prompt="[Trigger] Trash 1 card from hand")
+        modes = [
+            {"id": "add", "label": "Add top deck card to Life"},
+            {"id": "skip", "label": "Do not add a Life card"},
+        ]
+
+        def after_choice(selected):
+            if selected and selected[0] == "add" and player.deck:
+                top = player.deck.pop(0)
+                player.life_cards.insert(0, top)
+                game_state._log(f"{player.name} added {top.name} to top of Life cards (Trigger)")
+            trash_after_life()
+
+        return create_mode_choice(
+            game_state, player, modes, source_card=card,
+            callback=after_choice,
+            prompt="[Trigger] You may add up to 1 card from deck to Life",
+        )
+    trash_after_life()
     return True
 
 
@@ -3322,7 +3806,7 @@ def op06_117_ark_maxim(game_state, player, card):
             opp.trash.append(c)
             game_state._log(f"{c.name} K.O.'d (Ark Maxim)")
 
-    from ..game_engine import PendingChoice
+    from ...game_engine import PendingChoice
     import uuid
     game_state.pending_choice = PendingChoice(
         choice_id=f"op06_117_{uuid.uuid4().hex[:6]}",

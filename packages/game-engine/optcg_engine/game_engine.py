@@ -766,8 +766,10 @@ class GameState:
         self._clear_temporary_effects(self.opponent_player)
         self.current_player.cannot_add_life = False
         self.current_player.cannot_add_life_to_hand_this_turn = False
+        self.current_player.cannot_attack_opponent_leader = False
         self.opponent_player.cannot_add_life = False
         self.opponent_player.cannot_add_life_to_hand_this_turn = False
+        self.opponent_player.cannot_attack_opponent_leader = False
 
         # Hand limit removed - players can have unlimited cards in hand
 
@@ -996,9 +998,6 @@ class GameState:
 
     def _trigger_on_play_effects(self, card: Card):
         """Trigger On Play effects for a card using the effect system."""
-        if not card.effect:
-            return
-
         print(f"[DEBUG] _trigger_on_play_effects: {card.id} - {card.name}")
 
         # First try hardcoded handlers (for cards with complex effects)
@@ -1007,7 +1006,7 @@ class GameState:
 
         # ONLY parse and resolve effects if hardcoded handler didn't execute
         # This prevents duplicate execution (e.g., "Draw 2" happening twice)
-        if not executed:
+        if not executed and card.effect:
             print(f"[DEBUG] Running parser for {card.id}")
             effects = parse_effect(card.effect)
             for effect in effects:
@@ -1090,12 +1089,15 @@ class GameState:
                 self.current_player.trash.append(card)
                 self._log(f"{self.current_player.name} plays {card.name} (Event, Cost {cost}), Remaining Active DON: {self.available_don()}")
                 # Trigger effect
-                if card.effect:
-                    self._trigger_on_play_effects(card)
+                self._trigger_on_play_effects(card)
                 # Fire on_event triggers (e.g. Crocodile leader: draw 1 when you activate Event)
                 from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
                 if self.current_player.leader and has_hardcoded_effect(self.current_player.leader.id, 'on_event'):
                     execute_hardcoded_effect(self, self.current_player, self.current_player.leader, 'on_event')
+                # Fire on_opponent_event for cards on the opposing player's field (e.g. Gion OP06-044, Zeff OP06-048)
+                for opp_card in list(self.opponent_player.cards_in_play):
+                    if has_hardcoded_effect(opp_card.id, 'on_opponent_event'):
+                        execute_hardcoded_effect(self, self.opponent_player, opp_card, 'on_opponent_event')
             else:
                 # CHARACTER and STAGE cards go to field
                 self.current_player.cards_in_play.append(card)
@@ -1108,9 +1110,8 @@ class GameState:
 
                 self._log(f"{self.current_player.name} plays {card.name} (Cost {cost}), Remaining Active DON: {self.available_don()}")
 
-                # Trigger On Play effects
-                if card.effect and '[On Play]' in card.effect:
-                    self._trigger_on_play_effects(card)
+                # Trigger On Play effects (always try hardcoded; parser only if effect text present)
+                self._trigger_on_play_effects(card)
                 from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
                 if card.card_type == "CHARACTER" and self.current_player.leader and has_hardcoded_effect(self.current_player.leader.id, 'on_play_character'):
                     execute_hardcoded_effect(self, self.current_player, self.current_player.leader, 'on_play_character')
@@ -1311,6 +1312,10 @@ class GameState:
                     if attacker_player:
                         effect_manager = get_effect_manager()
                         effect_manager.on_opponent_event_play(self, attacker_player, card)
+                        from .effects.effect_registry import has_hardcoded_effect as _has_opp_event, execute_hardcoded_effect as _exec_opp_event
+                        for opp_event_card in list(attacker_player.cards_in_play):
+                            if _has_opp_event(opp_event_card.id, 'on_opponent_event'):
+                                _exec_opp_event(self, attacker_player, opp_event_card, 'on_opponent_event')
 
                     # Fire on_event for defender's leader (e.g. Crocodile OP01-062: draw 1 when you activate Event)
                     from .effects.effect_registry import has_hardcoded_effect as _has_he, execute_hardcoded_effect as _exec_he
@@ -1548,6 +1553,11 @@ class GameState:
                 self._log(f"{attacker.name} cannot attack the Leader on the turn it was played.")
                 return
 
+        # Block attacking opponent's leader when player has the restriction (e.g. OP06-026 Koushirou)
+        if target_index == -1 and getattr(p, 'cannot_attack_opponent_leader', False):
+            self._log(f"Cannot attack opponent's Leader this turn (effect restriction).")
+            return
+
         # Enforce taunt: if opponent has a character with has_taunt, must attack that character
         taunt_cards = [c for c in o.cards_in_play if getattr(c, 'has_taunt', False)]
         if taunt_cards:
@@ -1579,10 +1589,9 @@ class GameState:
         # (fires interactively during LEADER_EFFECT_STEP before blockers)
         from .effects.effect_registry import has_hardcoded_effect as _has_hce
         leader_has_effect = bool(
-            o.leader and _has_hce(o.leader.id, 'on_opponent_attack')
+            (o.leader and _has_hce(o.leader.id, 'on_opponent_attack'))
+            or any(_has_hce(c.id, 'on_opponent_attack') for c in o.cards_in_play)
         )
-        # Also capture any on_opponent_attack effects for fields cards — used in
-        # the leader_effect step for now to keep things simple.
 
         # Get available blockers for defender
         available_blockers = o.get_available_blockers()
@@ -2011,6 +2020,14 @@ class GameState:
         self.pending_attack = None
         self.awaiting_response = None
         for p in [self.player1, self.player2]:
+            battle_targets = list(p.cards_in_play)
+            if p.leader:
+                battle_targets.append(p.leader)
+            for c in battle_targets:
+                battle_modifier = getattr(c, '_battle_power_modifier', 0)
+                if battle_modifier:
+                    c.power_modifier = getattr(c, 'power_modifier', 0) - battle_modifier
+                    c._battle_power_modifier = 0
             for c in p.cards_in_play:
                 if hasattr(c, '_ko_protected_for_attack'):
                     c._ko_protected_for_attack = False

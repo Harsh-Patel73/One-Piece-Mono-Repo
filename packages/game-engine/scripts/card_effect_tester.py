@@ -479,6 +479,59 @@ def build_game_state(test_card: Card, timing: str) -> Tuple[GameState, Player, C
         p1.cards_in_play.append(_make_seed_card("ALLY-119-A", "Bottom Deck Ally A", "CHARACTER", 4, 5000, ["Purple"], "Straw Hat Crew"))
         p1.cards_in_play.append(_make_seed_card("ALLY-119-B", "Bottom Deck Ally B", "CHARACTER", 3, 4000, ["Purple"], "Straw Hat Crew"))
 
+    if card_id.startswith("OP06-"):
+        # Broad OP06 seed package: gives Wings of the Captain effects the
+        # archetype-specific cards they need to present meaningful choices.
+        if tc.card_type != "LEADER":
+            p1.leader = _make_seed_card(
+                "OP06-TEST-L", "OP06 Test Leader", "LEADER", None, 5000,
+                ["Green", "Purple"],
+                "FILM / New Fish-Man Pirates / GERMA 66 / Thriller Bark Pirates / East Blue / Land of Wano / Shandian Warrior",
+            )
+            p1.leader.life = 4
+
+        p2.leader.is_resting = True
+        p2.life_cards = p2.life_cards[:3]
+        p1.don_pool = ["active"] * 8 + ["rested"] * 2
+        p2.don_pool = ["active"] * 7 + ["rested"] * 1
+
+        support_hand = [
+            _make_seed_card("OP06-HAND-FILM", "FILM Hand Card", "CHARACTER", 2, 3000, ["Red"], "FILM"),
+            _make_seed_card("OP06-HAND-FISH", "Fish-Man Hand Card", "CHARACTER", 3, 4000, ["Green"], "Fish-Man"),
+            _make_seed_card("OP06-HAND-GERMA", "GERMA Hand Card", "CHARACTER", 2, 3000, ["Purple"], "GERMA 66 / The Vinsmoke Family"),
+            _make_seed_card("OP06-HAND-WANO", "Wano Hand Card", "CHARACTER", 2, 3000, ["Yellow"], "Land of Wano"),
+        ]
+        p1.hand.extend(support_hand)
+        while len(p2.hand) < 6:
+            p2.hand.append(_make_dummy_card(860 + len(p2.hand)))
+
+        support_field = [
+            _make_seed_card("OP06-FIELD-UTA", "Uta", "CHARACTER", 2, 3000, ["Red"], "FILM"),
+            _make_seed_card("OP06-FIELD-TB", "Thriller Bark Ally", "CHARACTER", 2, 3000, ["Black"], "Thriller Bark Pirates"),
+            _make_seed_card("OP06-FIELD-STAGE", "Upper Yard", "STAGE", 1, 0, ["Yellow"], "Sky Island"),
+            _make_seed_card("OP06-FIELD-ENEL", "Enel", "CHARACTER", 4, 5000, ["Yellow"], "Sky Island"),
+            _make_seed_card("OP06-FIELD-WANO", "Wano Field Ally", "CHARACTER", 3, 0, ["Yellow"], "Land of Wano"),
+            _make_seed_card("OP06-FIELD-SHANDIAN", "Shandian Ally", "CHARACTER", 3, 4000, ["Yellow"], "Shandian Warrior"),
+        ]
+        p1.cards_in_play.extend(support_field)
+
+        p2.cards_in_play.append(_make_seed_card("OP06-OPP-C1", "Opponent Cost 1", "CHARACTER", 1, 3000, ["Green"], "Navy", rested=True))
+        p2.cards_in_play.append(_make_seed_card("OP06-OPP-C4", "Opponent Cost 4", "CHARACTER", 4, 5000, ["Green"], "Navy", rested=False))
+        p2.cards_in_play.append(_make_seed_card("OP06-OPP-C6", "Opponent Cost 6", "CHARACTER", 6, 7000, ["Green"], "Navy", rested=True))
+
+        p1.trash.extend([
+            _make_seed_card("OP06-TRASH-TB2", "Thriller Bark Trash 2", "CHARACTER", 2, 3000, ["Black"], "Thriller Bark Pirates"),
+            _make_seed_card("OP06-TRASH-TB4", "Thriller Bark Trash 4", "CHARACTER", 4, 5000, ["Black"], "Thriller Bark Pirates"),
+            _make_seed_card("OP06-TRASH-GERMA-I", "Vinsmoke Ichiji", "CHARACTER", 7, 7000, ["Purple"], "GERMA 66 / The Vinsmoke Family"),
+            _make_seed_card("OP06-TRASH-GERMA-N", "Vinsmoke Niji", "CHARACTER", 5, 6000, ["Purple"], "GERMA 66 / The Vinsmoke Family"),
+            _make_seed_card("OP06-TRASH-GERMA-Y", "Vinsmoke Yonji", "CHARACTER", 4, 5000, ["Purple"], "GERMA 66 / The Vinsmoke Family"),
+            _make_seed_card("OP06-TRASH-GERMA-R", "Vinsmoke Reiju", "CHARACTER", 4, 5000, ["Purple"], "GERMA 66 / The Vinsmoke Family"),
+            _make_seed_card("OP06-TRASH-FILM", "FILM Trash Character", "CHARACTER", 4, 4000, ["Red"], "FILM"),
+        ])
+        p1.deck.insert(0, _make_seed_card("OP06-DECK-FILM", "FILM Deck Card", "CHARACTER", 2, 3000, ["Red"], "FILM"))
+        p1.deck.insert(1, _make_seed_card("OP06-DECK-GERMA", "GERMA Deck Card", "CHARACTER", 2, 3000, ["Purple"], "GERMA 66"))
+        p1.deck.insert(2, _make_seed_card("OP06-DECK-SHANDIAN", "Shandian Deck Card", "CHARACTER", 2, 3000, ["Yellow"], "Shandian Warrior"))
+
     return gs, p1, tc
 
 

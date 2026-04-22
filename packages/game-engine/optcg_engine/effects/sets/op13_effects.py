@@ -608,3 +608,91 @@ def op13_016_garp(game_state, player, card):
         filter_fn=lambda c: (c.cost or 0) >= 3,
         source_card=card,
         prompt="Garp: Look at top 4, choose 1 card with cost 3 or more to add to hand")
+
+
+# ---------------------------------------------------------------------------
+# OP13 GENERIC FALLBACK REGISTRATIONS
+# ---------------------------------------------------------------------------
+# These registrations cover cards/timings that do not yet have bespoke OP13
+# implementations. The shared fallback provides safe prompted behavior for the
+# common printed patterns and the MasterAudit marks these as Partial when exact
+# text still needs a bespoke resolver.
+from .generic_fallback import register_generic_set_fallback
+
+
+_OP13_GENERIC_TIMINGS = {
+    "OP13-005": ["on_play"],
+    "OP13-007": ["activate"],
+    "OP13-008": ["continuous"],
+    "OP13-009": ["continuous"],
+    "OP13-013": ["on_play"],
+    "OP13-014": ["trigger"],
+    "OP13-015": ["activate"],
+    "OP13-017": ["continuous"],
+    "OP13-019": ["counter", "on_play"],
+    "OP13-020": ["on_play", "trigger"],
+    "OP13-021": ["on_play", "trigger"],
+    "OP13-023": ["on_play", "on_ko"],
+    "OP13-024": ["on_play"],
+    "OP13-025": ["on_play", "blocker"],
+    "OP13-026": ["activate"],
+    "OP13-027": ["on_play", "end_of_turn"],
+    "OP13-030": ["on_play"],
+    "OP13-031": ["on_play", "blocker"],
+    "OP13-037": ["on_play", "end_of_turn"],
+    "OP13-038": ["on_play", "trigger"],
+    "OP13-039": ["counter", "trigger"],
+    "OP13-041": ["on_play"],
+    "OP13-044": ["on_attack", "on_ko"],
+    "OP13-045": ["on_attack"],
+    "OP13-046": ["continuous"],
+    "OP13-047": ["continuous"],
+    "OP13-055": ["on_attack"],
+    "OP13-056": ["on_attack"],
+    "OP13-058": ["counter", "on_play"],
+    "OP13-059": ["trigger"],
+    "OP13-061": ["on_play"],
+    "OP13-063": ["on_play", "blocker"],
+    "OP13-064": ["on_play"],
+    "OP13-066": ["on_play"],
+    "OP13-067": ["on_play"],
+    "OP13-068": ["on_play"],
+    "OP13-069": ["on_play"],
+    "OP13-071": ["on_play"],
+    "OP13-074": ["on_play"],
+    "OP13-075": ["counter", "on_play"],
+    "OP13-076": ["counter", "on_play"],
+    "OP13-077": ["counter", "on_play"],
+    "OP13-078": ["continuous"],
+    "OP13-080": ["on_attack"],
+    "OP13-081": ["activate"],
+    "OP13-082": ["activate"],
+    "OP13-084": ["continuous"],
+    "OP13-087": ["on_play", "blocker"],
+    "OP13-089": ["on_ko", "blocker"],
+    "OP13-091": ["on_play", "blocker"],
+    "OP13-093": ["on_play", "blocker"],
+    "OP13-094": ["on_play"],
+    "OP13-095": ["on_play"],
+    "OP13-096": ["trigger"],
+    "OP13-097": ["counter", "on_play"],
+    "OP13-098": ["counter", "on_play"],
+    "OP13-102": ["activate", "trigger"],
+    "OP13-104": ["on_ko", "blocker"],
+    "OP13-105": ["on_play"],
+    "OP13-106": ["blocker", "trigger"],
+    "OP13-108": ["on_play", "trigger"],
+    "OP13-109": ["continuous", "trigger"],
+    "OP13-110": ["on_play", "blocker"],
+    "OP13-112": ["blocker"],
+    "OP13-113": ["trigger"],
+    "OP13-114": ["on_play", "on_attack", "trigger"],
+    "OP13-115": ["trigger"],
+    "OP13-116": ["trigger"],
+    "OP13-117": ["on_play", "trigger"],
+    "OP13-118": ["on_play"],
+    "OP13-120": ["activate", "blocker"],
+}
+
+
+register_generic_set_fallback(_OP13_GENERIC_TIMINGS, "OP13")

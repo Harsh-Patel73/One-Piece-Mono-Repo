@@ -3,6 +3,8 @@ OPTCG Simulator - One Piece Trading Card Game Simulator
 Play against AI or other players in real-time.
 """
 
+import os
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -72,4 +74,11 @@ async def health():
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:socket_app", host="0.0.0.0", port=8001, reload=True)
+    port = int(os.getenv("OPTCG_SIMULATOR_BACKEND_PORT", "8000"))
+    reload_enabled = os.getenv("OPTCG_SIMULATOR_BACKEND_RELOAD", "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    uvicorn.run("main:socket_app", host="0.0.0.0", port=port, reload=reload_enabled)
