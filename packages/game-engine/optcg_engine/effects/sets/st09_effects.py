@@ -22,7 +22,7 @@ def ushimaru_effect(game_state, player, card):
         if wano:
             char = wano[0]
             player.hand.remove(char)
-            player.cards_in_play.append(char)
+            game_state.play_card_to_field_by_effect(player, char)
             return True
     return False
 

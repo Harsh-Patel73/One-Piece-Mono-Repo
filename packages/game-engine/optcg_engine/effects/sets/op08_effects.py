@@ -246,7 +246,7 @@ def op08_098_kalgara_leader(game_state, player, card):
             target = snap[idx]
             if _remove_card_instance(player.hand, target):
                 setattr(target, 'played_turn', game_state.turn_count)
-                player.cards_in_play.append(target)
+                game_state.play_card_to_field_by_effect(player, target)
                 game_state._apply_keywords(target)
                 game_state._log(f"Kalgara Leader: played {target.name}")
                 # Add 1 life to hand
@@ -254,8 +254,6 @@ def op08_098_kalgara_leader(game_state, player, card):
                     life_card = player.life_cards.pop()
                     player.hand.append(life_card)
                     game_state._log("Kalgara Leader: added 1 life card to hand")
-                if target.effect and '[On Play]' in target.effect:
-                    game_state._trigger_on_play_effects(target)
 
     return create_play_from_hand_choice(
         game_state, player, shandians, source_card=card,
@@ -1299,11 +1297,9 @@ def op08_052_ace(game_state, player, card):
             if selected:
                 if _remove_card_instance(player.deck, top_card):
                     setattr(top_card, 'played_turn', game_state.turn_count)
-                    player.cards_in_play.append(top_card)
+                    game_state.play_card_to_field_by_effect(player, top_card)
                     game_state._apply_keywords(top_card)
                     game_state._log(f"Ace: played {top_card.name} from deck")
-                    if top_card.effect and '[On Play]' in top_card.effect:
-                        game_state._trigger_on_play_effects(top_card)
             else:
                 # Place at top or bottom
                 reorder_top_cards(game_state, player, 1, source_card=card, allow_top=True)
@@ -1364,11 +1360,9 @@ def op08_054_you_cant_take(game_state, player, card):
                 if sel:
                     if _remove_card_instance(player.deck, top_card):
                         setattr(top_card, 'played_turn', game_state.turn_count)
-                        player.cards_in_play.append(top_card)
+                        game_state.play_card_to_field_by_effect(player, top_card)
                         game_state._apply_keywords(top_card)
                         game_state._log(f"You Can't Take: played {top_card.name}")
-                        if top_card.effect and '[On Play]' in top_card.effect:
-                            game_state._trigger_on_play_effects(top_card)
                 else:
                     reorder_top_cards(game_state, player, 1, source_card=card, allow_top=True)
             create_play_from_hand_choice(
@@ -1411,7 +1405,7 @@ def op08_055_phoenix_brand(game_state, player, card):
 @register_effect("OP08-056", "trigger", "[Trigger] Play this card")
 def op08_056_moby_dick_trigger(game_state, player, card):
     """Trigger: Play Moby Dick from life to field."""
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     setattr(card, 'played_turn', game_state.turn_count)
     game_state._log("Moby Dick: played from Life to field via Trigger")
     return True
@@ -1596,7 +1590,7 @@ def op08_068_perospero_trigger(game_state, player, card):
         # Play without cost
         if card in player.trash:
             player.trash.remove(card)
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         setattr(card, 'played_turn', game_state.turn_count)
         game_state._log("Charlotte Perospero: played from Life (no DON cost)")
         return True
@@ -1604,7 +1598,7 @@ def op08_068_perospero_trigger(game_state, player, card):
     def _after_don():
         if card in player.trash:
             player.trash.remove(card)
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         setattr(card, 'played_turn', game_state.turn_count)
         game_state._apply_keywords(card)
         game_state._log("Charlotte Perospero: played from Life via Trigger")
@@ -1703,12 +1697,10 @@ def op08_071_count_niwatori(game_state, player, card):
         target = tamagos[0]
         _remove_card_instance(player.deck, target)
         setattr(target, 'played_turn', game_state.turn_count)
-        player.cards_in_play.append(target)
+        game_state.play_card_to_field_by_effect(player, target)
         game_state._apply_keywords(target)
         random.shuffle(player.deck)
         game_state._log(f"Count Niwatori: played {target.name} from deck")
-        if target.effect and '[On Play]' in target.effect:
-            game_state._trigger_on_play_effects(target)
 
     auto = optional_don_return(game_state, player, 1, source_card=card, post_callback=_after_don)
     if auto:
@@ -1736,12 +1728,10 @@ def op08_073_viscount_hiyoko(game_state, player, card):
         target = niwatoris[0]
         _remove_card_instance(player.deck, target)
         setattr(target, 'played_turn', game_state.turn_count)
-        player.cards_in_play.append(target)
+        game_state.play_card_to_field_by_effect(player, target)
         game_state._apply_keywords(target)
         random.shuffle(player.deck)
         game_state._log(f"Viscount Hiyoko: played {target.name} from deck")
-        if target.effect and '[On Play]' in target.effect:
-            game_state._trigger_on_play_effects(target)
 
     auto = optional_don_return(game_state, player, 1, source_card=card, post_callback=_after_don)
     if auto:
@@ -2627,7 +2617,7 @@ def op08_104_charlotte_poire(game_state, player, card):
 
         # Play this card (it's a trigger card, so it's in trash after trigger)
         if _remove_card_instance(player.trash, card):
-            player.cards_in_play.append(card)
+            game_state.play_card_to_field_by_effect(player, card)
             card.is_resting = False
             setattr(card, 'played_turn', game_state.turn_count)
             game_state._log(f"{player.name} played {card.name} from trigger")
@@ -2834,7 +2824,7 @@ def op08_111_s_shark_trigger(game_state, player, card):
                 player.trash.append(t)
                 game_state._log(f"{player.name} trashed {t.name} from hand")
         if _remove_card_instance(player.trash, card):
-            player.cards_in_play.append(card)
+            game_state.play_card_to_field_by_effect(player, card)
             card.is_resting = False
             setattr(card, 'played_turn', game_state.turn_count)
             game_state._log(f"{player.name} played {card.name} from trigger")
@@ -2895,7 +2885,7 @@ def op08_113_s_bear(game_state, player, card):
                 game_state._log(f"{player.name} trashed {t.name} from hand")
 
         if _remove_card_instance(player.trash, card):
-            player.cards_in_play.append(card)
+            game_state.play_card_to_field_by_effect(player, card)
             card.is_resting = False
             setattr(card, 'played_turn', game_state.turn_count)
             game_state._log(f"{player.name} played {card.name} from trigger")
@@ -2956,7 +2946,7 @@ def op08_114_s_hawk_trigger(game_state, player, card):
                 player.trash.append(t)
                 game_state._log(f"{player.name} trashed {t.name} from hand")
         if _remove_card_instance(player.trash, card):
-            player.cards_in_play.append(card)
+            game_state.play_card_to_field_by_effect(player, card)
             card.is_resting = False
             setattr(card, 'played_turn', game_state.turn_count)
             game_state._log(f"{player.name} played {card.name} from trigger")

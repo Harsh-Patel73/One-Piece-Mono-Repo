@@ -76,7 +76,7 @@ def mjosgard_effect(game_state, player, card):
         if stages:
             stage = stages[0]
             player.trash.remove(stage)
-            player.cards_in_play.append(stage)
+            game_state.play_card_to_field_by_effect(player, stage)
             return True
     return False
 
@@ -107,7 +107,7 @@ def empty_throne_effect(game_state, player, card):
         if five_elders:
             char = five_elders[0]
             player.hand.remove(char)
-            player.cards_in_play.append(char)
+            game_state.play_card_to_field_by_effect(player, char)
             return True
     return False
 
@@ -149,7 +149,7 @@ def empty_throne_main_effect(game_state, player, card):
         if five_elders:
             card_to_play = five_elders[0]
             player.trash.remove(card_to_play)
-            player.cards_in_play.append(card_to_play)
+            game_state.play_card_to_field_by_effect(player, card_to_play)
             return True
     return False
 
@@ -195,7 +195,7 @@ def op13_050_sandersonia(game_state, player, card):
         if hancocks:
             to_play = hancocks[0]
             player.hand.remove(to_play)
-            player.cards_in_play.append(to_play)
+            game_state.play_card_to_field_by_effect(player, to_play)
     return True
 
 
@@ -219,7 +219,7 @@ def op13_052_marigold(game_state, player, card):
         if hancocks:
             to_play = hancocks[0]
             player.hand.remove(to_play)
-            player.cards_in_play.append(to_play)
+            game_state.play_card_to_field_by_effect(player, to_play)
     return True
 
 

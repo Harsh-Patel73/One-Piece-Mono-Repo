@@ -803,11 +803,9 @@ def op06_024_ikaros_much(game_state, player, card):
                     player.hand.remove(target)
                     target.is_resting = False
                     setattr(target, "played_turn", game_state.turn_count)
-                    player.cards_in_play.append(target)
+                    game_state.play_card_to_field_by_effect(player, target)
                     game_state._apply_keywords(target)
                     game_state._log(f"{player.name} played {target.name} from hand")
-                    if target.effect and "[On Play]" in target.effect:
-                        game_state._trigger_on_play_effects(target)
         add_life_to_hand()
 
     if targets:
@@ -871,34 +869,42 @@ def op06_028_zeo(game_state, player, card):
 
     free_count = _free_don_count(player)
     rested_indices = [idx for idx in range(free_count) if player.don_pool[idx] == "rested"]
-    if not rested_indices:
-        return True  # No rested DON to set active
 
-    def after_don_choice(selected):
-        if not selected:
-            return
-        try:
-            don_idx = int(selected[0])
-        except (TypeError, ValueError):
-            return
-        if 0 <= don_idx < len(player.don_pool) and player.don_pool[don_idx] == "rested":
+    def apply_remaining_effect(don_idx=None):
+        don_label = None
+        if don_idx is not None and 0 <= don_idx < len(player.don_pool) and player.don_pool[don_idx] == "rested":
             player.don_pool[don_idx] = "active"
-        else:
-            return
+            don_label = f"DON!! #{don_idx + 1}"
         card.power_modifier = getattr(card, "power_modifier", 0) + 1000
         card._sticky_power_modifier = getattr(card, "_sticky_power_modifier", 0) + 1000
         card.power_modifier_expires_on_turn = game_state.turn_count
         card._sticky_power_modifier_expires_on_turn = game_state.turn_count
         if player.life_cards:
             player.hand.append(player.life_cards.pop())
-        game_state._log(f"{card.name}: Set DON!! #{don_idx + 1} active, +1000 power, added 1 Life to hand")
+        if don_label:
+            game_state._log(f"{card.name}: Set {don_label} active, +1000 power, added 1 Life to hand")
+        else:
+            game_state._log(f"{card.name}: +1000 power, added 1 Life to hand")
+
+    if not rested_indices:
+        apply_remaining_effect()
+        return True
+
+    def after_don_choice(selected):
+        don_idx = None
+        if selected:
+            try:
+                don_idx = int(selected[0])
+            except (TypeError, ValueError):
+                don_idx = None
+        apply_remaining_effect(don_idx)
 
     game_state.pending_choice = PendingChoice(
         choice_id=f"op06_028_{uuid.uuid4().hex[:8]}",
         choice_type="select_target",
         prompt="Choose a rested DON!! to set active",
         options=[{"id": str(idx), "label": f"DON!! #{idx + 1} (rested)"} for idx in rested_indices],
-        min_selections=1,
+        min_selections=0,
         max_selections=1,
         source_card_id=card.id,
         source_card_name=card.name,
@@ -1569,7 +1575,7 @@ def op06_041_ark_noah_play(game_state, player, card):
 @register_effect("OP06-041", "trigger", "[Trigger] Play this card")
 def op06_041_ark_noah_trigger(game_state, player, card):
     card.is_resting = False
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     game_state._apply_keywords(card)
     game_state._log(f"{player.name} played {card.name} from Trigger")
     # Fire on-play effect: rest all opponent characters
@@ -1659,6 +1665,69 @@ def op06_057_tears(game_state, player, card):
 
     snap_targets = list(_own_leader_and_chars(player))
 
+    def reveal_top_card():
+        if not player.deck:
+            return True
+
+        revealed = player.deck[0]
+        can_play = revealed.card_type == "CHARACTER" and (getattr(revealed, "cost", 0) or 0) == 2
+
+        def take_revealed_from_deck():
+            if player.deck and player.deck[0] is revealed:
+                return player.deck.pop(0)
+            if revealed in player.deck:
+                player.deck.remove(revealed)
+                return revealed
+            return None
+
+        def place_revealed_top_or_bottom():
+            card_to_place = take_revealed_from_deck()
+            if card_to_place:
+                game_state._create_top_or_bottom_choice(
+                    player, [card_to_place],
+                    source_name=card.name,
+                    source_id=card.id,
+                )
+
+        if not can_play:
+            game_state._log(f"{card.name}: Revealed {revealed.name}")
+            place_revealed_top_or_bottom()
+            return True
+
+        import uuid
+        from ...game_engine import PendingChoice
+
+        def after_play_choice(selected):
+            if selected:
+                card_to_play = take_revealed_from_deck()
+                if not card_to_play:
+                    return
+                card_to_play.is_resting = False
+                setattr(card_to_play, "played_turn", game_state.turn_count)
+                game_state.play_card_to_field_by_effect(player, card_to_play)
+                game_state._apply_keywords(card_to_play)
+                game_state._log(f"{card.name}: Played {card_to_play.name} to field")
+            else:
+                place_revealed_top_or_bottom()
+
+        game_state.pending_choice = PendingChoice(
+            choice_id=f"op06_057_{uuid.uuid4().hex[:8]}",
+            choice_type="select_cards",
+            prompt=f"Reveal top card: play {revealed.name}?",
+            options=[{
+                "id": "0",
+                "label": f"Play {revealed.name} (Cost: {revealed.cost or 0})",
+                "card_id": revealed.id,
+                "card_name": revealed.name,
+            }],
+            min_selections=0,
+            max_selections=1,
+            source_card_id=card.id,
+            source_card_name=card.name,
+            callback=after_play_choice,
+        )
+        return True
+
     def after_power(selected):
         # Apply +1000 to the chosen target
         for sel in selected:
@@ -1667,15 +1736,7 @@ def op06_057_tears(game_state, player, card):
                 snap_targets[idx].power_modifier = getattr(snap_targets[idx], "power_modifier", 0) + 1000
                 snap_targets[idx]._sticky_power_modifier = getattr(snap_targets[idx], "_sticky_power_modifier", 0) + 1000
                 game_state._log(f"{snap_targets[idx].name} gets +1000 power")
-        if not player.deck:
-            return
-        search_top_cards(
-            game_state, player, 1, add_count=1,
-            filter_fn=lambda c: c.card_type == "CHARACTER" and (getattr(c, "cost", 0) or 0) == 2,
-            source_card=card,
-            play_to_field=True,
-            prompt="Reveal top 1 card: if cost 2 Character, play it; otherwise place at top/bottom",
-        )
+        reveal_top_card()
 
     if targets:
         return create_power_effect_choice(
@@ -1686,14 +1747,7 @@ def op06_057_tears(game_state, player, card):
             callback=after_power,
         )
     else:
-        if player.deck:
-            return search_top_cards(
-                game_state, player, 1, add_count=1,
-                filter_fn=lambda c: c.card_type == "CHARACTER" and (getattr(c, "cost", 0) or 0) == 2,
-                source_card=card,
-                play_to_field=True,
-                prompt="Reveal top 1 card: play cost 2 Character or place at top/bottom",
-            )
+        return reveal_top_card()
     return True
 
 
@@ -1792,7 +1846,7 @@ def op06_060_ichiji_4(game_state, player, card):
                         zone.remove(t)
                         break
                 t.is_resting = False
-                player.cards_in_play.append(t)
+                game_state.play_card_to_field_by_effect(player, t)
                 game_state._log(f"{player.name} played {t.name} from hand/trash")
 
         from ...game_engine import PendingChoice
@@ -1882,7 +1936,7 @@ def op06_062_judge_play(game_state, player, card):
                             if t in player.trash:
                                 player.trash.remove(t)
                                 t.is_resting = False
-                                player.cards_in_play.append(t)
+                                game_state.play_card_to_field_by_effect(player, t)
                                 game_state._log(f"{player.name} played {t.name} from trash (Judge)")
 
                 from ...game_engine import PendingChoice
@@ -2021,7 +2075,7 @@ def op06_064_niji_3(game_state, player, card):
                         zone.remove(t)
                         break
                 t.is_resting = False
-                player.cards_in_play.append(t)
+                game_state.play_card_to_field_by_effect(player, t)
                 game_state._log(f"{player.name} played {t.name} from hand/trash")
 
         from ...game_engine import PendingChoice
@@ -2113,7 +2167,7 @@ def op06_066_yonji_2(game_state, player, card):
                         zone.remove(t)
                         break
                 t.is_resting = False
-                player.cards_in_play.append(t)
+                game_state.play_card_to_field_by_effect(player, t)
                 game_state._log(f"{player.name} played {t.name} from hand/trash")
 
         from ...game_engine import PendingChoice
@@ -2178,7 +2232,7 @@ def op06_068_reiju_2(game_state, player, card):
                         zone.remove(t)
                         break
                 t.is_resting = False
-                player.cards_in_play.append(t)
+                game_state.play_card_to_field_by_effect(player, t)
                 game_state._log(f"{player.name} played {t.name} from hand/trash")
 
         from ...game_engine import PendingChoice
@@ -2638,7 +2692,7 @@ def op06_086_moria_char(game_state, player, card):
         if not cost2_targets:
             if card_a:
                 card_a.is_resting = False
-                player.cards_in_play.append(card_a)
+                game_state.play_card_to_field_by_effect(player, card_a)
                 game_state._log(f"{player.name} played {card_a.name} from trash")
             return
 
@@ -2656,17 +2710,17 @@ def op06_086_moria_char(game_state, player, card):
                         player.trash.remove(card_b)
             if card_a and card_b:
                 card_a.is_resting = False
-                player.cards_in_play.append(card_a)
+                game_state.play_card_to_field_by_effect(player, card_a)
                 card_b.is_resting = True
-                player.cards_in_play.append(card_b)
+                game_state.play_card_to_field_by_effect(player, card_b)
                 game_state._log(f"{player.name} played {card_a.name} (active) and {card_b.name} (rested) from trash")
             elif card_a:
                 card_a.is_resting = False
-                player.cards_in_play.append(card_a)
+                game_state.play_card_to_field_by_effect(player, card_a)
                 game_state._log(f"{player.name} played {card_a.name} from trash")
             elif card_b:
                 card_b.is_resting = False
-                player.cards_in_play.append(card_b)
+                game_state.play_card_to_field_by_effect(player, card_b)
                 game_state._log(f"{player.name} played {card_b.name} from trash")
 
         from ...game_engine import PendingChoice
@@ -3156,7 +3210,7 @@ def op06_100_trigger(game_state, player, card):
     opponent = get_opponent(game_state, player)
     if len(opponent.life_cards) <= 3:
         card.is_resting = False
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
     return True
 
@@ -3250,7 +3304,7 @@ def op06_102_kamakiri(game_state, player, card):
 def op06_102_trigger(game_state, player, card):
     if len(player.life_cards) <= 2:
         card.is_resting = False
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
     return True
 
@@ -3324,7 +3378,7 @@ def op06_103_trigger(game_state, player, card):
     opponent = get_opponent(game_state, player)
     if len(opponent.life_cards) <= 3:
         card.is_resting = False
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
     return True
 
@@ -3345,7 +3399,7 @@ def op06_104_trigger(game_state, player, card):
     opponent = get_opponent(game_state, player)
     if len(opponent.life_cards) <= 3:
         card.is_resting = False
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
     return True
 
@@ -3508,7 +3562,7 @@ def op06_109_trigger(game_state, player, card):
     opponent = get_opponent(game_state, player)
     if len(opponent.life_cards) <= 3:
         card.is_resting = False
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
     return True
 
@@ -3526,7 +3580,7 @@ def op06_110_trigger(game_state, player, card):
     opponent = get_opponent(game_state, player)
     if len(opponent.life_cards) <= 3:
         card.is_resting = False
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
     return True
 
@@ -3577,7 +3631,7 @@ def op06_111_braham(game_state, player, card):
 def op06_111_trigger(game_state, player, card):
     if len(player.life_cards) <= 2:
         card.is_resting = False
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
     return True
 
@@ -3610,7 +3664,7 @@ def op06_112_trigger(game_state, player, card):
     opponent = get_opponent(game_state, player)
     if len(opponent.life_cards) <= 3:
         card.is_resting = False
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
     return True
 

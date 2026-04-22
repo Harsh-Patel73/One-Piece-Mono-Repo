@@ -996,37 +996,84 @@ class GameState:
                 card.has_doubleattack = True
                 card._innate_doubleattack = True
 
-    def _trigger_on_play_effects(self, card: Card):
+    def _trigger_on_play_effects(self, card: Card, player: Optional[Player] = None):
         """Trigger On Play effects for a card using the effect system."""
         print(f"[DEBUG] _trigger_on_play_effects: {card.id} - {card.name}")
 
-        # First try hardcoded handlers (for cards with complex effects)
-        executed = trigger_effect(card.id, self, card)
-        print(f"[DEBUG] Hardcoded executed: {executed}")
-
-        # ONLY parse and resolve effects if hardcoded handler didn't execute
-        # This prevents duplicate execution (e.g., "Draw 2" happening twice)
-        if not executed and card.effect:
-            print(f"[DEBUG] Running parser for {card.id}")
-            effects = parse_effect(card.effect)
-            for effect in effects:
-                if effect.timing == EffectTiming.ON_PLAY:
-                    print(f"[DEBUG] Parsed effect: {effect.effect_type}, timing: {effect.timing}")
-                    # Create context and resolve
-                    context = EffectContext(
-                        game_state=self,
-                        source_card=card,
-                        source_player=self.current_player,
-                        opponent=self.opponent_player,
-                    )
-                    resolver = get_resolver()
-                    if resolver.can_resolve(effect, context):
-                        result = resolver.resolve(effect, context)
-                        print(f"[DEBUG] Resolved effect: {result.success}, {result.message}")
-                        if result.success and result.message:
-                            self._log(f"  [EFFECT] {result.message}")
+        effect_player = player or self._find_card_owner(card) or self.current_player
+        previous_current = self.current_player
+        previous_opponent = self.opponent_player
+        if effect_player is self.player1:
+            effect_opponent = self.player2
+        elif effect_player is self.player2:
+            effect_opponent = self.player1
         else:
-            print(f"[DEBUG] Skipping parser - hardcoded already executed")
+            effect_opponent = self.opponent_player
+
+        self.current_player = effect_player
+        self.opponent_player = effect_opponent
+        try:
+            # First try hardcoded handlers (for cards with complex effects)
+            executed = trigger_effect(card.id, self, card)
+            print(f"[DEBUG] Hardcoded executed: {executed}")
+
+            # ONLY parse and resolve effects if hardcoded handler didn't execute
+            # This prevents duplicate execution (e.g., "Draw 2" happening twice)
+            if not executed and card.effect:
+                print(f"[DEBUG] Running parser for {card.id}")
+                effects = parse_effect(card.effect)
+                for effect in effects:
+                    if effect.timing == EffectTiming.ON_PLAY:
+                        print(f"[DEBUG] Parsed effect: {effect.effect_type}, timing: {effect.timing}")
+                        # Create context and resolve
+                        context = EffectContext(
+                            game_state=self,
+                            source_card=card,
+                            source_player=effect_player,
+                            opponent=effect_opponent,
+                        )
+                        resolver = get_resolver()
+                        if resolver.can_resolve(effect, context):
+                            result = resolver.resolve(effect, context)
+                            print(f"[DEBUG] Resolved effect: {result.success}, {result.message}")
+                            if result.success and result.message:
+                                self._log(f"  [EFFECT] {result.message}")
+            else:
+                print(f"[DEBUG] Skipping parser - hardcoded already executed")
+        finally:
+            self.current_player = previous_current
+            self.opponent_player = previous_opponent
+
+    def play_card_to_field_by_effect(
+        self,
+        player: Player,
+        card: Card,
+        *,
+        rest_on_play: Optional[bool] = None,
+        trigger_on_play: bool = True,
+        log_message: Optional[str] = None,
+    ) -> None:
+        """Put a card into play from an effect and run play-time hooks."""
+        if rest_on_play is not None:
+            card.is_resting = rest_on_play
+        if not any(in_play is card for in_play in player.cards_in_play):
+            player.cards_in_play.append(card)
+        setattr(card, 'played_turn', self.turn_count)
+        card_type = str(getattr(card, "card_type", "")).upper()
+        if card_type == "CHARACTER":
+            self.last_played_character = card
+        self._apply_keywords(card)
+        if log_message:
+            self._log(log_message)
+        if trigger_on_play:
+            self._trigger_on_play_effects(card, player=player)
+            from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
+            if (
+                card_type == "CHARACTER"
+                and player.leader
+                and has_hardcoded_effect(player.leader.id, 'on_play_character')
+            ):
+                execute_hardcoded_effect(self, player, player.leader, 'on_play_character')
 
     def play_card(self, card: Card):
         """Play a card from hand."""
@@ -1100,21 +1147,11 @@ class GameState:
                         execute_hardcoded_effect(self, self.opponent_player, opp_card, 'on_opponent_event')
             else:
                 # CHARACTER and STAGE cards go to field
-                self.current_player.cards_in_play.append(card)
-                setattr(card, 'played_turn', self.turn_count)
-                if card.card_type == "CHARACTER":
-                    self.last_played_character = card
-
-                # Apply keyword effects (Rush, Blocker, etc.)
-                self._apply_keywords(card)
-
-                self._log(f"{self.current_player.name} plays {card.name} (Cost {cost}), Remaining Active DON: {self.available_don()}")
-
-                # Trigger On Play effects (always try hardcoded; parser only if effect text present)
-                self._trigger_on_play_effects(card)
-                from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
-                if card.card_type == "CHARACTER" and self.current_player.leader and has_hardcoded_effect(self.current_player.leader.id, 'on_play_character'):
-                    execute_hardcoded_effect(self, self.current_player, self.current_player.leader, 'on_play_character')
+                self.play_card_to_field_by_effect(
+                    self.current_player,
+                    card,
+                    log_message=f"{self.current_player.name} plays {card.name} (Cost {cost}), Remaining Active DON: {self.available_don()}",
+                )
         else:
             self._log(f"Cannot play {card.name}: needs {cost} DON, has {self.available_don()}.")
             return False
@@ -2395,15 +2432,12 @@ class GameState:
                 # Place chosen cards in hand or on field
                 for chosen_card in chosen_cards:
                     if play_to_field:
-                        player.cards_in_play.append(chosen_card)
-                        setattr(chosen_card, 'played_turn', self.turn_count)
-                        if play_rested:
-                            chosen_card.is_resting = True
-                        self._apply_keywords(chosen_card)
-                        self._log(f"{source_name}: Played {chosen_card.name} to field")
-                        # Trigger on-play effects for the played card
-                        if chosen_card.effect and '[On Play]' in chosen_card.effect:
-                            self._trigger_on_play_effects(chosen_card)
+                        self.play_card_to_field_by_effect(
+                            player,
+                            chosen_card,
+                            rest_on_play=play_rested,
+                            log_message=f"{source_name}: Played {chosen_card.name} to field",
+                        )
                     else:
                         player.hand.append(chosen_card)
                         self._log(f"{source_name}: Added {chosen_card.name} to hand")
@@ -2687,9 +2721,12 @@ class GameState:
                         for c in player.trash[:]:
                             if c.id == target_info["id"]:
                                 player.trash.remove(c)
-                                c.is_resting = rest_on_play
-                                player.cards_in_play.append(c)
-                                self._log(f"{player.name} played {c.name} from trash")
+                                self.play_card_to_field_by_effect(
+                                    player,
+                                    c,
+                                    rest_on_play=rest_on_play,
+                                    log_message=f"{player.name} played {c.name} from trash",
+                                )
                                 break
 
             elif action == "select_mode":
@@ -2875,14 +2912,12 @@ class GameState:
                         for c in player.hand[:]:
                             if c.id == target_info["id"]:
                                 player.hand.remove(c)
-                                c.is_resting = rest_on_play
-                                setattr(c, 'played_turn', self.turn_count)
-                                player.cards_in_play.append(c)
-                                self._apply_keywords(c)
-                                self._log(f"{player.name} played {c.name} from hand")
-                                # Trigger on_play effects for the played card
-                                if c.effect and '[On Play]' in c.effect:
-                                    self._trigger_on_play_effects(c)
+                                self.play_card_to_field_by_effect(
+                                    player,
+                                    c,
+                                    rest_on_play=rest_on_play,
+                                    log_message=f"{player.name} played {c.name} from hand",
+                                )
                                 break
 
             elif action == "place_at_bottom":
@@ -3082,15 +3117,21 @@ class GameState:
                     for c in player.hand[:]:
                         if c.id == target_info["id"]:
                             player.hand.remove(c)
-                            player.cards_in_play.append(c)
-                            self._log(f"{c.name} was played from hand")
+                            self.play_card_to_field_by_effect(
+                                player,
+                                c,
+                                log_message=f"{c.name} was played from hand",
+                            )
                             break
                     else:
                         for c in list(player.trash):
                             if c.id == target_info["id"]:
                                 player.trash.remove(c)
-                                player.cards_in_play.append(c)
-                                self._log(f"{c.name} was played from trash")
+                                self.play_card_to_field_by_effect(
+                                    player,
+                                    c,
+                                    log_message=f"{c.name} was played from trash",
+                                )
                                 break
 
             elif action == "give_rush":

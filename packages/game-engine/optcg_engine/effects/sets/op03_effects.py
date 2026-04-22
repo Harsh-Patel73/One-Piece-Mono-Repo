@@ -24,7 +24,7 @@ def _play_this_card_from_trigger(game_state, player, card):
     if card not in player.cards_in_play:
         card.is_resting = False
         setattr(card, "played_turn", game_state.turn_count)
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._apply_keywords(card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
     return True
@@ -169,7 +169,7 @@ def op03_094_air_door(game_state, player, card):
                 played = targets[idx]
                 played.is_resting = False
                 setattr(played, "played_turn", game_state.turn_count)
-                player.cards_in_play.append(played)
+                game_state.play_card_to_field_by_effect(player, played)
                 game_state._apply_keywords(played)
                 game_state._log(f"Air Door: played {played.name}")
         for revealed_card in revealed:
@@ -836,7 +836,7 @@ def op03_013_marco_ko(game_state, player, card):
         for c in player.trash[:]:
             if c is marco_snap:
                 player.trash.remove(c)
-                player.cards_in_play.append(c)
+                game_state.play_card_to_field_by_effect(player, c)
                 c.is_resting = True
                 game_state._log(f"{c.name} returns to field rested")
                 break
@@ -992,7 +992,7 @@ def op03_026_kuroobi(game_state, player, card):
 @register_effect("OP03-026", "trigger", "[Trigger] Play this card")
 def op03_026_kuroobi_trigger(game_state, player, card):
     """Trigger: Play this card."""
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     return True
 
 
@@ -1101,7 +1101,7 @@ def op03_029_chew(game_state, player, card):
 @register_effect("OP03-029", "trigger", "[Trigger] Play this card")
 def op03_029_chew_trigger(game_state, player, card):
     """Trigger: Play this card."""
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     return True
 
 
@@ -1122,7 +1122,7 @@ def op03_030_nami(game_state, player, card):
 @register_effect("OP03-030", "trigger", "[Trigger] Play this card")
 def op03_030_nami_trigger(game_state, player, card):
     """Trigger: Play this card."""
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     return True
 
 
@@ -2489,7 +2489,7 @@ def op03_108_cracker_trigger(game_state, player, card):
                     src = c
                     break
         if src is not None:
-            player.cards_in_play.append(src)
+            game_state.play_card_to_field_by_effect(player, src)
             game_state._apply_keywords(src)
             game_state._log(f"{player.name} played {src.name}")
 
@@ -2637,7 +2637,7 @@ def op03_110_smoothie_trigger(game_state, player, card):
                     src = c
                     break
         if src is not None:
-            player.cards_in_play.append(src)
+            game_state.play_card_to_field_by_effect(player, src)
             game_state._apply_keywords(src)
             game_state._log(f"{player.name} played {src.name}")
 
@@ -2772,7 +2772,7 @@ def op03_020_striker(game_state, player, card):
 @register_effect("OP03-116", "trigger", "[Trigger] Play this card")
 def op03_116_shirahoshi_trigger(game_state, player, card):
     """Trigger: Play this card."""
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     return True
 
 
@@ -2825,7 +2825,7 @@ def op03_117_napoleon(game_state, player, card):
 @register_effect("OP03-117", "trigger", "[Trigger] Play this card")
 def op03_117_napoleon_trigger(game_state, player, card):
     """Trigger: Play this card."""
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     return True
 
 
@@ -2979,7 +2979,7 @@ def op03_123_katakuri(game_state, player, card):
 def op03_033_hatchan_trigger(game_state, player, card):
     """Trigger: If Leader is East Blue, play this card."""
     if player.leader and 'East Blue' in (player.leader.card_origin or ''):
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
     return True
 
 
@@ -3004,7 +3004,7 @@ def op03_100_kingbaum_trigger(game_state, player, card):
             for c in zone[:]:
                 if c is card_snap:
                     zone.remove(c)
-                    player.cards_in_play.append(c)
+                    game_state.play_card_to_field_by_effect(player, c)
                     game_state._log(f"{player.name} played {c.name}")
                     card_found = True
                     break

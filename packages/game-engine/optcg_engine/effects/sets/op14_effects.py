@@ -78,7 +78,7 @@ def gecko_moria_effect(game_state, player, card):
         char = thriller[0]
         player.trash.remove(char)
         # Play it
-        player.cards_in_play.append(char)
+        game_state.play_card_to_field_by_effect(player, char)
         return True
     return False
 

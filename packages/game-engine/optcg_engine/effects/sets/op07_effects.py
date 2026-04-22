@@ -23,7 +23,7 @@ def _play_this_card_from_trigger(game_state, player, card):
     if card not in player.cards_in_play:
         card.is_resting = False
         setattr(card, "played_turn", game_state.turn_count)
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._apply_keywords(card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
     return True
@@ -352,7 +352,7 @@ def op07_008_tanaka_blocker(game_state, player, card):
 @register_effect("OP07-008", "trigger", "[Trigger] Play this card")
 def op07_008_tanaka_trigger(game_state, player, card):
     """Trigger: Play this card."""
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     return True
 
 
@@ -943,7 +943,7 @@ def op07_048_doflamingo(game_state, player, card):
             choice = selected[0] if selected else 'no'
             if choice == 'yes':
                 revealed.is_resting = True
-                player.cards_in_play.append(revealed)
+                game_state.play_card_to_field_by_effect(player, revealed)
                 game_state._log(f"Doflamingo: Played {revealed.name} rested")
             else:
                 player.deck.append(revealed)
@@ -1804,7 +1804,7 @@ def op07_098_atlas_continuous(game_state, player, card):
 def op07_098_atlas_trigger(game_state, player, card):
     """Trigger: If Leader is Vegapunk, play this card."""
     if player.leader and getattr(player.leader, 'name', '') == 'Vegapunk':
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._log("Atlas: Played to field via trigger")
     return True
 
@@ -1848,7 +1848,7 @@ def op07_100_edison(game_state, player, card):
 def op07_100_edison_trigger(game_state, player, card):
     """Trigger: If Leader is Vegapunk, play this card."""
     if player.leader and getattr(player.leader, 'name', '') == 'Vegapunk':
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._log("Edison: Played to field via trigger")
     return True
 
@@ -1864,7 +1864,7 @@ def op07_101_shaka_blocker(game_state, player, card):
 def op07_101_shaka_trigger(game_state, player, card):
     """Trigger: If Leader is Vegapunk, play this card."""
     if check_leader_type(player, 'Egghead'):
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._log(f"Shaka: Played to field via trigger")
     return True
 
@@ -1933,7 +1933,7 @@ def op07_105_pythagoras_ko(game_state, player, card):
 def op07_105_pythagoras_trigger(game_state, player, card):
     """Trigger: If Leader is Vegapunk, play this card."""
     if check_leader_type(player, 'Egghead'):
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._log(f"Pythagoras: Played to field via trigger")
     return True
 
@@ -1958,7 +1958,7 @@ def op07_107_franky_yellow(game_state, player, card):
     """Trigger: Draw 1. If 1 or less life, play this card."""
     draw_cards(player, 1)
     if check_life_count(player, 1):
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._log(f"Franky: Played to field via trigger")
     return True
 
@@ -2015,7 +2015,7 @@ def op07_110_york(game_state, player, card):
 def op07_110_york_trigger(game_state, player, card):
     """Trigger: If Leader is Vegapunk, play this card."""
     if check_leader_type(player, 'Egghead'):
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._log(f"York: Played to field via trigger")
     return True
 
@@ -2034,7 +2034,7 @@ def op07_111_lilith(game_state, player, card):
 def op07_111_lilith_trigger(game_state, player, card):
     """Trigger: If Leader is Vegapunk, play this card."""
     if check_leader_type(player, 'Egghead'):
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._log(f"Lilith: Played to field via trigger")
     return True
 

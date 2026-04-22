@@ -100,7 +100,7 @@ def sanji_op11_ko(game_state, player, card):
                     and (getattr(c, 'cost', 0) or 0) <= 5
                     and getattr(c, 'card_type', '') == 'CHARACTER']
         if straw_hat:
-            player.cards_in_play.append(straw_hat[0])
+            game_state.play_card_to_field_by_effect(player, straw_hat[0])
             top_5.remove(straw_hat[0])
         player.deck.extend(top_5)
         return True

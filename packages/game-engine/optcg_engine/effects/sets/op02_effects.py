@@ -41,7 +41,7 @@ def _play_this_card_from_trigger(game_state, player, card):
     if card not in player.cards_in_play:
         card.is_resting = False
         setattr(card, "played_turn", game_state.turn_count)
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._apply_keywords(card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
     return True
@@ -539,7 +539,7 @@ def op02_018_marco_ko(game_state, player, card):
                                 break
                         if marco_card in player.trash:
                             player.trash.remove(marco_card)
-                            player.cards_in_play.append(marco_card)
+                            game_state.play_card_to_field_by_effect(player, marco_card)
                             marco_card.is_resting = True
                             game_state._log(f"{marco_card.name} returns to play rested from trash")
 
@@ -672,7 +672,7 @@ def op02_030_oden_ko(game_state, player, card):
                 chosen = targets_snapshot[idx]
                 if chosen in player.deck:
                     player.deck.remove(chosen)
-                    player.cards_in_play.append(chosen)
+                    game_state.play_card_to_field_by_effect(player, chosen)
                     game_state._apply_keywords(chosen)
                     game_state._log(f"Kouzuki Oden: {chosen.name} played from deck")
         import random
@@ -1808,7 +1808,7 @@ def op02_103_sengoku(game_state, player, card):
 def op02_104_tashigi_trigger(game_state, player, card):
     """Trigger: Play this card."""
     if card not in player.cards_in_play:
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
     card.played_turn = getattr(game_state, 'turn_count', 0)
     return True
 
@@ -1985,7 +1985,7 @@ def op02_113_helmeppo(game_state, player, card):
 @register_effect("OP02-113", "trigger", "[Trigger] Play this card")
 def op02_113_helmeppo_trigger(game_state, player, card):
     """Trigger: Play this card."""
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     return True
 
 

@@ -34,7 +34,7 @@ def garp_op12_effect(game_state, player, card):
                 and getattr(hand_card, 'card_type', '') == 'CHARACTER'
                 and 'Monkey.D.Garp' not in getattr(hand_card, 'name', '')):
                 char = player.hand.pop(i)
-                player.cards_in_play.append(char)
+                game_state.play_card_to_field_by_effect(player, char)
                 return True
     return False
 
@@ -80,7 +80,7 @@ def op12_003_crocus(game_state, player, card):
         if red_chars:
             to_play = red_chars[0]
             player.hand.remove(to_play)
-            player.cards_in_play.append(to_play)
+            game_state.play_card_to_field_by_effect(player, to_play)
     return True
 
 
@@ -105,7 +105,7 @@ def op12_015_luffy(game_state, player, card):
         if red_chars:
             to_play = red_chars[0]
             player.hand.remove(to_play)
-            player.cards_in_play.append(to_play)
+            game_state.play_card_to_field_by_effect(player, to_play)
     return True
 
 

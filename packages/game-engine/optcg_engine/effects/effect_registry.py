@@ -51,6 +51,34 @@ def _remove_card_instance(zone: List['Card'], target: 'Card') -> bool:
     return False
 
 
+def play_card_by_effect(game_state: 'GameState', player: 'Player', card: 'Card',
+                        *, rest_on_play: bool = None,
+                        log_message: str = None,
+                        trigger_on_play: bool = True) -> None:
+    """Play a card to the field from an effect and trigger play-time hooks."""
+    if hasattr(game_state, "play_card_to_field_by_effect"):
+        game_state.play_card_to_field_by_effect(
+            player,
+            card,
+            rest_on_play=rest_on_play,
+            trigger_on_play=trigger_on_play,
+            log_message=log_message,
+        )
+        return
+
+    if rest_on_play is not None:
+        card.is_resting = rest_on_play
+    if not any(in_play is card for in_play in player.cards_in_play):
+        player.cards_in_play.append(card)
+    setattr(card, 'played_turn', getattr(game_state, 'turn_count', 0))
+    if hasattr(game_state, "_apply_keywords"):
+        game_state._apply_keywords(card)
+    if log_message and hasattr(game_state, "_log"):
+        game_state._log(log_message)
+    if trigger_on_play and hasattr(game_state, "_trigger_on_play_effects"):
+        game_state._trigger_on_play_effects(card, player=player)
+
+
 def register_effect(card_id: str, timing: str, description: str):
     """Decorator to register a hardcoded effect handler."""
     def decorator(func: Callable[['GameState', 'Player', 'Card'], bool]):
@@ -449,14 +477,11 @@ def search_top_cards(game_state: 'GameState', player: 'Player', look_count: int,
                     chosen_cards.append(player.deck.pop(idx))
             for chosen_card in chosen_cards:
                 if play_to_field:
-                    player.cards_in_play.append(chosen_card)
-                    setattr(chosen_card, 'played_turn', game_state.turn_count)
-                    if play_rested:
-                        chosen_card.is_resting = True
-                    game_state._apply_keywords(chosen_card)
-                    game_state._log(f"{source_name}: Played {chosen_card.name} to field")
-                    if chosen_card.effect and '[On Play]' in chosen_card.effect:
-                        game_state._trigger_on_play_effects(chosen_card)
+                    play_card_by_effect(
+                        game_state, player, chosen_card,
+                        rest_on_play=play_rested,
+                        log_message=f"{source_name}: Played {chosen_card.name} to field",
+                    )
                 else:
                     player.hand.append(chosen_card)
                     game_state._log(f"{source_name}: Added {chosen_card.name} to hand")
@@ -1124,9 +1149,11 @@ def create_play_from_trash_choice(game_state: 'GameState', player: 'Player',
         if 0 <= target_idx < len(snapshot):
             target = snapshot[target_idx]
             if _remove_card_instance(player.trash, target):
-                target.is_resting = rest_on_play
-                player.cards_in_play.append(target)
-                game_state._log(f"{player.name} played {target.name} from trash")
+                play_card_by_effect(
+                    game_state, player, target,
+                    rest_on_play=rest_on_play,
+                    log_message=f"{player.name} played {target.name} from trash",
+                )
 
     game_state.pending_choice = PendingChoice(
         choice_id=f"play_trash_{uuid.uuid4().hex[:8]}",
@@ -1370,13 +1397,11 @@ def create_play_from_hand_choice(game_state: 'GameState', player: 'Player',
         if 0 <= target_idx < len(snapshot):
             target = snapshot[target_idx]
             if _remove_card_instance(player.hand, target):
-                target.is_resting = rest_on_play
-                setattr(target, 'played_turn', game_state.turn_count)
-                player.cards_in_play.append(target)
-                game_state._apply_keywords(target)
-                game_state._log(f"{player.name} played {target.name} from hand")
-                if target.effect and '[On Play]' in target.effect:
-                    game_state._trigger_on_play_effects(target)
+                play_card_by_effect(
+                    game_state, player, target,
+                    rest_on_play=rest_on_play,
+                    log_message=f"{player.name} played {target.name} from hand",
+                )
 
     game_state.pending_choice = PendingChoice(
         choice_id=f"play_hand_{uuid.uuid4().hex[:8]}",

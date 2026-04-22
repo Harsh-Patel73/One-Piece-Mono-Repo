@@ -125,7 +125,7 @@ def eb02_059_without_help(game_state, player, card):
             if straw_hats:
                 char = straw_hats[0]
                 player.trash.remove(char)
-                player.cards_in_play.append(char)
+                game_state.play_card_to_field_by_effect(player, char)
         return True
     return False
 

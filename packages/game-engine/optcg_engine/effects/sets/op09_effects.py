@@ -2389,7 +2389,7 @@ def op09_100_karasu_trigger(game_state, player, card):
     if total_life > 5:
         return False
     if _remove_card_instance(player.trash, card):
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         card.is_resting = False
         setattr(card, 'played_turn', game_state.turn_count)
         game_state._log(f"{player.name} played {card.name} from trigger")
@@ -2494,7 +2494,7 @@ def op09_103_koala(game_state, player, card):
                     if 0 <= pidx < len(rev_chars):
                         t = rev_chars[pidx]
                         if _remove_card_instance(player.hand, t):
-                            player.cards_in_play.append(t)
+                            game_state.play_card_to_field_by_effect(player, t)
                             t.is_resting = False
                             setattr(t, 'played_turn', game_state.turn_count)
                             game_state._log(f"{player.name} played {t.name} from hand")
@@ -2678,7 +2678,7 @@ def op09_108_kuma_trigger(game_state, player, card):
     if total_life > 5:
         return False
     if _remove_card_instance(player.trash, card):
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         card.is_resting = False
         setattr(card, 'played_turn', game_state.turn_count)
         game_state._log(f"{player.name} played {card.name} from trigger")
@@ -2697,7 +2697,7 @@ def op09_109_saul_trigger(game_state, player, card):
     if not (player.leader and 'Nico Robin' in (player.leader.name or '')):
         return False
     if _remove_card_instance(player.trash, card):
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         card.is_resting = False
         setattr(card, 'played_turn', game_state.turn_count)
         game_state._log(f"{player.name} played {card.name} from trigger")
@@ -2716,7 +2716,7 @@ def op09_110_pierre(game_state, player, card):
 @register_effect("OP09-110", "trigger", "[Trigger] Play this card")
 def op09_110_pierre_trigger(game_state, player, card):
     if _remove_card_instance(player.trash, card):
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         card.is_resting = False
         setattr(card, 'played_turn', game_state.turn_count)
         game_state._log(f"{player.name} played {card.name} from trigger")
@@ -2753,7 +2753,7 @@ def op09_112_betty_trigger(game_state, player, card):
     if total_life > 5:
         return False
     if _remove_card_instance(player.trash, card):
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         card.is_resting = False
         setattr(card, 'played_turn', game_state.turn_count)
         game_state._log(f"{player.name} played {card.name} from trigger")
@@ -2785,7 +2785,7 @@ def op09_114_lindbergh_trigger(game_state, player, card):
     if total_life > 5:
         return False
     if _remove_card_instance(player.trash, card):
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         card.is_resting = False
         setattr(card, 'played_turn', game_state.turn_count)
         game_state._log(f"{player.name} played {card.name} from trigger")

@@ -391,7 +391,7 @@ def _play_card_from_trash(game_state, player, target, rest_on_play=False):
     player.trash.remove(target)
     target.is_resting = rest_on_play
     setattr(target, 'played_turn', game_state.turn_count)
-    player.cards_in_play.append(target)
+    game_state.play_card_to_field_by_effect(player, target)
     game_state._apply_keywords(target)
     game_state._recalc_continuous_effects()
     game_state._log(f"{player.name} played {target.name} from trash")
@@ -862,7 +862,7 @@ def op04_010_chopper(game_state, player, card):
             callback=lambda selected: (
                 None if not selected else (
                     player.hand.remove(targets[int(selected[0])]),
-                    player.cards_in_play.append(targets[int(selected[0])]),
+                    game_state.play_card_to_field_by_effect(player, targets[int(selected[0])]),
                     setattr(targets[int(selected[0])], 'played_turn', game_state.turn_count),
                     game_state._apply_keywords(targets[int(selected[0])]),
                     game_state._log(f"{player.name} played {targets[int(selected[0])].name} from hand")
@@ -1743,7 +1743,7 @@ def op04_052_black_maria(game_state, player, card):
 @register_effect("OP04-052", "trigger", "[Trigger] Play this card")
 def op04_052_black_maria_trigger(game_state, player, card):
     """Trigger: Play this card."""
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     return True
 
 
@@ -2084,7 +2084,7 @@ def op04_064_ms_all_sunday(game_state, player, card):
 def op04_064_ms_all_sunday_trigger(game_state, player, card):
     """Trigger: Return 2 DON to play this card."""
     def callback():
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         setattr(card, 'played_turn', game_state.turn_count)
         game_state._apply_keywords(card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
@@ -2115,7 +2115,7 @@ def op04_065_goldenweek(game_state, player, card):
 def op04_065_goldenweek_trigger(game_state, player, card):
     """Trigger: Return 1 DON to play this card."""
     def callback():
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         setattr(card, 'played_turn', game_state.turn_count)
         game_state._apply_keywords(card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
@@ -2142,7 +2142,7 @@ def op04_066_valentine(game_state, player, card):
 def op04_066_valentine_trigger(game_state, player, card):
     """Trigger: Return 1 DON to play this card."""
     def callback():
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         setattr(card, 'played_turn', game_state.turn_count)
         game_state._apply_keywords(card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
@@ -2165,7 +2165,7 @@ def op04_067_merry_christmas_blocker(game_state, player, card):
 def op04_067_merry_christmas_trigger(game_state, player, card):
     """Trigger: Return 1 DON to play this card."""
     def callback():
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         setattr(card, 'played_turn', game_state.turn_count)
         game_state._apply_keywords(card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
@@ -2227,7 +2227,7 @@ def op04_069_bon_kurei(game_state, player, card):
 def op04_069_bon_kurei_trigger(game_state, player, card):
     """Trigger: Return 1 DON to play this card."""
     def callback():
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         setattr(card, 'played_turn', game_state.turn_count)
         game_state._apply_keywords(card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
@@ -2352,7 +2352,7 @@ def op04_073_mr13_friday(game_state, player, card):
 @register_effect("OP04-073", "trigger", "[Trigger] Play this card")
 def op04_073_mr13_friday_trigger(game_state, player, card):
     """Trigger: Play this card."""
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     return True
 
 
@@ -3122,7 +3122,7 @@ def op04_099_olin(game_state, player, card):
 def op04_099_olin_trigger(game_state, player, card):
     """Trigger: If 1 or less Life, play this card."""
     if len(player.life_cards) <= 1:
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         return True
     return False
 
@@ -3163,7 +3163,7 @@ def op04_101_carmel(game_state, player, card):
 @register_effect("OP04-101", "trigger", "[Trigger] Play this card, K.O. cost 2 or less")
 def op04_101_carmel_trigger(game_state, player, card):
     """Trigger: Play this card and K.O. cost 2 or less."""
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     opponent = get_opponent(game_state, player)
     targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= 2]
     if targets:
@@ -3239,7 +3239,7 @@ def op04_103_hiyori(game_state, player, card):
 @register_effect("OP04-103", "trigger", "[Trigger] Play this card")
 def op04_103_hiyori_trigger(game_state, player, card):
     """Trigger: Play this card."""
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     return True
 
 
@@ -3265,7 +3265,7 @@ def op04_104_sanji_trigger(game_state, player, card):
                     player.hand.remove(discarded)
                     player.trash.append(discarded)
                     game_state._log(f"{player.name} trashed {discarded.name}")
-            player.cards_in_play.append(card)
+            game_state.play_card_to_field_by_effect(player, card)
             setattr(card, 'played_turn', game_state.turn_count)
             game_state._apply_keywords(card)
             game_state._log(f"{player.name} played {card.name} from Trigger")
@@ -3333,7 +3333,7 @@ def op04_106_bavarois_trigger(game_state, player, card):
                     player.hand.remove(discarded)
                     player.trash.append(discarded)
                     game_state._log(f"{player.name} trashed {discarded.name}")
-            player.cards_in_play.append(card)
+            game_state.play_card_to_field_by_effect(player, card)
             setattr(card, 'played_turn', game_state.turn_count)
             game_state._apply_keywords(card)
             game_state._log(f"{player.name} played {card.name} from Trigger")
@@ -3370,7 +3370,7 @@ def op04_108_moscato_trigger(game_state, player, card):
                     player.hand.remove(discarded)
                     player.trash.append(discarded)
                     game_state._log(f"{player.name} trashed {discarded.name}")
-            player.cards_in_play.append(card)
+            game_state.play_card_to_field_by_effect(player, card)
             setattr(card, 'played_turn', game_state.turn_count)
             game_state._apply_keywords(card)
             game_state._log(f"{player.name} played {card.name} from Trigger")
@@ -3500,7 +3500,7 @@ def op04_111_hera(game_state, player, card):
 @register_effect("OP04-111", "trigger", "[Trigger] Play this card")
 def op04_111_hera_trigger(game_state, player, card):
     """Trigger: Play this card."""
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     return True
 
 
@@ -3557,7 +3557,7 @@ def op04_112_yamato(game_state, player, card):
 @register_effect("OP04-113", "trigger", "[Trigger] Play this card")
 def op04_113_rabiyan(game_state, player, card):
     """Trigger: Play this card."""
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     return True
 
 
@@ -3833,12 +3833,10 @@ def op04_119_rosinante_play(game_state, player, card):
             if chosen in player.hand:
                 player.hand.remove(chosen)
                 setattr(chosen, 'played_turn', game_state.turn_count)
-                player.cards_in_play.append(chosen)
+                game_state.play_card_to_field_by_effect(player, chosen)
                 game_state._apply_keywords(chosen)
                 game_state._recalc_continuous_effects()
                 game_state._log(f"{player.name} played {chosen.name} from hand")
-                if chosen.effect and '[On Play]' in chosen.effect:
-                    game_state._trigger_on_play_effects(chosen)
 
     def use_callback(selected):
         if not selected or selected[0] != "yes":

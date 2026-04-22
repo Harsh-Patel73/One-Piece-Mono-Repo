@@ -22,7 +22,7 @@ def _play_this_card_from_trigger(game_state, player, card):
     if card not in player.cards_in_play:
         card.is_resting = False
         setattr(card, "played_turn", game_state.turn_count)
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._apply_keywords(card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
     return True
@@ -299,7 +299,7 @@ def op01_060_doffy_leader(game_state, player, card):
             if selected and selected[0] == "play" and player.deck and player.deck[0] is revealed_snapshot:
                 top_card = player.deck.pop(0)
                 top_card.is_resting = True
-                player.cards_in_play.append(top_card)
+                game_state.play_card_to_field_by_effect(player, top_card)
                 game_state._apply_keywords(top_card)
                 game_state._log(f"Doflamingo: {top_card.name} played to field rested")
             else:
@@ -458,7 +458,7 @@ def op01_008_cavendish(game_state, player, card):
 @register_effect("OP01-009", "trigger", "[Trigger] Play this card")
 def op01_009_carrot(game_state, player, card):
     """Trigger: Play this card."""
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     return True
 
 
@@ -1346,7 +1346,7 @@ def op01_069_caesar(game_state, player, card):
             target = smileys_snapshot[target_idx]
             if target in player.deck:
                 player.deck.remove(target)
-                player.cards_in_play.append(target)
+                game_state.play_card_to_field_by_effect(player, target)
                 game_state._log(f"{player.name} played {target.name} from deck to field")
         import random
         random.shuffle(player.deck)
@@ -1799,7 +1799,7 @@ def op01_104_marco_blocker(game_state, player, card):
 @register_effect("OP01-104", "trigger", "[Trigger] Play this card")
 def op01_104_speed_trigger(game_state, player, card):
     """[Trigger] Play this card."""
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     game_state._log(f"Trigger: {card.name} played to field")
     return True
 
@@ -2119,7 +2119,7 @@ def op01_120_shanks(game_state, player, card):
 @register_effect("OP01-037", "trigger", "[Trigger] Play this card")
 def op01_037_kawamatsu(game_state, player, card):
     # Card text: [Trigger] Play this card.
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     return True
 
 
@@ -2127,7 +2127,7 @@ def op01_037_kawamatsu(game_state, player, card):
 @register_effect("OP01-082", "trigger", "[Trigger] Play this card")
 def op01_082_monet(game_state, player, card):
     # Card text: [Trigger] Play this card.
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     return True
 
 

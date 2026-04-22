@@ -447,7 +447,7 @@ def _queue_multicolor_trigger_play(game_state, player, card):
                 game_state._log(f"{player.name} trashed {discarded.name}")
         card.is_resting = False
         setattr(card, "played_turn", game_state.turn_count)
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._apply_keywords(card)
         game_state._log(f"{card.name} is played from trigger")
         game_state._complete_trigger_followup(played=True)
@@ -1378,7 +1378,7 @@ def op05_011_kuma_trigger(game_state, player, card):
     """Trigger: Play this card if multicolored Leader."""
     if player.leader and len(getattr(player.leader, 'colors', [])) > 1:
         card.is_resting = False
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         setattr(card, 'played_turn', game_state.turn_count)
         game_state._apply_keywords(card)
         return True
@@ -2561,7 +2561,7 @@ def op05_073_doublefinger_trigger(game_state, player, card):
 
     def resolve_effect():
         card.is_resting = False
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         setattr(card, "played_turn", game_state.turn_count)
         game_state._apply_keywords(card)
         game_state._log(f"{player.name} played {card.name} from trigger")
@@ -3299,7 +3299,7 @@ def op05_105_satori(game_state, player, card):
                 player.hand.remove(trashed)
                 player.trash.append(trashed)
                 game_state._log(f"{player.name} trashed {trashed.name}")
-                player.cards_in_play.append(card)
+                game_state.play_card_to_field_by_effect(player, card)
                 setattr(card, 'played_turn', game_state.turn_count)
                 game_state._apply_keywords(card)
                 game_state._log(f"{player.name} played {card.name} from trigger")
@@ -3339,7 +3339,7 @@ def op05_106_shura_play(game_state, player, card):
 def op05_106_shura_trigger(game_state, player, card):
     """Trigger: Play this card."""
     card.is_resting = False
-    player.cards_in_play.append(card)
+    game_state.play_card_to_field_by_effect(player, card)
     setattr(card, 'played_turn', game_state.turn_count)
     game_state._apply_keywords(card)
     return True
@@ -3381,7 +3381,7 @@ def op05_111_hotori(game_state, player, card):
         kotori = kotori_targets[0]
         if kotori in player.hand:
             player.hand.remove(kotori)
-            player.cards_in_play.append(kotori)
+            game_state.play_card_to_field_by_effect(player, kotori)
             setattr(kotori, 'played_turn', game_state.turn_count)
             game_state._apply_keywords(kotori)
         opponent = get_opponent(game_state, player)

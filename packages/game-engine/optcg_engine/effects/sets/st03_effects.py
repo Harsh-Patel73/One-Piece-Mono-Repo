@@ -102,7 +102,7 @@ def st03_007_sentomaru(game_state, player, card):
             if pacifistas:
                 target = pacifistas[0]
                 player.deck.remove(target)
-                player.cards_in_play.append(target)
+                game_state.play_card_to_field_by_effect(player, target)
                 random.shuffle(player.deck)
             card.st03_007_used = True
             return True

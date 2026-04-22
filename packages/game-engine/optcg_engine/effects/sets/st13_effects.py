@@ -225,7 +225,7 @@ def st13_006_dadan_play(game_state, player, card):
                    and getattr(c, 'card_type', '') == 'CHARACTER']
         if matches:
             player.hand.remove(matches[0])
-            player.cards_in_play.append(matches[0])
+            game_state.play_card_to_field_by_effect(player, matches[0])
     return True
 
 
@@ -240,7 +240,7 @@ def st13_007_sabo(game_state, player, card):
             top_life = player.life_cards[-1]
             if 'sabo' in (getattr(top_life, 'name', '') or '').lower() and (getattr(top_life, 'cost', 0) or 0) == 5:
                 player.life_cards.pop()
-                player.cards_in_play.append(top_life)
+                game_state.play_card_to_field_by_effect(player, top_life)
                 if player.leader:
                     player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 2000
         return True
@@ -291,7 +291,7 @@ def st13_010_ace(game_state, player, card):
             top_life = player.life_cards[-1]
             if 'portgas.d.ace' in (getattr(top_life, 'name', '') or '').lower() and (getattr(top_life, 'cost', 0) or 0) == 5:
                 player.life_cards.pop()
-                player.cards_in_play.append(top_life)
+                game_state.play_card_to_field_by_effect(player, top_life)
                 if player.leader:
                     player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 2000
         return True
@@ -344,7 +344,7 @@ def st13_014_luffy(game_state, player, card):
             top_life = player.life_cards[-1]
             if 'monkey.d.luffy' in (getattr(top_life, 'name', '') or '').lower() and (getattr(top_life, 'cost', 0) or 0) == 5:
                 player.life_cards.pop()
-                player.cards_in_play.append(top_life)
+                game_state.play_card_to_field_by_effect(player, top_life)
                 if player.leader:
                     player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 2000
         return True

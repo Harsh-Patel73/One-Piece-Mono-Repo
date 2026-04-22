@@ -312,7 +312,7 @@ def op10_022_law_leader(game_state, player, card):
             if playable:
                 to_play = playable[0]
                 player.hand.remove(to_play)
-                player.cards_in_play.append(to_play)
+                game_state.play_card_to_field_by_effect(player, to_play)
             card.op10_022_used = True
             return True
     return False
@@ -361,7 +361,7 @@ def op10_003_gecko_moria(game_state, player, card):
         if 'Thriller Bark Pirates' in (c.card_origin or '') and (getattr(c, 'cost', 0) or 0) <= 4:
             if getattr(c, 'card_type', '') == 'CHARACTER':
                 player.trash.remove(c)
-                player.cards_in_play.append(c)
+                game_state.play_card_to_field_by_effect(player, c)
                 break
     return True
 
@@ -401,7 +401,7 @@ def op10_007_charlotte_linlin(game_state, player, card):
             if getattr(c, 'card_type', '') == 'CHARACTER':
                 player.hand.remove(c)
                 c.is_resting = True
-                player.cards_in_play.append(c)
+                game_state.play_card_to_field_by_effect(player, c)
                 break
     return True
 
@@ -529,7 +529,7 @@ def op10_061_linlin(game_state, player, card):
                 if getattr(c, 'card_type', '') == 'CHARACTER':
                     player.trash.remove(c)
                     c.is_resting = True
-                    player.cards_in_play.append(c)
+                    game_state.play_card_to_field_by_effect(player, c)
                     break
     return True
 
@@ -748,7 +748,7 @@ def _op10_play_this_card_from_trigger(game_state, player, card):
     if card not in player.cards_in_play:
         card.is_resting = False
         setattr(card, "played_turn", game_state.turn_count)
-        player.cards_in_play.append(card)
+        game_state.play_card_to_field_by_effect(player, card)
         game_state._apply_keywords(card)
         game_state._log(f"{player.name} played {card.name} from Trigger")
     return True

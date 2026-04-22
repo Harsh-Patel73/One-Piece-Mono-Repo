@@ -500,7 +500,11 @@ class EffectResolver:
                 return EffectResult(success=True, state_changed=False)
 
             _remove_exact(context.source_player.trash, card)
-            context.source_player.cards_in_play.append(card)
+            context.game_state.play_card_to_field_by_effect(
+                context.source_player,
+                card,
+                log_message=f"{card.name} is played from trigger",
+            )
             print(f"{card.name} is played from trigger")
             return EffectResult(success=True, state_changed=True)
 
@@ -513,7 +517,11 @@ class EffectResolver:
                 return EffectResult(success=False, message="Field is full")
             if card in context.source_player.hand:
                 context.source_player.hand.remove(card)
-                context.source_player.cards_in_play.append(card)
+                context.game_state.play_card_to_field_by_effect(
+                    context.source_player,
+                    card,
+                    log_message=f"{card.name} is played for free",
+                )
                 print(f"{card.name} is played for free")
                 return EffectResult(success=True, state_changed=True)
 

@@ -532,6 +532,19 @@ def build_game_state(test_card: Card, timing: str) -> Tuple[GameState, Player, C
         p1.deck.insert(1, _make_seed_card("OP06-DECK-GERMA", "GERMA Deck Card", "CHARACTER", 2, 3000, ["Purple"], "GERMA 66"))
         p1.deck.insert(2, _make_seed_card("OP06-DECK-SHANDIAN", "Shandian Deck Card", "CHARACTER", 2, 3000, ["Yellow"], "Shandian Warrior"))
 
+        if card_id == "OP06-011":
+            p1.leader = _make_seed_card("OP06-001", "Uta", "LEADER", None, 5000, ["Red"], "FILM")
+            p1.leader.life = 4
+            if not any(c.name == "Uta" and not c.is_resting for c in p1.cards_in_play):
+                p1.cards_in_play.append(_make_seed_card("OP06-011-UTA", "Uta", "CHARACTER", 3, 4000, ["Red"], "FILM"))
+
+        if card_id == "OP06-031":
+            for zone in (p1.cards_in_play, p1.hand, p1.trash, p1.deck, p1.life_cards):
+                if tc in zone:
+                    zone.remove(tc)
+            p1.life_cards.insert(0, tc)
+            p1.hand.insert(0, _make_seed_card("FISHMAN-SEED-001", "Arlong", "CHARACTER", 3, 4000, ["Blue"], "Fish-Man"))
+
     return gs, p1, tc
 
 

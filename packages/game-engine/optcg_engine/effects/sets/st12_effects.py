@@ -203,7 +203,7 @@ def st12_010_ivankov_play(game_state, player, card):
         top_card = player.deck[0]
         if getattr(top_card, 'card_type', '') == 'CHARACTER' and (getattr(top_card, 'cost', 0) or 0) == 2:
             player.deck.pop(0)
-            player.cards_in_play.append(top_card)
+            game_state.play_card_to_field_by_effect(player, top_card)
         return True
     return False
 
@@ -258,7 +258,7 @@ def st12_013_zeff_attack(game_state, player, card):
         if getattr(top_card, 'card_type', '') == 'CHARACTER' and (getattr(top_card, 'cost', 0) or 0) == 2:
             player.deck.pop(0)
             top_card.is_resting = True
-            player.cards_in_play.append(top_card)
+            game_state.play_card_to_field_by_effect(player, top_card)
         return True
     return False
 
