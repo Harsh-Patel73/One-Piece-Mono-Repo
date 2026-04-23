@@ -522,10 +522,10 @@ def build_game_state(test_card: Card, timing: str) -> Tuple[GameState, Player, C
         p1.trash.extend([
             _make_seed_card("OP06-TRASH-TB2", "Thriller Bark Trash 2", "CHARACTER", 2, 3000, ["Black"], "Thriller Bark Pirates"),
             _make_seed_card("OP06-TRASH-TB4", "Thriller Bark Trash 4", "CHARACTER", 4, 5000, ["Black"], "Thriller Bark Pirates"),
-            _make_seed_card("OP06-TRASH-GERMA-I", "Vinsmoke Ichiji", "CHARACTER", 7, 7000, ["Purple"], "GERMA 66 / The Vinsmoke Family"),
-            _make_seed_card("OP06-TRASH-GERMA-N", "Vinsmoke Niji", "CHARACTER", 5, 6000, ["Purple"], "GERMA 66 / The Vinsmoke Family"),
-            _make_seed_card("OP06-TRASH-GERMA-Y", "Vinsmoke Yonji", "CHARACTER", 4, 5000, ["Purple"], "GERMA 66 / The Vinsmoke Family"),
-            _make_seed_card("OP06-TRASH-GERMA-R", "Vinsmoke Reiju", "CHARACTER", 4, 5000, ["Purple"], "GERMA 66 / The Vinsmoke Family"),
+            _make_seed_card("OP06-TRASH-GERMA-I", "Vinsmoke Ichiji", "CHARACTER", 7, 4000, ["Purple"], "GERMA 66 / The Vinsmoke Family"),
+            _make_seed_card("OP06-TRASH-GERMA-N", "Vinsmoke Niji", "CHARACTER", 5, 4000, ["Purple"], "GERMA 66 / The Vinsmoke Family"),
+            _make_seed_card("OP06-TRASH-GERMA-Y", "Vinsmoke Yonji", "CHARACTER", 4, 3000, ["Purple"], "GERMA 66 / The Vinsmoke Family"),
+            _make_seed_card("OP06-TRASH-GERMA-R", "Vinsmoke Reiju", "CHARACTER", 4, 3000, ["Purple"], "GERMA 66 / The Vinsmoke Family"),
             _make_seed_card("OP06-TRASH-FILM", "FILM Trash Character", "CHARACTER", 4, 4000, ["Red"], "FILM"),
         ])
         p1.deck.insert(0, _make_seed_card("OP06-DECK-FILM", "FILM Deck Card", "CHARACTER", 2, 3000, ["Red"], "FILM"))
@@ -542,7 +542,7 @@ def build_game_state(test_card: Card, timing: str) -> Tuple[GameState, Player, C
             for zone in (p1.cards_in_play, p1.hand, p1.trash, p1.deck, p1.life_cards):
                 if tc in zone:
                     zone.remove(tc)
-            p1.life_cards.insert(0, tc)
+            p1.life_cards.append(tc)
             p1.hand.insert(0, _make_seed_card("FISHMAN-SEED-001", "Arlong", "CHARACTER", 3, 4000, ["Blue"], "Fish-Man"))
 
     return gs, p1, tc

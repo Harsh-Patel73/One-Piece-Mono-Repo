@@ -79,6 +79,29 @@ def play_card_by_effect(game_state: 'GameState', player: 'Player', card: 'Card',
         game_state._trigger_on_play_effects(card, player=player)
 
 
+def ko_character_by_effect(game_state: 'GameState', target: 'Card',
+                           *, controller: 'Player' = None) -> str:
+    """K.O. a character from an effect and trigger K.O. hooks."""
+    if hasattr(game_state, "_attempt_character_ko"):
+        return game_state._attempt_character_ko(
+            target,
+            by_effect=True,
+            controller=controller,
+        )
+
+    for candidate_player in [getattr(game_state, "player1", None), getattr(game_state, "player2", None)]:
+        if not candidate_player:
+            continue
+        for idx, in_play in enumerate(list(candidate_player.cards_in_play)):
+            if in_play is target:
+                candidate_player.cards_in_play.pop(idx)
+                candidate_player.trash.append(target)
+                if hasattr(game_state, "_log"):
+                    game_state._log(f"{target.name} was K.O.'d")
+                return "ko"
+    return "prevented"
+
+
 def register_effect(card_id: str, timing: str, description: str):
     """Decorator to register a hardcoded effect handler."""
     def decorator(func: Callable[['GameState', 'Player', 'Card'], bool]):
@@ -715,13 +738,33 @@ def return_don_to_deck(game_state: 'GameState', player: 'Player', count: int,
     total_pool = max(0, len(player.don_pool) - attached_total)
 
     if total_pool + attached_total < count:
-        return True  # Not enough DON to pay — effect fizzles
+        return False  # Not enough DON to pay — effect fizzles
+
+    def finish_after_return() -> None:
+        before_choice = getattr(game_state, "pending_choice", None)
+        game_state._trigger_on_don_return_effects(player)
+        if post_callback is None:
+            return
+        trigger_choice = getattr(game_state, "pending_choice", None)
+        if trigger_choice is not None and trigger_choice is not before_choice and trigger_choice.callback is not None:
+            original_callback = trigger_choice.callback
+
+            def chained_callback(selected: List[str]) -> None:
+                original_callback(selected)
+                if getattr(game_state, "pending_choice", None) is trigger_choice:
+                    post_callback()
+
+            trigger_choice.callback = chained_callback
+        else:
+            post_callback()
 
     # If only 1 DON total and we need 1, auto-return (no real choice)
     if total_pool + attached_total == count and total_pool == count and attached_total == 0:
         for _ in range(count):
             player.don_pool.pop()
-        return True
+        game_state._log(f"Returned {count} DON!! to DON deck")
+        finish_after_return()
+        return False
 
     # Build options: pool DON + DON attached to characters/leader
     options = []
@@ -755,6 +798,10 @@ def return_don_to_deck(game_state: 'GameState', player: 'Player', count: int,
         char_detach: Dict[int, int] = {}
         leader_detach = 0
         for sel_id in selected:
+            if isinstance(sel_id, str) and sel_id.isdigit():
+                option_idx = int(sel_id)
+                if 0 <= option_idx < len(options):
+                    sel_id = options[option_idx]["id"]
             if sel_id.startswith("pool_"):
                 pool_removals.append(int(sel_id.split("_")[1]))
             elif sel_id.startswith("leader_"):
@@ -776,9 +823,7 @@ def return_don_to_deck(game_state: 'GameState', player: 'Player', count: int,
             if player.don_pool:
                 player.don_pool.pop()
         game_state._log(f"Returned {len(selected)} DON!! to DON deck")
-        game_state._trigger_on_don_return_effects(player)
-        if post_callback is not None:
-            post_callback()
+        finish_after_return()
 
     game_state.pending_choice = PendingChoice(
         choice_id=f"don_return_{uuid.uuid4().hex[:8]}",
@@ -1036,7 +1081,7 @@ def create_ko_choice(game_state: 'GameState', player: 'Player',
             target_idx = int(sel) if sel is not None else -1
             if 0 <= target_idx < len(snapshot):
                 target = snapshot[target_idx]
-                result = game_state._attempt_character_ko(target, by_effect=True)
+                result = ko_character_by_effect(game_state, target, controller=player)
                 if result == "pending":
                     return
 

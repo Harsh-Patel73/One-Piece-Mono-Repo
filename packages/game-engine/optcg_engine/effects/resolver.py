@@ -335,17 +335,38 @@ class EffectResolver:
         """Handle KO effect."""
         targets = context.targets
         ko_count = 0
+        affected = []
 
         for target in targets:
-            # Find which player owns this card
+            if hasattr(context.game_state, "_attempt_character_ko"):
+                result = context.game_state._attempt_character_ko(
+                    target,
+                    by_effect=True,
+                    controller=context.source_player,
+                )
+                if result == "pending":
+                    return EffectResult(
+                        success=True,
+                        message="K.O. pending",
+                        state_changed=True,
+                        targets_affected=affected,
+                    )
+                if result == "ko":
+                    affected.append(target)
+                    ko_count += 1
+                    print(f"{target.name} is K.O.'d!")
+                continue
+
             if target in context.source_player.cards_in_play:
                 context.source_player.cards_in_play.remove(target)
                 context.source_player.trash.append(target)
+                affected.append(target)
                 ko_count += 1
                 print(f"{target.name} is K.O.'d!")
             elif target in context.opponent.cards_in_play:
                 context.opponent.cards_in_play.remove(target)
                 context.opponent.trash.append(target)
+                affected.append(target)
                 ko_count += 1
                 print(f"{target.name} is K.O.'d!")
 
@@ -353,7 +374,7 @@ class EffectResolver:
             success=ko_count > 0,
             message=f"K.O.'d {ko_count} character(s)",
             state_changed=ko_count > 0,
-            targets_affected=targets[:ko_count],
+            targets_affected=affected,
         )
 
     def _resolve_rest(self, effect: Effect, context: EffectContext) -> EffectResult:

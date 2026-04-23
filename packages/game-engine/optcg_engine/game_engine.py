@@ -146,6 +146,8 @@ class Player:
 
     def _can_block(self, card: Card) -> bool:
         """Check if a card can be used as a blocker."""
+        if getattr(card, 'effects_negated', False) or getattr(card, 'effects_negated_this_turn', False):
+            return False
         has_blocker = getattr(card, 'has_blocker', False) or getattr(card, 'is_blocker', False)
         if not has_blocker:
             return False
@@ -515,9 +517,9 @@ class GameState:
 
     def _find_card_owner(self, card: Card) -> Optional[Player]:
         """Find the player that currently owns the provided leader or in-play card."""
-        if card is self.player1.leader or card in self.player1.cards_in_play:
+        if card is self.player1.leader or any(in_play is card for in_play in self.player1.cards_in_play):
             return self.player1
-        if card is self.player2.leader or card in self.player2.cards_in_play:
+        if card is self.player2.leader or any(in_play is card for in_play in self.player2.cards_in_play):
             return self.player2
         return None
 
@@ -528,6 +530,15 @@ class GameState:
                 return card
         return None
 
+    def _find_in_play_card_by_uid(self, unique_id: Optional[int]) -> Optional[Card]:
+        """Find a leader or in-play card by Python object identity."""
+        if unique_id is None:
+            return None
+        for card in [self.player1.leader, *self.player1.cards_in_play, self.player2.leader, *self.player2.cards_in_play]:
+            if card and id(card) == unique_id:
+                return card
+        return None
+
     def _resolve_ko_prevention_choice(self, prevented: bool) -> str:
         """Continue a pending K.O. prevention flow after the player chooses to use or decline it."""
         context = getattr(self, "_pending_ko_context", None)
@@ -535,7 +546,7 @@ class GameState:
             return "ko"
 
         if prevented:
-            target = self._find_in_play_card_by_id(context["target_id"])
+            target = self._find_in_play_card_by_uid(context.get("target_uid")) or self._find_in_play_card_by_id(context["target_id"])
             if target:
                 self._log(f"{target.name} was saved from being K.O.'d")
             return self._finalize_character_ko(context, "prevented")
@@ -545,15 +556,18 @@ class GameState:
 
     def _finalize_character_ko(self, context: Dict[str, Any], result: str) -> str:
         """Finalize a character K.O. attempt and run any completion callback."""
-        target = self._find_in_play_card_by_id(context["target_id"])
+        target = self._find_in_play_card_by_uid(context.get("target_uid")) or self._find_in_play_card_by_id(context["target_id"])
         owner = self.player1 if context["owner_index"] == 0 else self.player2
         controller = self.player1 if context.get("controller_index") == 0 else self.player2 if context.get("controller_index") == 1 else None
-        attacker = self._find_in_play_card_by_id(context["attacker_id"]) if context.get("attacker_id") else None
+        attacker = self._find_in_play_card_by_uid(context.get("attacker_uid")) or (self._find_in_play_card_by_id(context["attacker_id"]) if context.get("attacker_id") else None)
         callback = context.get("after_resolve")
         self._pending_ko_context = None
 
-        if result == "ko" and target and target in owner.cards_in_play:
-            owner.cards_in_play.remove(target)
+        if result == "ko" and target and any(in_play is target for in_play in owner.cards_in_play):
+            for idx, in_play in enumerate(owner.cards_in_play):
+                if in_play is target:
+                    owner.cards_in_play.pop(idx)
+                    break
             owner.trash.append(target)
             self._log(f"{target.name} was K.O.'d")
 
@@ -577,8 +591,8 @@ class GameState:
             return "ko"
 
         owner = self.player1 if context["owner_index"] == 0 else self.player2
-        target = self._find_in_play_card_by_id(context["target_id"])
-        if not target or target not in owner.cards_in_play:
+        target = self._find_in_play_card_by_uid(context.get("target_uid")) or self._find_in_play_card_by_id(context["target_id"])
+        if not target or not any(in_play is target for in_play in owner.cards_in_play):
             return self._finalize_character_ko(context, "prevented")
 
         from .effects.effect_registry import execute_hardcoded_effect, has_hardcoded_effect
@@ -654,7 +668,7 @@ class GameState:
                                after_resolve: Optional[Callable[[str, Player, Optional[Card], Optional[Card]], None]] = None) -> str:
         """Attempt to K.O. a character, honoring hardcoded prevention effects when present."""
         owner = self._find_card_owner(target)
-        if owner is None or target not in owner.cards_in_play:
+        if owner is None or not any(in_play is target for in_play in owner.cards_in_play):
             return "prevented"
 
         if by_effect and getattr(target, 'cannot_be_ko_by_effects', False):
@@ -678,9 +692,11 @@ class GameState:
 
         self._pending_ko_context = {
             "target_id": target.id,
+            "target_uid": id(target),
             "owner_index": 0 if owner is self.player1 else 1,
             "controller_index": None if controller is None else (0 if controller is self.player1 else 1),
             "attacker_id": getattr(attacker, "id", None),
+            "attacker_uid": id(attacker) if attacker else None,
             "by_effect": by_effect,
             "candidate_index": 0,
             "candidates": candidates,
@@ -782,11 +798,24 @@ class GameState:
         """
         from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
         for player in [self.current_player, self.opponent_player]:
-            if player.leader and has_hardcoded_effect(player.leader.id, "continuous"):
+            if (
+                player.leader
+                and not self._card_effects_are_negated(player.leader)
+                and has_hardcoded_effect(player.leader.id, "continuous")
+            ):
                 execute_hardcoded_effect(self, player, player.leader, "continuous")
             for card in list(player.cards_in_play):
+                if self._card_effects_are_negated(card):
+                    continue
                 if has_hardcoded_effect(card.id, "continuous"):
                     execute_hardcoded_effect(self, player, card, "continuous")
+
+    @staticmethod
+    def _card_effects_are_negated(card: Card) -> bool:
+        return bool(
+            getattr(card, 'effects_negated', False)
+            or getattr(card, 'effects_negated_this_turn', False)
+        )
 
     def _recalc_continuous_effects(self):
         """Clear power_modifiers and reapply continuous effects mid-turn.
@@ -822,7 +851,10 @@ class GameState:
                 if hasattr(card, 'cannot_be_ko_in_battle'):
                     card.cannot_be_ko_in_battle = False
                 if hasattr(card, 'has_banish'):
-                    card.has_banish = getattr(card, '_innate_banish', False)
+                    card.has_banish = (
+                        getattr(card, '_innate_banish', False)
+                        or getattr(card, '_temporary_banish_until_turn', -1) >= self.turn_count
+                    )
                 if hasattr(card, 'blocker_disabled'):
                     card.blocker_disabled = False
                 if hasattr(card, 'birdcage_lock'):
@@ -878,6 +910,13 @@ class GameState:
                 player.leader.has_doubleattack = False
                 player.leader.has_double_attack = False
                 player.leader._temp_doubleattack = False
+            if hasattr(player.leader, 'has_banish'):
+                player.leader.has_banish = getattr(player.leader, '_innate_banish', False)
+                if hasattr(player.leader, '_temporary_banish_until_turn'):
+                    del player.leader._temporary_banish_until_turn
+            if getattr(player.leader, 'effects_negated_this_turn', False):
+                player.leader.effects_negated_this_turn = False
+                player.leader.effects_negated = False
 
         # Clear character temporary effects
         for card in player.cards_in_play:
@@ -906,8 +945,13 @@ class GameState:
                 card.has_taunt = False
             if hasattr(card, 'has_banish'):
                 card.has_banish = getattr(card, '_innate_banish', False)
+                if hasattr(card, '_temporary_banish_until_turn'):
+                    del card._temporary_banish_until_turn
             if hasattr(card, 'blocker_disabled'):
                 card.blocker_disabled = False
+            if getattr(card, 'effects_negated_this_turn', False):
+                card.effects_negated_this_turn = False
+                card.effects_negated = False
             if hasattr(card, '_temporary_rush_until_turn') and card._temporary_rush_until_turn < self.turn_count:
                 card.has_rush = False
             if getattr(card, '_temp_doubleattack', False):
@@ -1139,10 +1183,16 @@ class GameState:
                 self._trigger_on_play_effects(card)
                 # Fire on_event triggers (e.g. Crocodile leader: draw 1 when you activate Event)
                 from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
-                if self.current_player.leader and has_hardcoded_effect(self.current_player.leader.id, 'on_event'):
+                if (
+                    self.current_player.leader
+                    and not self._card_effects_are_negated(self.current_player.leader)
+                    and has_hardcoded_effect(self.current_player.leader.id, 'on_event')
+                ):
                     execute_hardcoded_effect(self, self.current_player, self.current_player.leader, 'on_event')
                 # Fire on_opponent_event for cards on the opposing player's field (e.g. Gion OP06-044, Zeff OP06-048)
                 for opp_card in list(self.opponent_player.cards_in_play):
+                    if self._card_effects_are_negated(opp_card):
+                        continue
                     if has_hardcoded_effect(opp_card.id, 'on_opponent_event'):
                         execute_hardcoded_effect(self, self.opponent_player, opp_card, 'on_opponent_event')
             else:
@@ -1351,12 +1401,18 @@ class GameState:
                         effect_manager.on_opponent_event_play(self, attacker_player, card)
                         from .effects.effect_registry import has_hardcoded_effect as _has_opp_event, execute_hardcoded_effect as _exec_opp_event
                         for opp_event_card in list(attacker_player.cards_in_play):
+                            if self._card_effects_are_negated(opp_event_card):
+                                continue
                             if _has_opp_event(opp_event_card.id, 'on_opponent_event'):
                                 _exec_opp_event(self, attacker_player, opp_event_card, 'on_opponent_event')
 
                     # Fire on_event for defender's leader (e.g. Crocodile OP01-062: draw 1 when you activate Event)
                     from .effects.effect_registry import has_hardcoded_effect as _has_he, execute_hardcoded_effect as _exec_he
-                    if defender_player.leader and _has_he(defender_player.leader.id, 'on_event'):
+                    if (
+                        defender_player.leader
+                        and not self._card_effects_are_negated(defender_player.leader)
+                        and _has_he(defender_player.leader.id, 'on_event')
+                    ):
                         _exec_he(self, defender_player, defender_player.leader, 'on_event')
 
                     # Check if card has a hardcoded counter effect
@@ -1464,6 +1520,9 @@ class GameState:
 
         if not card:
             return False
+        if self._card_effects_are_negated(card):
+            self._log(f"{card.name}'s effects are negated and cannot be activated.")
+            return False
 
         # Hardcoded activate handlers are authoritative for cards that define them.
         from .effects.effect_registry import has_hardcoded_effect
@@ -1493,6 +1552,8 @@ class GameState:
 
         # Check all cards in play for Activate: Main effects
         for card in list(self.current_player.cards_in_play):
+            if self._card_effects_are_negated(card):
+                continue
             if not card.effect or '[Activate: Main]' not in card.effect:
                 continue
 
@@ -1626,8 +1687,11 @@ class GameState:
         # (fires interactively during LEADER_EFFECT_STEP before blockers)
         from .effects.effect_registry import has_hardcoded_effect as _has_hce
         leader_has_effect = bool(
-            (o.leader and _has_hce(o.leader.id, 'on_opponent_attack'))
-            or any(_has_hce(c.id, 'on_opponent_attack') for c in o.cards_in_play)
+            (o.leader and not self._card_effects_are_negated(o.leader) and _has_hce(o.leader.id, 'on_opponent_attack'))
+            or any(
+                not self._card_effects_are_negated(c) and _has_hce(c.id, 'on_opponent_attack')
+                for c in o.cards_in_play
+            )
         )
 
         # Get available blockers for defender
@@ -1754,8 +1818,11 @@ class GameState:
         if attacker_power >= total_defense:
             if defender.card_type == 'LEADER':
                 # Check for Banish
-                has_banish = getattr(attacker, 'has_banish', False)
-                if not has_banish and attacker.effect:
+                has_banish = (
+                    getattr(attacker, 'has_banish', False)
+                    and not self._card_effects_are_negated(attacker)
+                )
+                if not has_banish and attacker.effect and not self._card_effects_are_negated(attacker):
                     has_banish = '[Banish]' in attacker.effect
 
                 # Take life damage
@@ -2264,10 +2331,23 @@ class GameState:
 
 
     def _trigger_on_don_return_effects(self, player: Player):
-        """Fire leader effects that care about DON!! returning to the DON!! deck."""
+        """Fire effects that care about DON!! returning to the DON!! deck."""
         from .effects.effect_registry import has_hardcoded_effect, execute_hardcoded_effect
-        if player.leader and has_hardcoded_effect(player.leader.id, 'on_don_return'):
+        if (
+            player.leader
+            and not self._card_effects_are_negated(player.leader)
+            and has_hardcoded_effect(player.leader.id, 'on_don_return')
+        ):
             execute_hardcoded_effect(self, player, player.leader, 'on_don_return')
+            if self.pending_choice:
+                return
+        for card in list(player.cards_in_play):
+            if self._card_effects_are_negated(card):
+                continue
+            if has_hardcoded_effect(card.id, 'on_don_return'):
+                execute_hardcoded_effect(self, player, card, 'on_don_return')
+                if self.pending_choice:
+                    return
 
     def _player_to_dict(self, player: Player, is_viewer: bool = False) -> dict:
         """Serialize a player to a dictionary.
@@ -2549,18 +2629,20 @@ class GameState:
                 if 0 <= target_idx < len(target_cards):
                     target_info = target_cards[target_idx]
                     opponent = self.player2 if player == self.player1 else self.player1
+                    target = self._find_in_play_card_by_uid(target_info.get("unique_id"))
 
-                    # Find and KO the target
-                    for p in [player, opponent]:
-                        for c in p.cards_in_play[:]:
-                            if c.id == target_info["id"]:
-                                if getattr(c, 'cannot_be_ko_by_effects', False):
-                                    self._log(f"{c.name} cannot be K.O.'d by effects")
+                    if target is None:
+                        for p in [player, opponent]:
+                            for c in p.cards_in_play:
+                                if c.id == target_info["id"]:
+                                    target = c
                                     break
-                                p.cards_in_play.remove(c)
-                                p.trash.append(c)
-                                self._log(f"{c.name} was KO'd")
+                            if target:
                                 break
+                    if target:
+                        result = self._attempt_character_ko(target, by_effect=True, controller=player)
+                        if result == "pending":
+                            return True
 
 
             elif action == "trash_own_character":
@@ -2617,15 +2699,16 @@ class GameState:
                     target_idx = int(sel)
                     if 0 <= target_idx < len(target_cards):
                         target_info = target_cards[target_idx]
-                        for c in opponent.cards_in_play[:]:
-                            if c.id == target_info["id"]:
-                                if getattr(c, 'cannot_be_ko_by_effects', False):
-                                    self._log(f"{c.name} cannot be K.O.'d by effects")
+                        target = self._find_in_play_card_by_uid(target_info.get("unique_id"))
+                        if target is None:
+                            for c in opponent.cards_in_play:
+                                if c.id == target_info["id"]:
+                                    target = c
                                     break
-                                opponent.cards_in_play.remove(c)
-                                opponent.trash.append(c)
-                                self._log(f"{c.name} was K.O.'d")
-                                break
+                        if target:
+                            result = self._attempt_character_ko(target, by_effect=True, controller=player)
+                            if result == "pending":
+                                return True
 
 
             elif action == "rest_targets_multi":
@@ -3045,9 +3128,14 @@ class GameState:
                 target_cards = data.get("target_cards", [])
                 if 0 <= target_idx < len(target_cards):
                     target_info = target_cards[target_idx]
-                    for c in player.cards_in_play:
+                    candidates = []
+                    if player.leader:
+                        candidates.append(player.leader)
+                    candidates.extend(player.cards_in_play)
+                    for c in candidates:
                         if c.id == target_info["id"]:
                             c.has_banish = True
+                            c._temporary_banish_until_turn = self.turn_count
                             self._log(f"{c.name} gains Banish")
                             break
 
@@ -3207,6 +3295,7 @@ class GameState:
                     opponent = self.player2 if player == self.player1 else self.player1
                     for c in opponent.cards_in_play:
                         if c.id == target_info["id"]:
+                            c.effects_negated = True
                             c.effects_negated_this_turn = True
                             self._log(f"{c.name}'s effects were negated")
                             break

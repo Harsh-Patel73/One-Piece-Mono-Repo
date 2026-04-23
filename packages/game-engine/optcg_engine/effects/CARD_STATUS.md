@@ -814,7 +814,7 @@
 | OP06-040 | Shark Arrows | EVENT | ✅ Verified | [Main] K.O. up to 2 of your opponent's rested Characters with a cost o… |  |
 | OP06-041 | The Ark Noah | STAGE | ✅ Verified | [On Play] Rest all of your opponent's Characters. | When the card comes to play as a trigger it should still activate the on play effect, currently it does not. |
 | OP06-043 | Aramaki | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… | The power that it gains should be for the turn, it goes away after it attacks. |
-| OP06-044 | Gion | CHARACTER | ⚠ Needs Fix | [Your Turn] [Once Per Turn] When your opponent activates an Event, you… | Gion's effect should only be once per turn, it currently does it every time an event is used.  |
+| OP06-044 | Gion | CHARACTER | ✅ Verified | [Your Turn] [Once Per Turn] When your opponent activates an Event, you… | Gion's effect should only be once per turn, it currently does it every time an event is used. |
 | OP06-045 | Kuzan | CHARACTER | ✅ Verified | [On Play] Draw 2 cards and place 2 cards from your hand at the bottom … |  |
 | OP06-046 | Sakazuki | CHARACTER | ✅ Verified | [On Play] Place up to 1 Character with a cost of 2 or less at the bott… |  |
 | OP06-047 | Charlotte Pudding | CHARACTER | ✅ Verified | [On Play] Your opponent returns all cards in their hand to their deck … |  |
@@ -826,18 +826,18 @@
 | OP06-053 | Jaguar.D.Saul | CHARACTER | ✅ Verified | [On K.O.] Place up to 1 Character with a cost of 2 or less at the bott… |  |
 | OP06-054 | Borsalino | CHARACTER | ✅ Verified | If you have 5 or less cards in your hand, this Character gains [Blocke… | This card should only have blocker if I have 5 or less cards in hand, it is still a blocker when I have more. |
 | OP06-055 | Monkey.D.Garp | CHARACTER | ✅ Verified | [DON!! x2] [When Attacking] If you have 4 or less cards in your hand, … |  |
-| OP06-056 | Ama no Murakumo Sword | EVENT | ⚠ Needs Fix | [Main] Place up to 1 of your opponent's Characters with a cost of 2 or… | It should prompt me to return a second character, right now it just asks to send 1 character with a cost of 2 or less from the opponent's characters. After the 2 or less it should ask me to send a 1 cost or less to the bottom as well.  |
-| OP06-057 | But I Will Never Doubt a Woman's Tears!!!! | EVENT | ⚠ Needs Fix | [Main] Up to 1 of your Leader or Character cards gains +1000 power dur… | It should allow me to play a character with a cost of 2 from hand as well not just the revealed card. |
+| OP06-056 | Ama no Murakumo Sword | EVENT | ✅ Verified | [Main] Place up to 1 of your opponent's Characters with a cost of 2 or… | It should prompt me to return a second character, right now it just asks to send 1 character with a cost of 2 or less from the opponent's characters. After the 2 or less it should ask me to send a 1 cost or less to the bottom as well. |
+| OP06-057 | But I Will Never Doubt a Woman's Tears!!!! | EVENT | ✅ Verified | [Main] Up to 1 of your Leader or Character cards gains +1000 power dur… | It should allow me to play a character with a cost of 2 from hand as well not just the revealed card. |
 | OP06-058 | Gravity Blade Raging Tiger | EVENT | ✅ Verified | [Main] Place up to 2 Characters with a cost of 6 or less at the bottom… |  |
 | OP06-059 | White Snake | EVENT | ✅ Verified | [Counter] Up to 1 of your Leader or Character cards gains +1000 power … |  |
 | OP06-042 | Vinsmoke Reiju | LEADER | ✅ Verified | [Your Turn] [Once Per Turn] When a DON!! card on your field is returne… |  |
 | OP06-060 | Vinsmoke Ichiji | CHARACTER | ✅ Verified | [Activate: Main] DON!! −1 (You may return the specified number of DON!… |  |
 | OP06-061 | Vinsmoke Ichiji | CHARACTER | ✅ Verified | [On Play] If the number of DON!! cards on your field is equal to or le… | Even though this card is gaining rush per the effect it will not let me attack on the turn it is played. |
-| OP06-115 | You're the One Who Should Disappear. | EVENT | ⚠ Needs Fix | [Counter] You may trash 1 card from your hand: Up to 1 of your Leader … | This card should only give +3000 power for the battle, it is giving it for the turn.  |
-| OP06-062 | Vinsmoke Judge | CHARACTER | ⚠ Needs Fix | [On Play] DON!! −1 (You may return the specified number of DON!! cards… | Put 4 Germa 66 type characters with different card names and 4000 power or less in the trash so I can test this card.  |
+| OP06-115 | You're the One Who Should Disappear. | EVENT | ✅ Verified | [Counter] You may trash 1 card from your hand: Up to 1 of your Leader … | This card should only give +3000 power for the battle, it is giving it for the turn. |
+| OP06-062 | Vinsmoke Judge | CHARACTER | ⚠ Needs Fix | [On Play] DON!! −1 (You may return the specified number of DON!! cards… | It should prompt me to select 0 or 1 DON!! to rest.  |
 | OP06-063 | Vinsmoke Sora | CHARACTER | ✅ Verified | [On Play] You may trash 1 card from your hand: If the number of DON!! … |  |
 | OP06-064 | Vinsmoke Niji | CHARACTER | ✅ Verified | [Activate: Main] DON!! −1 (You may return the specified number of DON!… |  |
-| OP06-065 | Vinsmoke Niji | CHARACTER | ⚠ Needs Fix | [On Play] If the number of DON!! cards on your field is equal to or le… | If the number of DON!! cards on my field and the opponents field are the same or I have less and I play this card I should be prompted to choose if I want to A. KO up to 1 of my opponents characters with a cost of 2 or less. Or B. If I want to return a character with a cost of 4 or less to the opponents hand.  |
+| OP06-065 | Vinsmoke Niji | CHARACTER | ⚠ Needs Fix | [On Play] If the number of DON!! cards on your field is equal to or le… | It only prompts me if there is a 2 cost to KO, even if there is a 4 cost or less I should be prompted to choose 1 effect.  |
 | OP06-066 | Vinsmoke Yonji | CHARACTER | ✅ Verified | [Activate: Main] DON!! −1 (You may return the specified number of DON!… |  |
 | OP06-067 | Vinsmoke Yonji | CHARACTER | ✅ Verified | If the number of DON!! cards on your field is equal to or less than th… |  |
 | OP06-069 | Vinsmoke Reiju | CHARACTER | ✅ Verified | [On Play] If the number of DON!! cards on your field is equal to or le… |  |
@@ -845,14 +845,47 @@
 | OP06-071 | Gild Tesoro | CHARACTER | ✅ Verified | [On Play] DON!! −1 (You may return the specified number of DON!! cards… |  |
 | OP06-072 | Cosette | CHARACTER | ✅ Verified | If your Leader has the {GERMA 66} type and the number of DON!! cards o… |  |
 | OP06-073 | Shiki | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
-| OP06-074 | Zephyr (Navy) | CHARACTER | ⚠ Needs Fix | [On Play] DON!! −1 (You may return the specified number of DON!! cards… | Says invalid choice response when I try to return 1 DON!! Negate means that the card's effect can no longer be activated, this means "on your opponents turn" or "blocker" or "activate main" |
+| OP06-074 | Zephyr (Navy) | CHARACTER | ✅ Verified | [On Play] DON!! −1 (You may return the specified number of DON!! cards… | Says invalid choice response when I try to return 1 DON!! Negate means that the card's effect can no longer be activated, this means "on your opponents turn" or "blocker" or "activate main" |
 | OP06-075 | Count Battler | CHARACTER | ✅ Verified | [On Play] DON!! −1 (You may return the specified number of DON!! cards… |  |
-| OP06-076 | Hitokiri Kamazo | CHARACTER | ⚠ Needs Fix | [Your Turn] [Once Per Turn] When a DON!! card on your field is returne… | Whenever a DON is returned to the DON!! deck by DON -1 or whatever means I should be prompted to KO a character with a cost of 2 or less.  |
+| OP06-076 | Hitokiri Kamazo | CHARACTER | ✅ Verified | [Your Turn] [Once Per Turn] When a DON!! card on your field is returne… | Whenever a DON is returned to the DON!! deck by DON -1 or whatever means I should be prompted to KO a character with a cost of 2 or less. |
 | OP06-077 | Black Bug | EVENT | ✅ Verified | [Main] If the number of DON!! cards on your field is equal to or less … |  |
 | OP06-078 | GERMA 66 | EVENT | ✅ Verified | [Main] Look at 5 cards from the top of your deck; reveal up to 1 card … |  |
 | OP06-079 | Kingdom of GERMA | STAGE | ✅ Verified | [Activate: Main] You may trash 1 card from your hand and rest this Sta… |  |
-| OP06-080 | Gecko Moria | LEADER | ⚠ Needs Fix | [DON!! x1] [When Attacking] ➁ (You may rest the specified number of DO… | I should be prompted if I want to use the leader effect and rest 2 DON!! it is currently automatic. |
+| OP06-080 | Gecko Moria | LEADER | ✅ Verified | [DON!! x1] [When Attacking] ➁ (You may rest the specified number of DO… | I should be prompted if I want to use the leader effect and rest 2 DON!! it is currently automatic. |
 | OP06-081 | Absalom | CHARACTER | ✅ Verified | [On Play] You may return 2 cards from your trash to the bottom of your… |  |
+| OP06-082 | Inuppe | CHARACTER | ✅ Verified | [On Play]/[On K.O.] If your Leader has the {Thriller Bark Pirates} typ… |  |
+| OP06-084 | Jigoro of the Wind | CHARACTER | ✅ Verified | [On K.O.] Up to 1 of your Leader or Character cards gains +1000 power … |  |
+| OP06-085 | Kumacy | CHARACTER | ✅ Verified | [DON!! x2] [Your Turn] This Character gains +1000 power for every 5 ca… |  |
+| OP06-086 | Gecko Moria | CHARACTER | ✅ Verified | [On Play] Choose up to 1 Character card with a cost of 4 or less and u… |  |
+| OP06-087 | Cerberus | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
+| OP06-088 | Sai | CHARACTER | ✅ Verified | If your Leader has the {Dressrosa} type and is active, this Character … |  |
+| OP06-089 | Taralan | CHARACTER | ✅ Verified | [On Play]/[On K.O.] Trash 3 cards from the top of your deck. |  |
+| OP06-090 | Dr. Hogback | CHARACTER | ✅ Verified | [On Play] You may return 2 cards from your trash to the bottom of your… |  |
+| OP06-091 | Victoria Cindry | CHARACTER | ✅ Verified | [On Play] If your Leader has the {Thriller Bark Pirates} type, trash 5… |  |
+| OP06-092 | Brook | CHARACTER | ⚠ Needs Fix | [On Play] Choose one: • Trash up to 1 of your opponent's Characters wi… | This card should prompt me to trash a character with a cost of 4 or less OR I can choose to have the opponent place 3 cards from their trash to the bottom of their deck in any order.  |
+| OP06-093 | Perona | CHARACTER | ✅ Verified | [On Play] If your opponent has 5 or more cards in their hand, choose o… |  |
+| OP06-094 | Lola | CHARACTER | ✅ Verified |  |  |
+| OP06-095 | Shadows Asgard | EVENT | ✅ Verified | [Main]/[Counter] Your Leader gains +1000 power during this turn. Then,… | It should give +1000 power by default then 1000 extra power for each card KOd. |
+| OP06-096 | ...Nothing...at All!!! | EVENT | ⚠ Needs Fix | [Counter] You may add 1 card from the top of your Life cards to your h… | If I choose to take the life to hand all characters on my field with a cost of 7 or less should not be able to be KOd by battle for the remainder of the turn.  |
+| OP06-097 | Negative Hollow | EVENT | ✅ Verified | [Main] Trash 1 card from your opponent's hand. |  |
+| OP06-098 | Thriller Bark | STAGE | ✅ Verified | [Activate: Main] ➀ (You may rest the specified number of DON!! cards i… |  |
+| OP06-099 | Aisa | CHARACTER | ✅ Verified | [On Play] Look at up to 1 card from the top of your or your opponent's… |  |
+| OP06-100 | Inuarashi | CHARACTER | ✅ Verified | [DON!! x2] [When Attacking] You may trash 1 card from your hand: K.O. … |  |
+| OP06-101 | O-Nami | CHARACTER | ✅ Verified | [On Play] Up to 1 of your Leader or Character cards gains [Banish] dur… | This card is not giving the leader or character banish even when it is selected. |
+| OP06-103 | Kawamatsu | CHARACTER | ✅ Verified | [When Attacking] You may trash 2 cards from your hand: Add up to 1 of … | It is not prompting me to trash 2 cards from my hand if I want to do so. If I do trash the cards then I should be prompted to select an opponents character with 0 power to add to the top or bottom of their life cards face up. |
+| OP06-106 | Kouzuki Hiyori | CHARACTER | ✅ Verified | [On Play] You may add 1 card from the top or bottom of your Life cards… |  |
+| OP06-107 | Kouzuki Momonosuke | CHARACTER | ✅ Verified | [Blocker] (After your opponent declares an attack, you may rest this c… |  |
+| OP06-108 | Tenguyama Hitetsu | CHARACTER | ✅ Verified | [Trigger] Up to 1 of your {Land of Wano} type Leader or Character card… |  |
+| OP06-109 | Denjiro | CHARACTER | ✅ Verified | [DON!! x2] If your opponent has 3 or less Life cards, this Character c… |  |
+| OP06-112 | Raizo | CHARACTER | ✅ Verified | [When Attacking] You may trash 1 card from your hand: Rest up to 1 of … | Since it says rest up to 1 of your opponent's DON!! cards I should be prompted to select 0 or 1 DON!! cards that I want to rest. |
+| OP06-119 | Sanji | CHARACTER | ✅ Verified | [On Play] Reveal 1 card from the top of your deck and play up to 1 Cha… |  |
+| OP06-068 | Vinsmoke Reiju | CHARACTER | ✅ Verified | [Activate: Main] DON!! −1 (You may return the specified number of DON!… |  |
+| OP06-083 | Oars | CHARACTER | ✅ Verified | This Character cannot attack. [Activate: Main] You may K.O. 1 of your … |  |
+| OP06-102 | Kamakiri | CHARACTER | ✅ Verified | [Activate: Main] [Once Per Turn] You may place 1 Stage with a cost of … |  |
+| OP06-117 | The Ark Maxim | STAGE | ✅ Verified | [Activate: Main] [Once Per Turn] You may rest this card and 1 of your … |  |
+| OP06-111 | Braham | CHARACTER | ✅ Verified | [Activate: Main] [Once Per Turn] You may place 1 Stage with a cost of … |  |
+| OP06-114 | Wyper | CHARACTER | ✅ Verified | [On Play] You may place 1 Stage with a cost of 1 at the bottom of the … |  |
+| OP06-118 | Roronoa Zoro | CHARACTER | ⚠ Needs Fix | [When Attacking] [Once Per Turn] ➀ (You may rest the specified number … | When I attack the first effect should be prompted, if the player wants to restand 1 DON!! and set this character as active again. Then the card should be able to attack again. After attacking again there should be a second prompt if I want to rest 2 DON!! and set the character as active again. If this is done, the card becomes active AGAIN and can attack AGAIN.  |
 
 | ID | Status | Type | Notes |
 |----|--------|------|-------|

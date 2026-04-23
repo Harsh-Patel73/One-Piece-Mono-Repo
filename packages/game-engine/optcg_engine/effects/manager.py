@@ -105,6 +105,13 @@ def check_don_requirement(card: 'Card', effect: Effect) -> bool:
     return attached >= effect.don_requirement
 
 
+def effects_are_negated(card: 'Card') -> bool:
+    return bool(
+        getattr(card, 'effects_negated', False)
+        or getattr(card, 'effects_negated_this_turn', False)
+    )
+
+
 class CardEffectManager:
     """
     Manages effect resolution for a game.
@@ -170,6 +177,8 @@ class CardEffectManager:
             List of effect results
         """
         results = []
+        if effects_are_negated(card):
+            return results
 
         # Check for hardcoded effects first
         executed = False
@@ -221,6 +230,8 @@ class CardEffectManager:
         Checks hardcoded effects first, falls back to parser.
         """
         results = []
+        if effects_are_negated(attacker):
+            return results
 
         # Check hardcoded [When Attacking] effects first
         if has_hardcoded_effect(attacker.id, 'on_attack'):
@@ -264,7 +275,7 @@ class CardEffectManager:
         results = []
 
         # Check hardcoded effects first on defending player's leader
-        if defending_player.leader:
+        if defending_player.leader and not effects_are_negated(defending_player.leader):
             if has_hardcoded_effect(defending_player.leader.id, 'ON_OPPONENT_ATTACK'):
                 execute_hardcoded_effect(
                     game_state, defending_player, defending_player.leader, 'ON_OPPONENT_ATTACK'
@@ -272,6 +283,8 @@ class CardEffectManager:
 
         # Check hardcoded effects on defending player's characters
         for card in defending_player.cards_in_play:
+            if effects_are_negated(card):
+                continue
             if has_hardcoded_effect(card.id, 'ON_OPPONENT_ATTACK'):
                 execute_hardcoded_effect(game_state, defending_player, card, 'ON_OPPONENT_ATTACK')
 
@@ -298,7 +311,7 @@ class CardEffectManager:
         results = []
 
         # Check parsed effects on leader
-        if defending_player.leader:
+        if defending_player.leader and not effects_are_negated(defending_player.leader):
             if not has_hardcoded_effect(defending_player.leader.id, 'ON_OPPONENT_ATTACK'):
                 effects = get_effects_by_timing(defending_player.leader, EffectTiming.ON_OPPONENT_ATTACK)
                 for effect in effects:
@@ -321,6 +334,8 @@ class CardEffectManager:
 
         # Check parsed effects on defending player's characters
         for card in defending_player.cards_in_play:
+            if effects_are_negated(card):
+                continue
             if has_hardcoded_effect(card.id, 'ON_OPPONENT_ATTACK'):
                 continue
             effects = get_effects_by_timing(card, EffectTiming.ON_OPPONENT_ATTACK)
@@ -353,6 +368,8 @@ class CardEffectManager:
         Called by game_engine.activate_main_effect after hardcoded check fails.
         """
         results = []
+        if effects_are_negated(card):
+            return results
         effects = get_effects_by_timing(card, EffectTiming.MAIN)
         for effect in effects:
             if not check_don_requirement(card, effect):
@@ -403,6 +420,9 @@ class CardEffectManager:
         Also checks for ON_YOUR_CHARACTER_KO effects on other cards (like Ace's leader).
         """
         results = []
+        if effects_are_negated(ko_card):
+            self._resolve_on_character_ko_effects(game_state, player, ko_card)
+            return results
 
         # Check hardcoded ON_KO effects first
         if has_hardcoded_effect(ko_card.id, 'on_ko'):
@@ -439,7 +459,7 @@ class CardEffectManager:
         ko_base_power = getattr(ko_card, 'power', 0)
 
         # Check leader for ON_YOUR_CHARACTER_KO effects
-        if owner.leader:
+        if owner.leader and not effects_are_negated(owner.leader):
             effects = get_effects_by_timing(owner.leader, EffectTiming.ON_TAKE_DAMAGE)  # Combined trigger
             effects.extend(get_effects_by_timing(owner.leader, EffectTiming.ON_YOUR_CHARACTER_KO))
 
@@ -569,6 +589,8 @@ class CardEffectManager:
         Activate a card's [Activate: Main] effect.
         """
         results = []
+        if effects_are_negated(card):
+            return results
         effects = get_effects_by_timing(card, EffectTiming.MAIN)
 
         for effect in effects:
@@ -684,11 +706,13 @@ class CardEffectManager:
         """
         results = []
         # Fire hardcoded on_event_activated for leader
-        if attacker_player.leader:
+        if attacker_player.leader and not effects_are_negated(attacker_player.leader):
             if has_hardcoded_effect(attacker_player.leader.id, 'on_event_activated'):
                 execute_hardcoded_effect(game_state, attacker_player, attacker_player.leader, 'on_event_activated')
         # Fire for each character on the attacker's field
         for card in list(attacker_player.cards_in_play):
+            if effects_are_negated(card):
+                continue
             if has_hardcoded_effect(card.id, 'on_event_activated'):
                 execute_hardcoded_effect(game_state, attacker_player, card, 'on_event_activated')
         return results

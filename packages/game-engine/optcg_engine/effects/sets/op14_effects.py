@@ -412,19 +412,25 @@ def op14_079_croc_activate(game_state, player, card):
         own_snap = list(player.cards_in_play)
         def croc_cb(selected: list) -> None:
             target_idx = int(selected[0]) if selected else -1
-            ko_cost = 0
             if 0 <= target_idx < len(own_snap):
                 target = own_snap[target_idx]
                 ko_cost = getattr(target, 'cost', 0) or 0
-                if target in player.cards_in_play:
-                    player.cards_in_play.remove(target)
-                    player.trash.append(target)
-                    game_state._log(f"{target.name} was K.O.'d (cost {ko_cost})")
-            opponent = get_opponent(game_state, player)
-            opp_targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= ko_cost]
-            if opp_targets:
-                create_ko_choice(game_state, player, opp_targets, source_card=None,
-                                prompt=f"Choose opponent's cost {ko_cost} or less Character to K.O.")
+
+                def after_own_ko(result, _owner, _target, _attacker):
+                    if result != "ko":
+                        return
+                    opponent = get_opponent(game_state, player)
+                    opp_targets = [c for c in opponent.cards_in_play if (getattr(c, 'cost', 0) or 0) <= ko_cost]
+                    if opp_targets:
+                        create_ko_choice(game_state, player, opp_targets, source_card=None,
+                                        prompt=f"Choose opponent's cost {ko_cost} or less Character to K.O.")
+
+                game_state._attempt_character_ko(
+                    target,
+                    by_effect=True,
+                    controller=player,
+                    after_resolve=after_own_ko,
+                )
         return create_own_character_choice(game_state, player, player.cards_in_play,
                                            callback=croc_cb, source_card=card,
                                            prompt="Choose your Character to K.O.")
@@ -441,14 +447,23 @@ def op14_080_moria_leader(game_state, player, card):
                       if 'thriller bark pirates' in (c.card_origin or '').lower()]
     if thriller_chars:
         to_ko = thriller_chars[0]
-        player.cards_in_play.remove(to_ko)
-        player.trash.append(to_ko)
-        if player.leader:
-            player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 1000
-        for char in player.cards_in_play:
-            char.power_modifier = getattr(char, 'power_modifier', 0) + 1000
-        card.op14_080_used = True
-        return True
+
+        def after_thriller_ko(result, _owner, _target, _attacker):
+            if result != "ko":
+                return
+            if player.leader:
+                player.leader.power_modifier = getattr(player.leader, 'power_modifier', 0) + 1000
+            for char in player.cards_in_play:
+                char.power_modifier = getattr(char, 'power_modifier', 0) + 1000
+            card.op14_080_used = True
+
+        result = game_state._attempt_character_ko(
+            to_ko,
+            by_effect=True,
+            controller=player,
+            after_resolve=after_thriller_ko,
+        )
+        return result in ("ko", "pending")
     return False
 
 
